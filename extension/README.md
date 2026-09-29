@@ -1,4 +1,5 @@
 # Chrome extension — FUTURE WORK
 
 The eventual extension will select screenshot regions and show a study popup.
-Phase 1 implements local OCR only. No extension code or JavaScript tooling exists yet.
+Phases 1–2 implement local OCR, morphological analysis, and dictionary lookup.
+No extension code or JavaScript tooling exists yet.

@@ -879,8 +879,10 @@ name = "yomiscan"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "fugashi" },
     { name = "manga-ocr" },
     { name = "pillow" },
+    { name = "unidic-lite" },
 ]
 
 [package.dev-dependencies]
@@ -890,8 +892,10 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "fugashi", specifier = ">=1.5,<2" },
     { name = "manga-ocr", specifier = ">=0.1.16,<0.2" },
     { name = "pillow", specifier = ">=11" },
+    { name = "unidic-lite", specifier = ">=1.0.8,<2" },
 ]
 
 [package.metadata.requires-dev]

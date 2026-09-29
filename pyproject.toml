@@ -5,11 +5,16 @@ build-backend = "hatchling.build"
 [project]
 name = "yomiscan"
 version = "0.1.0"
-description = "Offline-first Japanese manga reading assistant: OCR validation"
+description = "Offline-first Japanese manga OCR and linguistic analysis"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 license = "MIT"
-dependencies = ["manga-ocr>=0.1.16,<0.2", "Pillow>=11"]
+dependencies = [
+    "manga-ocr>=0.1.16,<0.2",
+    "Pillow>=11",
+    "fugashi>=1.5,<2",
+    "unidic-lite>=1.0.8,<2",
+]
 
 [dependency-groups]
 dev = ["pytest>=8"]
