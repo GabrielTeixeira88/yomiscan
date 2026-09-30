@@ -2,13 +2,14 @@
 
 An offline-first Japanese manga reading assistant that extracts and analyzes Japanese text from manga images using local OCR and NLP.
 
-**Current status: Phase 2 — local OCR, Japanese morphological analysis, and local
-dictionary lookup are implemented.** Phase 1 OCR has run successfully on real manga
-screenshots. This does not establish accuracy across all manga styles.
-Sentence translation, HTTP endpoints, and the Chrome extension remain future work.
+**Current status: Phase 3 — local manga OCR, Japanese morphological analysis,
+local JMdict dictionary lookup, and local Japanese → English sentence translation
+are implemented.** Real CPU inference and a complete crop-to-analysis run have been
+verified. This does not establish accuracy across manga styles or dialogue contexts.
+FastAPI, the Chrome extension, and all browser/UI/chapter workflows remain future work.
 
 The purpose is to help Japanese learners study manga without paid APIs or per-request
-costs. Phase 2 turns recognized text into ordered tokens with readings, dictionary
+costs. Sentence translation is separate from ordered tokens with readings, dictionary
 forms, POS, conjugation information, and candidate English dictionary meanings.
 
 ## Setup (Windows / PowerShell)
@@ -123,13 +124,18 @@ or Jisho requests are used.
 uv run python scripts/analyze_text.py "でも大丈夫"
 uv run python scripts/analyze_text.py "食べました"
 uv run python scripts/analyze_text.py "高かった。猫とYomiScan！"
+uv run python scripts/analyze_text.py "でも大丈夫" --translate --device cpu
 uv run python scripts/analyze_image.py samples/test.png --cpu
 ```
 
 Both analysis commands accept `--dictionary path/to/jmdict.sqlite3`. Paths default to
 the current working directory; run examples from the repository root. Keep using
 `scripts/ocr_image.py` for OCR-only output. Image analysis needs the same OCR weights
-as Phase 1; text analysis never initializes the OCR model.
+as Phase 1; text analysis never initializes the OCR model. Text analysis remains
+lexical-only unless `--translate` is supplied. Image analysis includes sentence
+translation by default; `--no-translation` retains the Phase 2 lexical-only workflow.
+`--device auto|cpu|cuda` selects the translation device. Image `--cpu` forces both
+OCR and translation onto CPU and cannot be combined with `--device cuda`.
 
 The tokenizer is **fugashi + UniDic-lite** (a packaged UniDic 2.1.2 dictionary), chosen
 as a small, reproducible baseline already compatible with Windows/Python 3.13. It is
@@ -152,8 +158,60 @@ Empty text produces an empty token list. Whitespace is retained in `original_tex
 but UniDic does not emit it as tokens.
 
 Analysis exit codes: `0` success, `2` invalid arguments/image, `3` missing/invalid
-dictionary, tokenizer, or OCR initialization error, `4` OCR recognition failure.
+dictionary, tokenizer, OCR, or translation initialization error, `4` OCR or translation failure.
 The dictionary importer returns `1` on import failure.
+
+## Local sentence translation
+
+```powershell
+uv sync
+uv run python scripts/translate_text.py "でも大丈夫"
+uv run python scripts/translate_text.py "今日は学校に行かなかった。" "何をしているんだ？" --device cpu
+uv run python scripts/benchmark_translation.py --device cpu
+```
+
+The default is **Helsinki-NLP/opus-mt-ja-en**, a small Marian model at a pinned
+revision. It runs locally using Transformers/PyTorch, with no paid API or translation
+service. The first invocation downloads approximately **306 MB** of model/tokenizer
+files; Python dependencies use additional space. The model is loaded once per engine
+instance and reused across sentences and real padded batches (up to eight by default).
+Separate CLI invocations each initialize their own engine.
+
+The default Hugging Face cache is `~/.cache/huggingface/hub` (normally
+`C:\Users\<user>\.cache\huggingface\hub` on Windows). Set `HF_HOME` before setup to use
+another directory, as shown above. Later runs reuse cached weights. After the first
+successful run, verify offline use with:
+
+```powershell
+$env:HF_HUB_OFFLINE = "1"
+uv run python scripts/translate_text.py "本当に大丈夫なの？" --device cpu
+```
+
+Use the same cache for setup and offline runs. An incomplete cache produces an
+initialization error; unset `HF_HUB_OFFLINE` to finish downloading. Windows can cache
+without symlinks; the upstream warning about extra disk usage is not a failure.
+
+`auto` selects CUDA when available, otherwise CPU. Explicit `cuda` fails with an
+actionable error when unavailable. CPU and Python 3.13.9 were verified; actual GPU
+inference was **not** verified. Short synthetic examples took roughly 140–260 ms each
+on the development CPU, excluding initialization. Other PCs and longer text will vary.
+FP32 weights alone occupy about 303 MB; total RAM/VRAM includes runtime, activations,
+and batch/beam buffers. Peak RAM/VRAM has not been measured; budget extra memory,
+especially when OCR is loaded too.
+
+Translation output includes source, English translation, engine, model, device, and
+elapsed time. For batched inputs, each result reports its entire batch's elapsed time,
+not individual latency; do not sum repeated batch times. Downloads and initialization
+are excluded. Empty/whitespace-only CLI input is rejected before model loading;
+exit codes are `0` success, `2` invalid input, `3` initialization failure, `4` inference
+failure. Inputs over 512 model tokens and unfinished output fail rather than silently
+losing text. Analyze-text preserves Phase 2's empty result and skips translation.
+
+The observed translation of `でも大丈夫` is **“But I'm fine.”**, not a fixed expected
+string. Omitted subjects are ambiguous. Slang, tone, and longer casual dialogue can be
+mistranslated; the real crop run exposed a substantial meaning error. This is a usable
+local baseline, not a validated manga localization system. See
+[model comparison, licensing, and manual evaluation](docs/phase-3-translation.md).
 
 ## Design and validation
 
@@ -162,15 +220,16 @@ The dictionary importer returns `1` on import failure.
 interface does not load the network. Unit tests substitute a fake upstream model.
 The CLI logic lives in the package so the script stays small and tests can import it.
 
-Direct runtime dependencies are manga-ocr, Pillow, fugashi, and UniDic-lite; pytest is
-a dev dependency. SQLite and the XML importer use Python's standard library.
+Direct runtime dependencies are manga-ocr, Pillow, fugashi, UniDic-lite, torch,
+transformers, sentencepiece, and sacremoses; pytest is a dev dependency.
+SQLite and the XML importer use Python's standard library.
 `JapaneseTokenizer` isolates the tokenizer, while `TextAnalyzer` composes it with the
 dictionary. Each analyzer reuses its tokenizer and dictionary connection. Shared
 entries are stored once per result and referenced by JMdict ID from tokens.
 
 Run `uv run pytest` for tests covering real lightweight tokenization, synthetic JMdict
 imports (including gzip and failed rebuilds), normalized lookup, CLI errors, and a
-mocked OCR-to-analysis pipeline. Tests need no network or OCR model weights. The full
+mocked OCR/translation-to-analysis pipeline. Tests need no network or neural weights. The full
 downloaded JMdict database is not required for tests. See
 [Phase 2 validation](docs/phase-2-validation.md) for actual execution results.
 
@@ -180,14 +239,13 @@ transcription before describing recognition as reliable.
 
 ## Roadmap and eventual architecture
 
-1. **Implemented:** local OCR → Japanese morphological analysis → local JMdict lookup.
-2. **Future:** Chrome region selection → local FastAPI → the implemented analysis pipeline
-   → local sentence translation → one detailed study popup.
-3. **Future:** full-page detection, OCR, sentence reconstruction, translation, masking,
-   inpainting, and typesetting.
+1. **Implemented:** local OCR → sentence translation + morphological analysis / JMdict lookup.
+2. **Future:** Chrome extension, screenshot selection, FastAPI, and detailed study popup.
+3. **Future:** Translate Chapter, manga page discovery, text detection, inpainting,
+   typesetting, image overlays, and lazy-loaded page translation.
 
 See [architecture](docs/architecture.md). No extension, selection UI, detailed popup,
-HTTP API, sentence translation, JLPT grading, detection, inpainting, typesetting,
+HTTP API, chapter translation, JLPT grading, detection, inpainting, typesetting,
 accounts, or cloud deployment is implemented.
 
 ## Limitations and licensing

@@ -1,6 +1,7 @@
 """Compose existing engines without tying tokenization to OCR."""
 
 from dataclasses import dataclass
+from time import perf_counter
 from typing import Protocol
 import unicodedata
 
@@ -9,6 +10,7 @@ from PIL import Image
 from yomiscan.dictionary import DictionaryEntry
 from yomiscan.nlp import JapaneseToken, JapaneseTokenizer
 from yomiscan.ocr import OCREngine, OCRResult
+from yomiscan.translation import TranslationEngine, TranslationResult
 
 
 class DictionaryLookup(Protocol):
@@ -27,6 +29,8 @@ class TextAnalysisResult:
     original_text: str
     tokens: tuple[AnalyzedToken, ...]
     dictionary_entries: dict[int, DictionaryEntry]
+    translation: TranslationResult | None = None
+    processing_time_ms: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -46,11 +50,17 @@ def lookup_candidates(token: JapaneseToken) -> tuple[str, ...]:
 
 
 class TextAnalyzer:
-    def __init__(self, tokenizer: JapaneseTokenizer, dictionary: DictionaryLookup) -> None:
+    def __init__(
+        self, tokenizer: JapaneseTokenizer, dictionary: DictionaryLookup,
+        translator: TranslationEngine | None = None,
+    ) -> None:
         self._tokenizer = tokenizer
         self._dictionary = dictionary
+        self._translator = translator
 
     def analyze(self, text: str) -> TextAnalysisResult:
+        translation = self._translator.translate(text) if self._translator and text.strip() else None
+        start = perf_counter()
         tokens = []
         entries: dict[int, DictionaryEntry] = {}
         cache: dict[str, tuple[DictionaryEntry, ...]] = {}
@@ -66,7 +76,9 @@ class TextAnalyzer:
                     break
             entries.update((entry.entry_id, entry) for entry in matches)
             tokens.append(AnalyzedToken(token, matched_form, tuple(e.entry_id for e in matches)))
-        return TextAnalysisResult(text, tuple(tokens), entries)
+        return TextAnalysisResult(
+            text, tuple(tokens), entries, translation, (perf_counter() - start) * 1000,
+        )
 
 
 def analyze_image(image: Image.Image, ocr: OCREngine, analyzer: TextAnalyzer) -> ImageAnalysisResult:

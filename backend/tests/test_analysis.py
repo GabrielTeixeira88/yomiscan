@@ -6,6 +6,8 @@ from yomiscan.analysis import TextAnalyzer, analyze_image, lookup_candidates
 from yomiscan.dictionary import SQLiteDictionary
 from yomiscan.nlp import FugashiTokenizer, JapaneseToken
 from yomiscan.ocr import OCRResult
+from yomiscan.translation import TranslationResult, TranslationError
+import pytest
 
 
 def test_real_tokenizer_normalized_lookup(dictionary_path):
@@ -44,3 +46,20 @@ def test_combined_pipeline_with_mock_ocr(dictionary_path):
     assert result.analysis.original_text == "大丈夫"
     assert result.analysis.tokens[0].entry_ids == (4,)
     assert result.ocr.engine == "fake"
+
+
+def test_translation_is_once_per_region_and_separate_from_dictionary(dictionary_path):
+    translator = Mock()
+    translator.translate.return_value = TranslationResult("でも大丈夫", "But it's okay.", "fake", "fake", 7)
+    with SQLiteDictionary(dictionary_path) as dictionary:
+        analyzer = TextAnalyzer(FugashiTokenizer(), dictionary, translator)
+        result = analyzer.analyze("でも大丈夫")
+        translator.translate.assert_called_once_with("でも大丈夫")
+        assert result.translation.translated_text == "But it's okay."
+        assert result.dictionary_entries[4].senses[0].glosses == ("okay",)
+        assert result.processing_time_ms >= 0
+        assert analyzer.analyze(" \n").translation is None
+        translator.translate.assert_called_once()
+        translator.translate.side_effect = TranslationError("failed")
+        with pytest.raises(TranslationError):
+            analyzer.analyze("猫")

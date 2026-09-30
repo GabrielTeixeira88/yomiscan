@@ -46,3 +46,18 @@ manga-ocr, its model weights, PyTorch, Pillow, and all other dependencies retain
 own licenses. Consult the [manga-ocr repository](https://github.com/kha-white/manga-ocr)
 and [model card](https://huggingface.co/kha-white/manga-ocr-base) for their terms and
 training-resource information. No model or training dataset is relicensed by this repo.
+## Phase 3 translation model
+
+The local default is Helsinki-NLP's `opus-mt-ja-en` checkpoint, revision
+`0770961a39ba6bd66305b149c3f4110bcafca2e6`. Its
+[Hugging Face model card](https://huggingface.co/Helsinki-NLP/opus-mt-ja-en/blob/0770961a39ba6bd66305b149c3f4110bcafca2e6/README.md)
+declares **Apache-2.0**. These weights are not covered by YomiScan's MIT license.
+Retain applicable attribution, license and notices, and identify modifications if
+redistributing. The broader [OPUS-MT project](https://github.com/Helsinki-NLP/Opus-MT)
+also describes original model releases under CC-BY-4.0; preserve source provenance
+and verify the exact artifact's terms before redistributing it. No weights are bundled
+with this repository. They are downloaded directly to the user's local cache.
+
+The evaluated M2M100 checkpoint declares MIT; NLLB-200 distilled declares
+CC-BY-NC-4.0 and carries a noncommercial restriction. Neither is the default or bundled.
+See [Phase 3 research and evaluation](phase-3-translation.md) for source links and limits.

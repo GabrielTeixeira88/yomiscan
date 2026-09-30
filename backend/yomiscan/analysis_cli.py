@@ -7,6 +7,7 @@ from .dictionary import DictionaryError, SQLiteDictionary
 from .nlp import FugashiTokenizer, TokenizerError
 from .ocr import MangaOCREngine, OCRInitializationError, OCRRecognitionError
 from .ocr.cli import load_image
+from .translation import MarianTranslationEngine, TranslationError, TranslationInitializationError
 
 DEFAULT_DATABASE = Path("data/jmdict.sqlite3")
 
@@ -18,7 +19,10 @@ def configure_output() -> None:
 
 
 def print_analysis(result: TextAnalysisResult) -> None:
-    print(f"Original:\n{result.original_text}\n\nTokens:")
+    print(f"Original:\n{result.original_text}")
+    if result.translation is not None:
+        print(f"\nTranslation:\n{result.translation.translated_text}")
+    print("\nBreakdown:")
     if not result.tokens:
         print("(none)")
     for index, item in enumerate(result.tokens, 1):
@@ -50,6 +54,10 @@ def print_analysis(result: TextAnalysisResult) -> None:
                     print(f"       Notes: {'; '.join(sense.labels + sense.notes)}")
     print("\nDictionary candidates, not context-selected meanings or sentence translation.")
     print("JMdict © EDRDG contributors — CC BY-SA 4.0; https://www.edrdg.org/edrdg/licence.html")
+    print("\nExecution times (excluding model initialization):")
+    if result.translation is not None:
+        print(f"Translation: {result.translation.processing_time_ms:.0f} ms")
+    print(f"Analysis: {result.processing_time_ms:.0f} ms")
 
 
 def main(argv: list[str] | None = None, *, image_mode: bool = False) -> int:
@@ -57,26 +65,43 @@ def main(argv: list[str] | None = None, *, image_mode: bool = False) -> int:
     parser = argparse.ArgumentParser(description="YomiScan local Japanese analysis")
     parser.add_argument("input", help="Cropped image path" if image_mode else "Japanese text")
     parser.add_argument("--dictionary", type=Path, default=DEFAULT_DATABASE)
+    parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto",
+                        help="Translation device")
     if image_mode:
-        parser.add_argument("--cpu", action="store_true", help="Force CPU OCR")
+        parser.add_argument("--cpu", action="store_true", help="Force CPU OCR and translation")
+        parser.add_argument("--no-translation", action="store_true", help="OCR and lexical analysis only")
+    else:
+        parser.add_argument("--translate", action="store_true", help="Include sentence translation")
     args = parser.parse_args(argv)
+    if image_mode and args.cpu and args.device == "cuda":
+        parser.error("--cpu conflicts with --device cuda")
+    include_translation = (
+        not args.no_translation if image_mode else args.translate and bool(args.input.strip())
+    )
+    device = "cpu" if image_mode and args.cpu else args.device
+
+    def make_analyzer(dictionary: SQLiteDictionary) -> TextAnalyzer:
+        tokenizer = FugashiTokenizer()
+        translator = MarianTranslationEngine(device=device) if include_translation else None
+        return TextAnalyzer(tokenizer, dictionary, translator)
+
     try:
         with SQLiteDictionary(args.dictionary) as dictionary:
-            analyzer = TextAnalyzer(FugashiTokenizer(), dictionary)
             if image_mode:
                 with load_image(Path(args.input)) as image:
+                    analyzer = make_analyzer(dictionary)
                     result = analyze_image(image, MangaOCREngine(force_cpu=args.cpu), analyzer)
                 print(f"OCR: {result.ocr.engine} | {result.ocr.processing_time_ms:.0f} ms\n")
                 print_analysis(result.analysis)
             else:
-                print_analysis(analyzer.analyze(args.input))
+                print_analysis(make_analyzer(dictionary).analyze(args.input))
         return 0
     except ValueError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 2
-    except (DictionaryError, TokenizerError, OCRInitializationError) as exc:
+    except (DictionaryError, TokenizerError, OCRInitializationError, TranslationInitializationError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 3
-    except OCRRecognitionError as exc:
+    except (OCRRecognitionError, TranslationError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 4
