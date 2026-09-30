@@ -18,10 +18,14 @@ dependencies = [
     "transformers>=5.17,<6",
     "sentencepiece>=0.2.1,<0.3",
     "sacremoses>=0.1.1,<0.2",
+    "fastapi>=0.115,<1",
+    "pydantic>=2.10,<3",
+    "uvicorn>=0.34,<1",
+    "python-multipart>=0.0.20,<1",
 ]
 
 [dependency-groups]
-dev = ["pytest>=8"]
+dev = ["pytest>=8", "httpx>=0.28,<1"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["backend/yomiscan"]

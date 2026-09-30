@@ -65,30 +65,81 @@ select a context-specific sense, filter homophones by POS, join multi-token expr
 or apply restrictions as a grammatical interpretation. Those limitations are visible
 in CLI output. Source XML/databases live in ignored `data/`; they are never committed.
 
-## Study mode: FUTURE WORK
+## Phase 4: implemented study mode
 
 ```text
-Chrome Extension [FUTURE WORK]
+Chrome extension action / keyboard command
   ↓
-screenshot selection [FUTURE WORK]
+viewport rectangle selection → cropped screenshot
   ↓
-FastAPI [FUTURE WORK]
+localhost FastAPI
   ↓
-OCR [IMPLEMENTED]
+ImageAnalysisService
+  ├── OCREngine
+  ├── TranslationEngine
+  ├── JapaneseTokenizer
+  └── local SQLite JMdict
   ↓
-Japanese morphological analysis [IMPLEMENTED]
-  ↓
-JMdict / local lexical database [IMPLEMENTED]
-  ↓
-local sentence translation [IMPLEMENTED]
-  ↓
-single detailed study popup [FUTURE WORK]
+Pydantic JSON response → one detailed study popup
 ```
 
-The eventual popup will combine original Japanese, English sentence translation,
-readings, dictionary forms, meanings, parts of speech, verbs, particles, and optional
-JLPT information. The UI and JLPT grading remain future work.
-Tokens, readings, lemmas, POS, conjugation, and dictionary candidates are implemented.
+The popup contains original Japanese, English sentence translation, readings, lemmas,
+dictionary forms, POS, conjugation and dictionary candidates. OCR editing/reanalysis,
+grammar explanations, JLPT metadata, vocabulary storage/export remain future work.
+
+`service.py` wraps the existing `analysis.analyze_image` composition in
+`ImageAnalysisService`. The composition root `open_local_service` creates a tokenizer,
+read-only dictionary, OCR engine and translator once. The service accepts injected
+engines; it has no HTTP dependencies. Existing CLI tools remain unchanged.
+
+`api/main.py` uses FastAPI lifespan to open resources on a dedicated single-worker
+executor. Creation, inference, and cleanup all happen on that same thread, preserving
+SQLite's thread affinity without weakening its checks. One application process owns
+one set of models. Inference does not block the event loop; `/health` remains responsive.
+An overlapping request gets 429 instead of accumulating queued work. Cancelling an
+HTTP request does not release the busy slot until its running inference finishes.
+Initialization failure is logged and leaves `/health` and analysis unavailable (503);
+fix resource setup and restart. Run one Uvicorn worker for this local MVP.
+
+The route validates a multipart file, delegates decoding and service execution to the
+worker, then maps domain dataclasses to Pydantic DTOs in `api/models.py`. It contains no
+tokenization, dictionary search or model generation logic. `original_text` and optional
+sentence `translation` remain separate from each token's grouped dictionary senses.
+Senses retain entry IDs, POS, restrictions, notes and usage labels. Timing fields are
+`ocr_ms`, `translation_ms`, `analysis_ms`, and worker `total_ms` (decode, inference and
+analysis; excludes HTTP upload and model startup). No model-specific objects cross HTTP.
+
+Image decoding in `api/images.py` validates actual PNG/JPEG/WebP data, rejects animation,
+checks dimensions before loading pixels, applies EXIF orientation and returns RGB.
+Limits are 10 MiB per image and 12 megapixels. `api/security.py` bounds the full multipart
+body to 10 MiB + 64 KiB before parsing, including streamed requests. Errors: invalid
+image 400, oversized upload 413, malformed/missing fields 422, busy 429, unavailable
+resources 503, unexpected inference 500. Detailed errors remain in backend logs.
+
+Loopback binding is the default documented deployment. Trusted Host checks accept
+localhost/127.0.0.1/[::1]. CORS accepts syntactically valid Chrome extension origins by
+default; `YOMISCAN_EXTENSION_ORIGINS` optionally narrows this to explicit origins.
+Ordinary webpage origins are denied. A required `X-YomiScan-Client` header prevents
+simple cross-origin form submissions from starting inference; it is not a secret or
+local-process authentication. No wildcard CORS, accounts, or internet-facing service.
+
+The extension is plain TypeScript with esbuild, no framework. Its action/command injects
+`content.ts` into the active main frame. A temporary Shadow DOM overlay tracks pointer
+coordinates, clamps the rectangle and supports Escape. The overlay is removed before
+two animation frames pass; then `background.ts` verifies the active tab and viewport,
+captures the visible tab, crops via OffscreenCanvas and POSTs only the PNG crop.
+Screenshot-to-CSS ratios handle normal zoom/scaling without assuming screenshot pixels
+equal `devicePixelRatio`. Scroll offsets are already accounted for by viewport coordinates;
+they are not added again. Scroll/resize/visibility changes invalidate pending capture.
+Pinch zoom is rejected. Selection IDs suppress stale results after close/reselection.
+
+The service worker handles localhost requests with fixed URLs, no credentials, no
+redirects, and a 25-second timeout. The extension validates nested JSON shapes before
+rendering. `popup.ts` uses text nodes for all response data, one closed Shadow DOM popup,
+viewport-clamped placement, internal scroll, × and Escape. Extra senses expand inside
+the popup. Original OCR is a dedicated read-only section for future editing.
+Cancellation aborts the client fetch, not synchronous backend model work. No history
+or screenshots are persisted. See [extension instructions](../extension/README.md).
 
 ## Full-page translation: FUTURE WORK
 
@@ -190,6 +241,7 @@ manga page. A future caller can prioritize visible/current pages, then later pag
 and react to lazy loading. It can associate ordered translation results with region
 IDs outside the engine and reuse one model across pages. A batch contains independent
 regions, not a concatenated chapter or dictionary tokens. Cross-region conversational
-context is not provided by Phase 3. No page discovery, browser code, queues, detection,
+context is not provided by the current translator. Future reading mode may add
+context-aware/batched translation. No chapter discovery, page scheduling, detection,
 inpainting, typesetting, or image replacement is implemented here. See the
 [model decision and evaluation](phase-3-translation.md).

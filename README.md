@@ -2,11 +2,12 @@
 
 An offline-first Japanese manga reading assistant that extracts and analyzes Japanese text from manga images using local OCR and NLP.
 
-**Current status: Phase 3 — local manga OCR, Japanese morphological analysis,
-local JMdict dictionary lookup, and local Japanese → English sentence translation
-are implemented.** Real CPU inference and a complete crop-to-analysis run have been
-verified. This does not establish accuracy across manga styles or dialogue contexts.
-FastAPI, the Chrome extension, and all browser/UI/chapter workflows remain future work.
+**Current status: Phase 4 — Study Mode MVP implemented.** Local manga OCR, Japanese
+morphological analysis, JMdict lookup, Japanese → English translation, localhost
+FastAPI, and a Chrome extension with screenshot region selection and one comprehensive
+study popup are available. The real extension flow was tested in isolated headless
+Chrome with CPU inference. Translation quality remains limited on casual dialogue.
+Translate Chapter and seamless translated-page rendering remain future work.
 
 The purpose is to help Japanese learners study manga without paid APIs or per-request
 costs. Sentence translation is separate from ordered tokens with readings, dictionary
@@ -28,6 +29,94 @@ uv run pytest
 and includes the dev dependency group. Python is constrained to `>=3.13,<3.14`.
 The generated `uv.lock` records resolved versions; direct dependencies live in
 `pyproject.toml`. No global Python configuration changes are needed.
+
+## Study mode: two-terminal development
+
+Complete the [JMdict import](#set-up-the-local-jmdict-dictionary) below first. Install
+Node.js 22+ for extension tooling. The backend runs on your machine and must be started
+manually for this MVP.
+
+Terminal 1, from the repository root:
+
+```powershell
+uv sync
+uv run uvicorn yomiscan.api.main:app --host 127.0.0.1 --port 8765 --reload
+```
+
+Wait for `Application startup complete`. First startup may download OCR/translation
+weights; subsequent requests reuse the initialized models. Set
+`$env:YOMISCAN_DEVICE = "cpu"` before startup to force CPU (default `auto`).
+`YOMISCAN_DICTIONARY` overrides `data/jmdict.sqlite3`. Once models are cached, set
+`$env:HF_HUB_OFFLINE = "1"` to require offline model use.
+
+Terminal 2, from the repository root:
+
+```powershell
+cd extension
+npm.cmd ci
+npm.cmd run build
+npm.cmd run watch
+```
+
+Use `npm` on macOS/Linux. `npm.cmd` avoids Windows PowerShell's `npm.ps1` execution
+policy error; changing execution policy is unnecessary.
+
+1. Open `chrome://extensions`, enable **Developer mode**, and choose **Load unpacked**.
+2. Select `extension/dist` (here **`C:\Users\T-GAMER\yomiscan\extension\dist`**).
+3. Open a normal manga webpage, click YomiScan's extension action, and drag around a
+   Japanese speech bubble. Only that viewport crop is sent to the local backend.
+4. Read the original, translation, readings, lemmas, POS, conjugations, and dictionary
+   meanings in one scrollable popup. Extra senses expand inside it.
+5. Close with **×** or **Escape**. Escape also cancels selection or dismisses pending work.
+
+The suggested shortcut is **Ctrl+Shift+Y** (**Command+Shift+Y** on macOS). Conflicts
+can leave it unassigned; change the binding at `chrome://extensions/shortcuts`.
+Reload the extension and refresh the manga tab after rebuilding. Watch rebuilds code
+but does not reload Chrome or type-check changes; run `npm.cmd run typecheck` separately.
+
+Selected screenshots are sent only to the local YomiScan backend at `127.0.0.1:8765`.
+Initial model/dictionary/dependency downloads are separate from local image analysis.
+The full visible-tab screenshot is transient in extension memory; only the selected
+crop is uploaded. Images/results are not saved by the application. There is no analytics,
+cloud upload, paid API, or third-party inference. The attribution link opens externally
+only if clicked.
+
+## Local API
+
+- `GET /health` → `{"status":"ok"}` when resources are ready; 503 after initialization
+  failure. Fix setup and restart; see terminal diagnostics.
+- `POST /api/v1/analyze-image`: multipart upload named **`file`**, plus header
+  **`X-YomiScan-Client: study-extension-v1`**. Supports still PNG, JPEG and WebP.
+- API schema: `http://127.0.0.1:8765/docs`. POST clients must supply the client header;
+  the curl example is the simplest manual request.
+
+```powershell
+curl.exe http://127.0.0.1:8765/health
+curl.exe -H "X-YomiScan-Client: study-extension-v1" -F "file=@samples/test.png" http://127.0.0.1:8765/api/v1/analyze-image
+```
+
+JSON contains `original_text`, separate `translation`, `processing` times, and ordered
+`tokens` with readings, lemmas, dictionary forms, POS, conjugation, and grouped senses
+with restrictions. The extension never needs to know which translation model is used.
+Limits: **10 MiB image**, **12 megapixels**, one analysis at a time. Overlapping requests
+return 429. The extension times out after 25 seconds. Client cancellation does not
+interrupt ongoing model inference; wait before selecting again.
+
+Bind to loopback, not `0.0.0.0`. Development CORS permits valid `chrome-extension://`
+origins only, never `*` or arbitrary manga-site origins. To allow only your extension,
+find its ID on `chrome://extensions` and set this before startup:
+
+```powershell
+$env:YOMISCAN_EXTENSION_ORIGINS = "chrome-extension://YOUR_EXTENSION_ID"
+```
+
+The custom header requires preflight for webpage requests; unapproved Origin/Host
+headers are rejected. This is a local development boundary, not authentication against
+other programs on your machine. The extension host permission covers loopback, while
+its request URL and network CSP fix analysis to port 8765. Keep that port unless you
+rebuild the extension with matching changes. Use one Uvicorn worker to avoid duplicating
+model memory. See [extension instructions](extension/README.md) and
+[Phase 4 validation/checklist](docs/phase-4-validation.md).
 
 ## Run OCR
 
@@ -221,7 +310,8 @@ interface does not load the network. Unit tests substitute a fake upstream model
 The CLI logic lives in the package so the script stays small and tests can import it.
 
 Direct runtime dependencies are manga-ocr, Pillow, fugashi, UniDic-lite, torch,
-transformers, sentencepiece, and sacremoses; pytest is a dev dependency.
+transformers, sentencepiece, sacremoses, FastAPI, Pydantic, Uvicorn, and python-multipart;
+pytest and httpx are dev dependencies.
 SQLite and the XML importer use Python's standard library.
 `JapaneseTokenizer` isolates the tokenizer, while `TextAnalyzer` composes it with the
 dictionary. Each analyzer reuses its tokenizer and dictionary connection. Shared
@@ -240,17 +330,19 @@ transcription before describing recognition as reliable.
 ## Roadmap and eventual architecture
 
 1. **Implemented:** local OCR → sentence translation + morphological analysis / JMdict lookup.
-2. **Future:** Chrome extension, screenshot selection, FastAPI, and detailed study popup.
-3. **Future:** Translate Chapter, manga page discovery, text detection, inpainting,
-   typesetting, image overlays, and lazy-loaded page translation.
+2. **Implemented:** Chrome screenshot selection → localhost FastAPI → one study popup.
+3. **Future:** OCR correction, translation engine improvements/benchmarking,
+   manga-context-aware translation, vocabulary saving/export, full-page text detection,
+   seamless rendering, Translate Chapter, chapter image discovery, lazy-loaded image
+   handling, inpainting, typesetting, and translated overlays.
 
-See [architecture](docs/architecture.md). No extension, selection UI, detailed popup,
-HTTP API, chapter translation, JLPT grading, detection, inpainting, typesetting,
-accounts, or cloud deployment is implemented.
+See [architecture](docs/architecture.md). Chapter translation, JLPT grading, detection,
+inpainting, typesetting, accounts, and cloud deployment are not implemented.
 
 ## Limitations and licensing
 
-Manually crop one text region; this is recognition, not full-page text detection.
+Select one visible text region in Chrome or supply a manually cropped image to a CLI;
+this is recognition, not full-page text detection.
 There are no bounding boxes or confidence scores. Small, stylized, obscured, or long
 text can be misread. The generative OCR model can invent text on images without text.
 Furigana is not exposed as separate readings. Punctuation and spacing may be normalized

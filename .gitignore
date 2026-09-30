@@ -26,6 +26,8 @@ models/
 *.onnx
 *.h5
 *.gguf
+node_modules/
+extension/.test/
 /samples/*
 !/samples/README.md
 /data/
