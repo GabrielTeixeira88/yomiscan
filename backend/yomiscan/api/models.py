@@ -1,6 +1,8 @@
 from pydantic import BaseModel
 
 from yomiscan.analysis import ImageAnalysisResult
+from yomiscan.ocr import OCRResult
+from yomiscan.page import PageAnalysisResult
 
 
 class ProcessingTimes(BaseModel):
@@ -59,3 +61,57 @@ class ImageAnalysisResponse(BaseModel):
                           for sense in analysis.dictionary_entries[entry_id].senses],
             ) for item in analysis.tokens],
         )
+
+
+class BoxResponse(BaseModel):
+    left: int
+    top: int
+    right: int
+    bottom: int
+
+
+class BlockResponse(BaseModel):
+    id: int
+    region_ids: list[int]
+    bbox: BoxResponse
+    orientation: str
+    reading_order: int
+    original_text: str
+    translation: str | None
+    tokens: list[TokenResponse]
+    confidence: float | None
+    category: str
+    status: str
+    error_message: str | None
+
+
+class PageProcessingTimes(ProcessingTimes):
+    detection_ms: float
+
+
+class PageAnalysisResponse(BaseModel):
+    width: int
+    height: int
+    regions_detected: int
+    regions_filtered: int
+    text_blocks: list[BlockResponse]
+    processing: PageProcessingTimes
+
+    @classmethod
+    def from_result(cls, result: PageAnalysisResult) -> "PageAnalysisResponse":
+        blocks = []
+        for block in result.text_blocks:
+            # Reuse the stable Study Mode lexical DTO mapping.
+            analysis = ImageAnalysisResponse.from_result(
+                ImageAnalysisResult(OCRResult(block.original_text, "page", 0), block.analysis), 0,
+            ) if block.analysis is not None else None
+            blocks.append(BlockResponse(
+                id=block.id, region_ids=list(block.region_ids), bbox=BoxResponse(**block.bbox.__dict__),
+                orientation=block.orientation, reading_order=block.reading_order,
+                original_text=block.original_text, translation=analysis.translation if analysis else None,
+                tokens=analysis.tokens if analysis else [], confidence=block.confidence,
+                category=block.category, status=block.status, error_message=block.error_message,
+            ))
+        return cls(width=result.width, height=result.height, regions_detected=len(result.regions),
+                   regions_filtered=len(result.filtered_regions), text_blocks=blocks,
+                   processing=PageProcessingTimes(**result.processing.__dict__))

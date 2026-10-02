@@ -16,8 +16,9 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from yomiscan.service import ImageAnalysisService, open_local_service
 from yomiscan.translation.base import Device
+from yomiscan.detection import DetectionInitializationError
 from .images import decode_image, MAX_FILE_BYTES
-from .models import ImageAnalysisResponse
+from .models import ImageAnalysisResponse, PageAnalysisResponse
 from .security import EXTENSION_ORIGIN, LocalRequestGuard
 
 logger = logging.getLogger(__name__)
@@ -33,13 +34,19 @@ def default_service() -> AbstractContextManager[ImageAnalysisService]:
     )
 
 
-def analyze_upload(service: ImageAnalysisService, data: bytes) -> ImageAnalysisResponse:
+def analyze_upload(service: ImageAnalysisService, data: bytes, page: bool = False) -> ImageAnalysisResponse | PageAnalysisResponse:
     start = perf_counter()
     try:
         image = decode_image(data)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     with image:
+        if page:
+            try:
+                return PageAnalysisResponse.from_result(service.analyze_page(image))
+            except DetectionInitializationError as exc:
+                logger.exception("Page detector unavailable")
+                raise HTTPException(503, "Page detector unavailable. Check server logs and model setup.") from exc
         result = service.analyze_image(image)
     return ImageAnalysisResponse.from_result(result, (perf_counter() - start) * 1000)
 
@@ -96,6 +103,13 @@ def create_app(
 
     @app.post("/api/v1/analyze-image", response_model=ImageAnalysisResponse)
     async def analyze(request: Request, file: Annotated[UploadFile, File()]) -> ImageAnalysisResponse:
+        return await handle_upload(request, file, page=False)
+
+    @app.post("/api/v1/analyze-page", response_model=PageAnalysisResponse)
+    async def analyze_page(request: Request, file: Annotated[UploadFile, File()]) -> PageAnalysisResponse:
+        return await handle_upload(request, file, page=True)
+
+    async def handle_upload(request: Request, file: UploadFile, *, page: bool) -> ImageAnalysisResponse | PageAnalysisResponse:
         try:
             data = await file.read(MAX_FILE_BYTES + 1)
         finally:
@@ -111,7 +125,7 @@ def create_app(
             raise HTTPException(429, "YomiScan is processing another crop. Please try again shortly.")
         state.busy = True
         future = asyncio.get_running_loop().run_in_executor(
-            state.executor, analyze_upload, state.service, data,
+            state.executor, analyze_upload, state.service, data, page,
         )
 
         def finished(task: asyncio.Future) -> None:
@@ -129,6 +143,8 @@ def create_app(
             raise
         except Exception as exc:
             # HTTP boundary: do not disclose library errors, paths, or tracebacks to clients.
+            if page:
+                raise HTTPException(500, "Page analysis failed. See server logs for diagnostics.") from exc
             raise HTTPException(500, "Image analysis failed. Try a smaller clear crop; see server logs.") from exc
 
     return app

@@ -3,10 +3,10 @@
 - YomiScan is offline-first. Prefer local, open-source components; avoid paid APIs and cloud OCR.
 - Implement only the explicitly requested phase. OCR, morphological analysis, and local
   JMdict lookup, local sentence translation, localhost FastAPI, and Chrome study-mode
-  selection/popup are implemented. Chapter translation, detection, inpainting,
+  selection/popup and single-page text detection/analysis are implemented. Chapter translation, inpainting,
   typesetting, OCR correction, and JLPT grading remain future work.
 - Keep components modular with small typed interfaces; avoid premature abstractions.
-- Use Python type hints and useful tests. Ordinary tests must not download or load OCR or translation weights.
+- Use Python type hints and useful tests. Ordinary tests must not download or load OCR, translation, or detection weights.
 - Do not hide failures with broad exception handling. At third-party boundaries, wrap failures
   with actionable context and preserve the exception cause.
 - Preserve Windows compatibility and cross-platform paths.

@@ -61,3 +61,18 @@ with this repository. They are downloaded directly to the user's local cache.
 The evaluated M2M100 checkpoint declares MIT; NLLB-200 distilled declares
 CC-BY-NC-4.0 and carries a noncommercial restriction. Neither is the default or bundled.
 See [Phase 3 research and evaluation](phase-3-translation.md) for source links and limits.
+
+## Phase 5 detector
+
+The publisher of [`ogkalu/comic-text-and-bubble-detector`](https://huggingface.co/ogkalu/comic-text-and-bubble-detector)
+lists **Apache-2.0** for the selected RT-DETR-v2 weights. YomiScan downloads the pinned
+revision documented in [Phase 5](phase-5-page-analysis.md); weights are not committed
+or relicensed under YomiScan's MIT license. No third-party detector source is vendored.
+
+Apache-2.0 permits use, modification and distribution, including commercial use,
+subject to its conditions. If distributing the model, include its license, retain
+applicable attribution and NOTICE material, and identify modifications where required.
+The license does not grant trademark rights or ownership of training images. Preserve
+the publisher's provenance and review all bundled artifacts before packaging an extension
+or installer. See the [official Apache-2.0 text](https://www.apache.org/licenses/LICENSE-2.0).
+Current Chrome screenshots are processed locally; only initial weights are downloaded.

@@ -141,30 +141,43 @@ the popup. Original OCR is a dedicated read-only section for future editing.
 Cancellation aborts the client fetch, not synchronous backend model work. No history
 or screenshots are persisted. See [extension instructions](../extension/README.md).
 
-## Full-page translation: FUTURE WORK
+## Phase 5: implemented single-page analysis
 
 ```text
-manga page [FUTURE input workflow]
-  ↓
-text detection [FUTURE WORK]
-  ↓
-OCR [adapter exists; page integration is FUTURE WORK]
-  ↓
-sentence reconstruction [FUTURE WORK]
-  ↓
-translation [adapter exists; page integration is FUTURE WORK]
-  ↓
-text masks [FUTURE WORK]
-  ↓
-inpainting [FUTURE WORK]
-  ↓
-typesetting [FUTURE WORK]
-  ↓
-translated manga page [FUTURE WORK]
+full page -> TextDetector -> raw TextRegion boxes (optional polygons)
+  -> clip/filter -> conservative grouping -> initial reading order
+  -> padded TextBlock crops -> shared OCREngine
+  -> Japanese validation -> shared TextAnalyzer.analyze_many
+  -> batched TranslationEngine + tokenizer/JMdict
+  -> PageAnalysisResult -> CLI/debug JSON or PageAnalysisResponse
 ```
 
-Recognition and localization are separate responsibilities. Detection will eventually
-provide regions and reading order; manga-ocr currently receives an already cropped image.
+`detection/base.py` defines geometry and the detector Protocol; `rtdetr.py` owns all
+model-specific preprocessing and original-pixel postprocessing. `page_layout.py` owns
+geometry grouping/order; `page.py` owns orchestration and block failures. `page_cli.py`
+provides numbered overlays and optional developer JSON. Detection never performs OCR.
+
+`ImageAnalysisService.analyze_page` lazily creates and retains a PageAnalysisService on
+its existing owning worker. It shares Study Mode's OCR/analyzer and therefore translator,
+tokenizer and dictionary connection. The page endpoint uses the same upload validation,
+security, busy guard and cancellation lifecycle; missing detector resources do not change
+Study Mode availability. Page and Study requests cannot race the shared models/SQLite.
+
+`TextAnalyzer.analyze_many` batches translation, preserves input order, and isolates known
+translation failures by retrying individually. Ordinary `analyze` retains its original
+behavior. Page results preserve raw regions, filtered reasons and block membership without
+copying raw regions into every block. API DTOs reuse Study Mode token serialization.
+Per-block known OCR/analysis errors preserve successful neighbors and safe error messages.
+Unexpected programming failures remain overall errors instead of being silently hidden.
+
+Default detections already represent blocks; only explicitly line-level detections can
+be geometrically joined. Default orientation/category stay unknown. Reading order is a
+band-based top-to-bottom/right-to-left heuristic, not panel understanding. Debug overlays
+number raw detections; JSON joins these IDs to final blocks and OCR/status. See the
+[Phase 5 model decision and validation](phase-5-page-analysis.md) for exact thresholds,
+cache behavior, licensing, measured CPU results, and unresolved full-page evaluation.
+
+Image modification (masking, inpainting, typesetting, translated overlays) remains future.
 
 ## Replaceability
 
@@ -242,6 +255,7 @@ and react to lazy loading. It can associate ordered translation results with reg
 IDs outside the engine and reuse one model across pages. A batch contains independent
 regions, not a concatenated chapter or dictionary tokens. Cross-region conversational
 context is not provided by the current translator. Future reading mode may add
-context-aware/batched translation. No chapter discovery, page scheduling, detection,
-inpainting, typesetting, or image replacement is implemented here. See the
+context-aware/batched translation. No chapter discovery or page scheduling,
+inpainting, typesetting, or image replacement is implemented here. Single-page detection
+and analysis are now provided by PageAnalysisService. See the
 [model decision and evaluation](phase-3-translation.md).

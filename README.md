@@ -2,12 +2,15 @@
 
 An offline-first Japanese manga reading assistant that extracts and analyzes Japanese text from manga images using local OCR and NLP.
 
-**Current status: Phase 4 — Study Mode MVP implemented.** Local manga OCR, Japanese
+**Current status: Phase 5 — Study Mode and single-page analysis implemented.** Local manga OCR, Japanese
 morphological analysis, JMdict lookup, Japanese → English translation, localhost
 FastAPI, and a Chrome extension with screenshot region selection and one comprehensive
 study popup are available. The real extension flow was tested in isolated headless
 Chrome with CPU inference. Translation quality remains limited on casual dialogue.
-Translate Chapter and seamless translated-page rendering remain future work.
+Single-page detection, cropping, OCR, initial ordering/grouping and block analysis are now
+available through CLI/API. Full-page accuracy still needs representative local pages;
+the initial real inference check used an existing crop. Translate Chapter and seamless
+translated-page rendering remain future work.
 
 The purpose is to help Japanese learners study manga without paid APIs or per-request
 costs. Sentence translation is separate from ordered tokens with readings, dictionary
@@ -29,6 +32,23 @@ uv run pytest
 and includes the dev dependency group. Python is constrained to `>=3.13,<3.14`.
 The generated `uv.lock` records resolved versions; direct dependencies live in
 `pyproject.toml`. No global Python configuration changes are needed.
+
+## Single-page analysis (Phase 5)
+
+```powershell
+uv run python scripts/detect_text.py samples/page.png --device cpu --output samples/page-boxes.png
+uv run python scripts/analyze_page.py samples/page.png --device cpu --debug-image samples/page-debug.png --json-output samples/page-analysis.json
+```
+
+The existing local server also exposes `POST /api/v1/analyze-page` (multipart `file`,
+`X-YomiScan-Client: study-extension-v1`). Study Mode's `/api/v1/analyze-image` is unchanged.
+Detection uses a pinned comic-trained RT-DETR-v2 model (about 172 MB, publisher license
+Apache-2.0), loaded once on the first page request. Models run locally and reuse the
+Hugging Face cache. No new dependencies. Full analysis needs the existing JMdict setup.
+
+See [detector decision, commands, cache, limitations and evaluation](docs/phase-5-page-analysis.md).
+Keep page images and debug outputs under ignored `samples/`. No inpainting, typesetting,
+translated image rendering, chapter discovery or lazy-loaded chapter processing is implemented.
 
 ## Study mode: two-terminal development
 
@@ -331,19 +351,20 @@ transcription before describing recognition as reliable.
 
 1. **Implemented:** local OCR → sentence translation + morphological analysis / JMdict lookup.
 2. **Implemented:** Chrome screenshot selection → localhost FastAPI → one study popup.
-3. **Future:** OCR correction, translation engine improvements/benchmarking,
-   manga-context-aware translation, vocabulary saving/export, full-page text detection,
+3. **Implemented:** single-page text detection, region cropping, initial reading order/grouping,
+   OCR and translation/lexical analysis per block.
+4. **Future:** OCR correction, translation engine improvements/benchmarking,
+   manga-context-aware translation, vocabulary saving/export,
    seamless rendering, Translate Chapter, chapter image discovery, lazy-loaded image
    handling, inpainting, typesetting, and translated overlays.
 
-See [architecture](docs/architecture.md). Chapter translation, JLPT grading, detection,
+See [architecture](docs/architecture.md). Chapter translation, JLPT grading,
 inpainting, typesetting, accounts, and cloud deployment are not implemented.
 
 ## Limitations and licensing
 
-Select one visible text region in Chrome or supply a manually cropped image to a CLI;
-this is recognition, not full-page text detection.
-There are no bounding boxes or confidence scores. Small, stylized, obscured, or long
+Study Mode accepts one selected crop. Page analysis accepts a complete page and returns
+text boxes and detector scores; the OCR engine itself has no confidence score. Small, stylized, obscured, or long
 text can be misread. The generative OCR model can invent text on images without text.
 Furigana is not exposed as separate readings. Punctuation and spacing may be normalized
 by the upstream engine. Each CLI invocation loads a new engine, so wall-clock runtime

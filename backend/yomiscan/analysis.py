@@ -1,6 +1,8 @@
 """Compose existing engines without tying tokenization to OCR."""
 
 from dataclasses import dataclass
+from collections.abc import Sequence
+import logging
 from time import perf_counter
 from typing import Protocol
 import unicodedata
@@ -11,6 +13,9 @@ from yomiscan.dictionary import DictionaryEntry
 from yomiscan.nlp import JapaneseToken, JapaneseTokenizer
 from yomiscan.ocr import OCREngine, OCRResult
 from yomiscan.translation import TranslationEngine, TranslationResult
+from yomiscan.translation import TranslationError
+from yomiscan.nlp import TokenizerError
+from yomiscan.dictionary import DictionaryError
 
 
 class DictionaryLookup(Protocol):
@@ -60,6 +65,40 @@ class TextAnalyzer:
 
     def analyze(self, text: str) -> TextAnalysisResult:
         translation = self._translator.translate(text) if self._translator and text.strip() else None
+        return self._analyze_lexical(text, translation)
+
+    def analyze_many(self, texts: Sequence[str]) -> list[TextAnalysisResult | Exception]:
+        """Batch sentence translation; isolate known per-block failures in page mode."""
+        translations: list[TranslationResult | None | Exception] = [None] * len(texts)
+        nonblank = [i for i, text in enumerate(texts) if text.strip()]
+        if self._translator and nonblank:
+            try:
+                batch = self._translator.translate_many([texts[i] for i in nonblank])
+                if len(batch) != len(nonblank):
+                    raise TranslationError("Translation batch returned an unexpected number of results")
+                for i, result in zip(nonblank, batch, strict=True):
+                    translations[i] = result
+            except TranslationError:
+                logging.getLogger(__name__).exception("Page translation batch failed; retrying individual blocks")
+                for i in nonblank:
+                    try:
+                        translations[i] = self._translator.translate(texts[i])
+                    except TranslationError as exc:
+                        logging.getLogger(__name__).exception("Page block translation failed")
+                        translations[i] = exc
+        results: list[TextAnalysisResult | Exception] = []
+        for text, translation in zip(texts, translations, strict=True):
+            if isinstance(translation, Exception):
+                results.append(translation)
+                continue
+            try:
+                results.append(self._analyze_lexical(text, translation))
+            except (TokenizerError, DictionaryError) as exc:
+                logging.getLogger(__name__).exception("Page lexical analysis failed")
+                results.append(exc)
+        return results
+
+    def _analyze_lexical(self, text: str, translation: TranslationResult | None) -> TextAnalysisResult:
         start = perf_counter()
         tokens = []
         entries: dict[int, DictionaryEntry] = {}
