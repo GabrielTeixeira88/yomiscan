@@ -76,3 +76,20 @@ The license does not grant trademark rights or ownership of training images. Pre
 the publisher's provenance and review all bundled artifacts before packaging an extension
 or installer. See the [official Apache-2.0 text](https://www.apache.org/licenses/LICENSE-2.0).
 Current Chrome screenshots are processed locally; only initial weights are downloaded.
+
+## Phase 6 rendering and font
+
+OpenCV 4.x is [Apache-2.0](https://opencv.org/license/); the headless Python wheel
+also carries its own package/bundled-library notices. NumPy uses BSD-3-Clause.
+Keep dependency notices when redistributing an application/runtime. No new neural
+inpainting weights are used, so there is no additional model license or model download.
+Existing detector/OCR/translation licenses still apply independently.
+
+English rendering uses the **Aileron Regular subset embedded in Pillow**, not an OS
+font. The [font author's terms](https://dotcolon.net/fonts/aileron/) state
+**No Rights Reserved** and permit modification/redistribution. Pillow's code remains
+under [MIT-CMU](https://github.com/python-pillow/Pillow/blob/main/LICENSE).
+No font binaries are copied into this repository; Pillow supplies the font during
+installation. This font is not relicensed under YomiScan's MIT license. Preserve Pillow
+and relevant third-party notices in future packaged runtimes. The subset does not cover
+every Unicode character; unsupported translations are safely skipped.

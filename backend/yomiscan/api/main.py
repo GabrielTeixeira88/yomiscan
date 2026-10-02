@@ -6,11 +6,13 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import AbstractContextManager, asynccontextmanager
 import logging
 import os
+from io import BytesIO
 from pathlib import Path
 from time import perf_counter
 from typing import Annotated, cast
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
@@ -34,7 +36,8 @@ def default_service() -> AbstractContextManager[ImageAnalysisService]:
     )
 
 
-def analyze_upload(service: ImageAnalysisService, data: bytes, page: bool = False) -> ImageAnalysisResponse | PageAnalysisResponse:
+def analyze_upload(service: ImageAnalysisService, data: bytes, page: bool = False,
+                   render: bool = False) -> ImageAnalysisResponse | PageAnalysisResponse | Response:
     start = perf_counter()
     try:
         image = decode_image(data)
@@ -43,6 +46,16 @@ def analyze_upload(service: ImageAnalysisService, data: bytes, page: bool = Fals
     with image:
         if page:
             try:
+                if render:
+                    result = service.translate_and_render_page(image)
+                    buffer = BytesIO()
+                    result.rendered_image.save(buffer, format="PNG")
+                    return Response(buffer.getvalue(), media_type="image/png", headers={
+                        "X-YomiScan-Blocks-Rendered": str(result.blocks_rendered),
+                        "X-YomiScan-Blocks-Skipped": str(result.blocks_skipped),
+                        "X-YomiScan-Processing-Ms": f"{result.analysis_processing.get('pipeline_total_ms', 0):.1f}",
+                        "Cache-Control": "no-store",
+                    })
                 return PageAnalysisResponse.from_result(service.analyze_page(image))
             except DetectionInitializationError as exc:
                 logger.exception("Page detector unavailable")
@@ -92,6 +105,7 @@ def create_app(
         CORSMiddleware, allow_origins=origins,
         allow_origin_regex=None if origins else EXTENSION_ORIGIN,
         allow_methods=["GET", "POST"], allow_headers=["Content-Type", "X-YomiScan-Client"],
+        expose_headers=["X-YomiScan-Blocks-Rendered", "X-YomiScan-Blocks-Skipped", "X-YomiScan-Processing-Ms"],
     )
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "[::1]"])
 
@@ -109,7 +123,13 @@ def create_app(
     async def analyze_page(request: Request, file: Annotated[UploadFile, File()]) -> PageAnalysisResponse:
         return await handle_upload(request, file, page=True)
 
-    async def handle_upload(request: Request, file: UploadFile, *, page: bool) -> ImageAnalysisResponse | PageAnalysisResponse:
+    @app.post("/api/v1/render-page", response_class=Response,
+              responses={200: {"content": {"image/png": {}}}})
+    async def render_page(request: Request, file: Annotated[UploadFile, File()]) -> Response:
+        return await handle_upload(request, file, page=True, render=True)
+
+    async def handle_upload(request: Request, file: UploadFile, *, page: bool,
+                            render: bool = False) -> ImageAnalysisResponse | PageAnalysisResponse | Response:
         try:
             data = await file.read(MAX_FILE_BYTES + 1)
         finally:
@@ -125,7 +145,7 @@ def create_app(
             raise HTTPException(429, "YomiScan is processing another crop. Please try again shortly.")
         state.busy = True
         future = asyncio.get_running_loop().run_in_executor(
-            state.executor, analyze_upload, state.service, data, page,
+            state.executor, analyze_upload, state.service, data, page, render,
         )
 
         def finished(task: asyncio.Future) -> None:

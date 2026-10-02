@@ -39,12 +39,27 @@ def group_regions(regions: list[TextRegion]) -> list[RegionGroup]:
     groups: list[list[TextRegion]] = []
     for region in sorted(regions, key=lambda r: (r.bbox.top, -r.bbox.right, r.id)):
         # Complete-link rule avoids chains bridging distant bubbles.
-        target = next((g for g in groups if all(nearby_lines(region, r) for r in g)), None)
+        target = next((g for g in groups if all(nearby_lines(region, r) or contained_duplicate(region, r) for r in g)), None)
         if target is None:
             groups.append([region])
         else:
             target.append(region)
     return [RegionGroup(tuple(g), union_box(tuple(g))) for g in groups]
+
+
+def contained_duplicate(a: TextRegion, b: TextRegion) -> bool:
+    """Same-class block predictions fully containing a second prediction share one OCR crop.
+
+    Keep both raw IDs; partial overlap or mere proximity does not imply a shared bubble.
+    """
+    if any(r.metadata.get("granularity") != "block" for r in (a, b)):
+        return False
+    if not a.metadata.get("class") or a.metadata.get("class") != b.metadata.get("class"):
+        return False
+    outer, inner = sorted((a, b), key=lambda r: r.bbox.width*r.bbox.height, reverse=True)
+    x, y = outer.bbox, inner.bbox
+    return (x.left <= y.left and x.top <= y.top and x.right >= y.right and x.bottom >= y.bottom
+            and (outer.confidence or 0) >= (inner.confidence or 0))
 
 
 def reading_order(groups: list[RegionGroup]) -> list[RegionGroup]:

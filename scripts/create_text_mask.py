@@ -1,0 +1,4 @@
+from yomiscan.rendering.cli import main
+
+if __name__ == "__main__":
+    raise SystemExit(main(mask_only=True))

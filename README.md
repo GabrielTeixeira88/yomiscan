@@ -2,15 +2,16 @@
 
 An offline-first Japanese manga reading assistant that extracts and analyzes Japanese text from manga images using local OCR and NLP.
 
-**Current status: Phase 5 — Study Mode and single-page analysis implemented.** Local manga OCR, Japanese
+**Current status: Phase 6 — Study Mode, page analysis and conservative page rendering implemented.** Local manga OCR, Japanese
 morphological analysis, JMdict lookup, Japanese → English translation, localhost
 FastAPI, and a Chrome extension with screenshot region selection and one comprehensive
 study popup are available. The real extension flow was tested in isolated headless
 Chrome with CPU inference. Translation quality remains limited on casual dialogue.
 Single-page detection, cropping, OCR, initial ordering/grouping and block analysis are now
-available through CLI/API. Full-page accuracy still needs representative local pages;
-the initial real inference check used an existing crop. Translate Chapter and seamless
-translated-page rendering remain future work.
+available through CLI/API. Single-page rendering now removes safely masked text and fits
+English into suitable regions, preserving uncertain blocks. A real local page was visually
+reviewed; broader detection/rendering accuracy still needs representative pages.
+Translate Chapter and browser translated-image overlays remain future work.
 
 The purpose is to help Japanese learners study manga without paid APIs or per-request
 costs. Sentence translation is separate from ordered tokens with readings, dictionary
@@ -47,8 +48,34 @@ Apache-2.0), loaded once on the first page request. Models run locally and reuse
 Hugging Face cache. No new dependencies. Full analysis needs the existing JMdict setup.
 
 See [detector decision, commands, cache, limitations and evaluation](docs/phase-5-page-analysis.md).
-Keep page images and debug outputs under ignored `samples/`. No inpainting, typesetting,
-translated image rendering, chapter discovery or lazy-loaded chapter processing is implemented.
+Keep page images and debug outputs under ignored `samples/`. Chapter discovery and
+lazy-loaded chapter processing remain future work.
+
+## Single-page rendering (Phase 6)
+
+```powershell
+uv sync
+uv run python scripts/create_text_mask.py samples/page.png --output samples/text-mask.png
+uv run python scripts/render_page.py samples/page.png --device cpu --output samples/translated.png --debug-dir samples/render-debug
+```
+
+Rendering runs page analysis once, generates tight foreground masks, reconstructs safe
+backgrounds using uniform fill/OpenCV inpainting, then fits and typesets English with
+Pillow's bundled Aileron font. It preserves original pixels when a block is uncertain,
+overlaps another detection, fails processing, or cannot fit readable English.
+Complex artwork and unclassified free text are normally skipped. The source is not changed.
+The quality pass separates tight glyph masks from enclosed bubble/narration interiors,
+uses balanced measured wrapping and a preferred font size, and groups contained duplicate
+predictions. See the [real-page skip audit and before/after observations](docs/phase-6-quality.md).
+
+The existing server exposes `POST /api/v1/render-page`, multipart `file`, with the same
+`X-YomiScan-Client: study-extension-v1` header. It returns PNG and rendered/skipped counts
+in response headers. The Chrome extension remains Study Mode only.
+
+No additional model weights or font installation is needed; `uv sync` installs OpenCV
+headless and NumPy. Rendering uses CPU; `--device` controls analysis. Debug output includes
+original, detection, raw/final masks, cleaned and final pages, plus metadata.
+See [Phase 6 design, licensing, validation and limitations](docs/phase-6-rendering.md).
 
 ## Study mode: two-terminal development
 
@@ -353,13 +380,16 @@ transcription before describing recognition as reliable.
 2. **Implemented:** Chrome screenshot selection → localhost FastAPI → one study popup.
 3. **Implemented:** single-page text detection, region cropping, initial reading order/grouping,
    OCR and translation/lexical analysis per block.
-4. **Future:** OCR correction, translation engine improvements/benchmarking,
+4. **Implemented:** conservative masks, text removal/inpainting, English font fitting,
+   typesetting and single-page translated PNG output through CLI/API.
+5. **Future:** OCR correction, translation engine improvements/benchmarking,
    manga-context-aware translation, vocabulary saving/export,
-   seamless rendering, Translate Chapter, chapter image discovery, lazy-loaded image
-   handling, inpainting, typesetting, and translated overlays.
+   improved artwork reconstruction, Translate Chapter, chapter image discovery,
+   progressive/viewport-prioritized translation, lazy-loaded image handling, browser
+   translated overlays, Original/English toggle, caching and chapter session management.
 
 See [architecture](docs/architecture.md). Chapter translation, JLPT grading,
-inpainting, typesetting, accounts, and cloud deployment are not implemented.
+browser image replacement, accounts, and cloud deployment are not implemented.
 
 ## Limitations and licensing
 

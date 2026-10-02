@@ -14,6 +14,11 @@ from .translation import MarianTranslationEngine
 from .translation.base import Device
 from .detection import ComicTextDetector, TextDetector
 from .page import PageAnalysisService, PageAnalysisResult
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .rendering.base import PageRenderResult
+    from .rendering.service import PageTranslationRenderService
 
 
 class ImageAnalysisService:
@@ -24,6 +29,7 @@ class ImageAnalysisService:
         self._detector = detector
         self._device = device
         self._page_service: PageAnalysisService | None = None
+        self._render_service: PageTranslationRenderService | None = None
 
     def analyze_image(self, image: Image.Image) -> ImageAnalysisResult:
         return analyze_image(image, self._ocr, self._analyzer)
@@ -34,6 +40,14 @@ class ImageAnalysisService:
             detector = self._detector if self._detector is not None else ComicTextDetector(device=self._device)
             self._page_service = PageAnalysisService(detector, self._ocr, self._analyzer)
         return self._page_service.analyze_page(image)
+
+    def translate_and_render_page(self, image: Image.Image, analysis: PageAnalysisResult | None = None,
+                                  *, debug: bool = False) -> "PageRenderResult":
+        if self._render_service is None:
+            from .rendering.renderer import ConservativePageRenderer
+            from .rendering.service import PageTranslationRenderService
+            self._render_service = PageTranslationRenderService(self, ConservativePageRenderer())
+        return self._render_service.translate_and_render_page(image, analysis, debug=debug)
 
 
 @contextmanager

@@ -177,7 +177,48 @@ number raw detections; JSON joins these IDs to final blocks and OCR/status. See 
 [Phase 5 model decision and validation](phase-5-page-analysis.md) for exact thresholds,
 cache behavior, licensing, measured CPU results, and unresolved full-page evaluation.
 
-Image modification (masking, inpainting, typesetting, translated overlays) remains future.
+Single-page masking, inpainting and typesetting are implemented in Phase 6 below.
+Browser translated overlays remain future work.
+
+## Phase 6: single-page rendering
+
+```text
+ImageAnalysisService.translate_and_render_page(image, optional analysis)
+  -> PageTranslationRenderService
+     -> reuse supplied PageAnalysisResult OR analyze_page once
+     -> PageRenderer.render(image, analysis)
+        -> conservative mask + safe text area
+        -> Typesetter.layout_text (fit before erasing)
+        -> InpaintingEngine (isolated crop)
+        -> Typesetter.draw_text (isolated crop)
+        -> commit only successful mask/text pixels
+  -> PageRenderResult: lossless image, statuses, timings, optional debug images
+```
+
+`rendering/base.py` provides the two lightweight image-rendering/inpainting Protocols.
+`masks.py` separates connected foreground components from flat light/dark backgrounds,
+rejects uncertain outlines/textures. `layout_regions.py` separately estimates enclosed
+bubble/narration interiors and inscribed layout rectangles; open backgrounds fall back
+to bounded clear-strip expansion. Interior geometry never becomes a white fill mask.
+`inpainting.py` uses uniform masked-pixel fill when the surrounding ring is flat, otherwise
+OpenCV Telea. Detailed artwork regions are normally skipped. `typesetting.py` owns cached
+Pillow Aileron fonts, balanced measured wrapping, preferred/minimum/maximum font sizes,
+center alignment and margins. Same-class contained duplicate block predictions share
+one OCR crop in `page_layout.py`, preserving raw detector IDs; thresholds are unchanged.
+`renderer.py` keeps each edit transactional: layout overflow or mask/inpaint/draw failure
+preserves original pixels. Known SFX and overlapping detections are preserved.
+
+The application lazily retains one rendering service alongside the existing page service.
+It does not reload any model per block. `POST /api/v1/render-page` uses the same worker,
+upload validation and security as existing endpoints; it returns PNG and bounded count/
+timing headers, with no disk persistence. CLI debug mode writes numbered stages and JSON.
+Rendering depends on structured analysis, not the detector's model implementation.
+No additional inpainting model weights or system-installed fonts are required.
+
+The complete page boundary can be called by future browser image orchestration without
+understanding masks/layout. It currently has no chapter queue, browser replacement,
+lazy-loading observer, cache/session manager or Original/English UI. See the
+[Phase 6 decision and visual evaluation](phase-6-rendering.md).
 
 ## Replaceability
 
@@ -255,7 +296,7 @@ and react to lazy loading. It can associate ordered translation results with reg
 IDs outside the engine and reuse one model across pages. A batch contains independent
 regions, not a concatenated chapter or dictionary tokens. Cross-region conversational
 context is not provided by the current translator. Future reading mode may add
-context-aware/batched translation. No chapter discovery or page scheduling,
-inpainting, typesetting, or image replacement is implemented here. Single-page detection
-and analysis are now provided by PageAnalysisService. See the
+context-aware translation. No chapter discovery, page scheduling or browser image
+replacement is implemented here. Single-page detection/analysis are provided by
+PageAnalysisService; the rendering service adds masking, removal and typesetting. See the
 [model decision and evaluation](phase-3-translation.md).
