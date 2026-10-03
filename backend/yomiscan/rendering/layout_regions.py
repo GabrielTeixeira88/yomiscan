@@ -63,7 +63,7 @@ def _estimate_layout_region(image: Image.Image, box: BoundingBox, mask: TextMask
     fallback = LayoutRegion(safe_text_area(image, box, mask.background, obstacles), "conservative")
     # Short utterances can occupy a small fraction of their containing bubble.
     # Search far enough to see an enclosing boundary, still within a bounded ROI.
-    padding = min(256, max(128, 2 * min(box.width, box.height)))
+    padding = min(384, max(256, 2 * min(box.width, box.height)))
     roi = box.clipped(*image.size, padding=padding)
     pixels = np.asarray(image.crop(roi.coordinates()).convert("RGB"))
     difference = np.abs(pixels.astype(np.int16)-np.array(mask.background)).max(axis=2)
@@ -106,4 +106,8 @@ def _estimate_layout_region(image: Image.Image, box: BoundingBox, mask: TextMask
         return fallback
     result = BoundingBox(roi.left+x+rectangle.left, roi.top+y+rectangle.top,
                          roi.left+x+rectangle.right, roi.top+y+rectangle.bottom)
+    # An irregular white strip over artwork can be connected yet yield a tiny
+    # rectangle far from most source glyphs. Never replace a usable fallback with it.
+    if result.width*result.height < fallback.bbox.width*fallback.bbox.height*.75:
+        return fallback
     return LayoutRegion(result, kind, True)

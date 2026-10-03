@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from typing import Protocol
 import unicodedata
+import re
 from PIL import Image, ImageDraw, ImageFont
 from yomiscan.detection import BoundingBox
 from .base import TypesettingError
@@ -24,7 +25,15 @@ class Typesetter(Protocol):
 
 
 def wrap_text(text: str, font: ImageFont.FreeTypeFont, width: int) -> str | None:
-    words = text.split()
+    # Existing hyphens are natural break opportunities, not unbreakable words.
+    words: list[str] = []
+    continuations: list[bool] = []
+    for word in text.split():
+        for index, part in enumerate(re.split(r"(?<=-)(?=\w)", word)):
+            words.append(part)
+            continuations.append(index > 0)
+    def phrase(start: int, end: int) -> str:
+        return "".join(("" if i == start or continuations[i] else " ") + words[i] for i in range(start, end))
     if any(font.getlength(word) > width for word in words):
         return None
     # Measured dynamic programming: prefer few lines, then balanced line lengths.
@@ -34,7 +43,7 @@ def wrap_text(text: str, font: ImageFont.FreeTypeFont, width: int) -> str | None
     costs[-1] = 0
     for start in range(len(words)-1, -1, -1):
         for end in range(start+1, len(words)+1):
-            length = font.getlength(" ".join(words[start:end]))
+            length = font.getlength(phrase(start, end))
             if length > width:
                 break
             score = 2*width*width + (width-length)**2 + costs[end]
@@ -43,7 +52,7 @@ def wrap_text(text: str, font: ImageFont.FreeTypeFont, width: int) -> str | None
     lines, index = [], 0
     while index < len(words):
         end = breaks[index]
-        lines.append(" ".join(words[index:end]))
+        lines.append(phrase(index, end))
         index = end
     return "\n".join(lines)
 

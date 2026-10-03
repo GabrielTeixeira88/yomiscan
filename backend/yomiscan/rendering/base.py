@@ -56,7 +56,7 @@ class PageRenderResult:
         return {"blocks_detected": len(self.blocks), "blocks_rendered": self.blocks_rendered,
                 "blocks_skipped": self.blocks_skipped, "blocks": [asdict(b) for b in self.blocks],
                 "processing": asdict(self.processing), "analysis_processing": self.analysis_processing,
-                "diagnostics": self.diagnostics}
+                "diagnostics": self.diagnostics, "coverage": self.diagnostics.get("coverage", {})}
 
 
 class InpaintingEngine(Protocol):

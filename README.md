@@ -2,7 +2,7 @@
 
 An offline-first Japanese manga reading assistant that extracts and analyzes Japanese text from manga images using local OCR and NLP.
 
-**Current status: Phase 6 — Study Mode, page analysis and conservative page rendering implemented.** Local manga OCR, Japanese
+**Current status: Phase 7 — Study Mode and Translate Chapter MVP implemented.** Local manga OCR, Japanese
 morphological analysis, JMdict lookup, Japanese → English translation, localhost
 FastAPI, and a Chrome extension with screenshot region selection and one comprehensive
 study popup are available. The real extension flow was tested in isolated headless
@@ -11,7 +11,9 @@ Single-page detection, cropping, OCR, initial ordering/grouping and block analys
 available through CLI/API. Single-page rendering now removes safely masked text and fits
 English into suitable regions, preserving uncertain blocks. A real local page was visually
 reviewed; broader detection/rendering accuracy still needs representative pages.
-Translate Chapter and browser translated-image overlays remain future work.
+Translate Chapter progressively renders supported image-based readers, prioritizes visible
+pages, discovers lazy-loaded images, and offers reversible Original/English overlays.
+Generic discovery and cross-origin capture have limitations; universal site support is not claimed.
 
 The purpose is to help Japanese learners study manga without paid APIs or per-request
 costs. Sentence translation is separate from ordered tokens with readings, dictionary
@@ -48,8 +50,42 @@ Apache-2.0), loaded once on the first page request. Models run locally and reuse
 Hugging Face cache. No new dependencies. Full analysis needs the existing JMdict setup.
 
 See [detector decision, commands, cache, limitations and evaluation](docs/phase-5-page-analysis.md).
-Keep page images and debug outputs under ignored `samples/`. Chapter discovery and
-lazy-loaded chapter processing remain future work.
+Keep page images and debug outputs under ignored `samples/`. Browser chapter orchestration
+reuses this single-page pipeline; there is no chapter archive/backend batch endpoint.
+
+## Translate Chapter (Phase 7)
+
+Start the configured backend and build the extension:
+
+```powershell
+# Terminal 1, repository root (after model/JMdict setup)
+uv run uvicorn yomiscan.api.main:app --host 127.0.0.1 --port 8765 --reload
+# Terminal 2
+cd extension
+npm.cmd ci
+npm.cmd run build
+```
+
+Load `extension/dist` at `chrome://extensions` → Developer mode → Load unpacked.
+Open an image-based chapter and click YomiScan → **Translate Chapter**. Visible pages
+process first, one at a time. **Original / English** switches cached results immediately;
+close the controls with × to read unobstructed. **Stop Translation** stops future work
+while the current page may finish. **Retry Failed / Skipped** retries explicitly.
+**Clear Session** removes all translated overlays and releases cached images.
+
+**Select Text** (or Ctrl+Shift+Y) remains Study Mode. It stops chapter scheduling,
+waits for the current page, and switches to Original before screenshot selection.
+Chapter translation resumes only when explicitly started again.
+
+For HTTP(S) images, the extension first fetches the selected source with permission for
+its image host. A small YomiScan access window lists the required hosts; approve Chrome's
+permission prompt or choose capture fallbacks. It then tries safe canvas extraction and
+visible-tab cropping. **Allow scroll capture** enables a final tall-page stitching fallback;
+it temporarily scrolls, restores position, and cancels on Escape/user input. No manual
+zooming is needed for direct fetching or supported stitched captures. No access bypass.
+Canvas/WebGL readers, frames, unusual layouts and restrictive content policies may not work.
+See [chapter architecture, validation and limitations](docs/phase-7-chapter.md).
+See [image acquisition, permissions and real-reader validation](docs/phase-7-acquisition.md).
 
 ## Single-page rendering (Phase 6)
 
@@ -76,6 +112,8 @@ No additional model weights or font installation is needed; `uv sync` installs O
 headless and NumPy. Rendering uses CPU; `--device` controls analysis. Debug output includes
 original, detection, raw/final masks, cleaned and final pages, plus metadata.
 See [Phase 6 design, licensing, validation and limitations](docs/phase-6-rendering.md).
+See the [targeted coverage pass](docs/phase-7-coverage.md) for dense-bubble fixes,
+conservative artwork-text recovery, per-block reasons and real before/after results.
 
 ## Study mode: two-terminal development
 
@@ -110,7 +148,7 @@ policy error; changing execution policy is unnecessary.
 
 1. Open `chrome://extensions`, enable **Developer mode**, and choose **Load unpacked**.
 2. Select `extension/dist` (here **`C:\Users\T-GAMER\yomiscan\extension\dist`**).
-3. Open a normal manga webpage, click YomiScan's extension action, and drag around a
+3. Open a normal manga webpage, click YomiScan's extension action → **Select Text**, and drag around a
    Japanese speech bubble. Only that viewport crop is sent to the local backend.
 4. Read the original, translation, readings, lemmas, POS, conjugations, and dictionary
    meanings in one scrollable popup. Extra senses expand inside it.
@@ -159,8 +197,8 @@ $env:YOMISCAN_EXTENSION_ORIGINS = "chrome-extension://YOUR_EXTENSION_ID"
 
 The custom header requires preflight for webpage requests; unapproved Origin/Host
 headers are rejected. This is a local development boundary, not authentication against
-other programs on your machine. The extension host permission covers loopback, while
-its request URL and network CSP fix analysis to port 8765. Keep that port unless you
+other programs on your machine. The extension's fixed backend request URL sends analysis
+to loopback port 8765; optional source-image host access is separate. Keep that port unless you
 rebuild the extension with matching changes. Use one Uvicorn worker to avoid duplicating
 model memory. See [extension instructions](extension/README.md) and
 [Phase 4 validation/checklist](docs/phase-4-validation.md).
@@ -382,14 +420,16 @@ transcription before describing recognition as reliable.
    OCR and translation/lexical analysis per block.
 4. **Implemented:** conservative masks, text removal/inpainting, English font fitting,
    typesetting and single-page translated PNG output through CLI/API.
-5. **Future:** OCR correction, translation engine improvements/benchmarking,
+5. **Implemented:** generic chapter-image discovery, progressive serial processing,
+   viewport priority, lazy-image observation, Original/English overlays, session cache,
+   page states, Stop/Retry and cleanup.
+6. **Future:** OCR correction, translation engine improvements/benchmarking,
    manga-context-aware translation, vocabulary saving/export,
-   improved artwork reconstruction, Translate Chapter, chapter image discovery,
-   progressive/viewport-prioritized translation, lazy-loaded image handling, browser
-   translated overlays, Original/English toggle, caching and chapter session management.
+   improved artwork reconstruction, broader site adapters/acquisition support,
+   persistent caching, and packaging/automatic local backend startup.
 
-See [architecture](docs/architecture.md). Chapter translation, JLPT grading,
-browser image replacement, accounts, and cloud deployment are not implemented.
+See [architecture](docs/architecture.md). JLPT grading, accounts, vocabulary export,
+model fine-tuning, and cloud deployment are not implemented.
 
 ## Limitations and licensing
 

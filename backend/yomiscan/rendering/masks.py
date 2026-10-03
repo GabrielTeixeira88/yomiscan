@@ -35,6 +35,8 @@ class TextMask:
     background: tuple[int, int, int]
     safe: bool
     reason: str | None = None
+    foreground_complete: bool = False
+    background_uniform: bool = False
 
 
 def intersects(a: BoundingBox, b: BoundingBox) -> bool:
@@ -106,7 +108,10 @@ class UniformBackgroundMaskGenerator:
             reason = "Nonuniform background; artwork/screentones left unchanged"
         elif not (bg_gray >= 180 or bg_gray <= 75):
             reason = "Uncertain midtone background"
-        return TextMask(context, Image.fromarray(raw), Image.fromarray(final), background, reason is None, reason)
+        complete = not np.any(rejected[interior])
+        uniform = bool(len(remaining) and np.percentile(remaining, 98) <= 14)
+        return TextMask(context, Image.fromarray(raw), Image.fromarray(final), background, reason is None, reason,
+                        complete, uniform)
 
 
 def safe_text_area(image: Image.Image, box: BoundingBox, background: tuple[int, int, int],

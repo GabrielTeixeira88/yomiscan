@@ -1,6 +1,7 @@
 import { parseAnalysis } from "./api";
 import { sameViewport, selectionRect, validSelection, type Point, type Rect, type Viewport } from "./geometry";
 import { element, StudyPopup, styles } from "./popup";
+import {ChapterControls} from "./chapter/controls";
 
 const globalState = globalThis as typeof globalThis & { __yomiscanInstalled?: boolean };
 if (!globalState.__yomiscanInstalled) {
@@ -13,6 +14,8 @@ function viewport(): Viewport {
 }
 
 function install(): void {
+  const chapter = new ChapterControls(() => { void activateStudy(); });
+  async function activateStudy(): Promise<void> { await chapter.prepareStudy(); start(); }
   let id: string | null = null;
   let host: HTMLDivElement | null = null;
   let root: ShadowRoot | null = null;
@@ -50,6 +53,7 @@ function install(): void {
     lifecycle = new AbortController(); selection = new AbortController();
     id = crypto.randomUUID(); mode = "selecting";
     host = element("div");
+    host.dataset.yomiscan = "study";
     for (const [key, value] of Object.entries({all: "initial", position: "fixed", inset: "0", "z-index": "2147483647", display: "block", margin: "0", padding: "0", border: "0"})) host.style.setProperty(key, value, "important");
     root = host.attachShadow({mode: "closed"});
     for (const eventName of ["pointerdown", "pointermove", "pointerup", "click", "dblclick"]) {
@@ -121,7 +125,11 @@ function install(): void {
 
   chrome.runtime.onMessage.addListener((message, sender, respond) => {
     if (sender.id !== chrome.runtime.id) return;
-    if (message?.type === "activate") { start(); respond(true); }
+    if (message?.type === "activate") { void activateStudy(); respond(true); }
+    if (message?.type === "chapter-controls") { chapter.open(); respond(true); }
+    if (message?.type === "verify-page-capture") respond(chapter.verifyCapture(message.id));
+    if (message?.type === "resolve-page-source") respond(chapter.resolveSource(message.id));
+    if (message?.type === "chapter-access-resolved") {chapter.resumeAfterPermission(message.version,message.retry);respond(true);}
     if (message?.type === "verify-capture") respond(id === message.id && mode === "capturing" && sameViewport(captureViewport, viewport()) && !document.hidden);
     if (message?.type === "captured" && id === message.id) {
       mode = "processing";

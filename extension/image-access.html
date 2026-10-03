@@ -1,0 +1,8 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>YomiScan image host access</title>
+<style>body{font:15px/1.5 system-ui;margin:24px;color:#203729;background:#fffdf8}button{font:inherit;padding:10px;margin:6px 6px 6px 0}li{overflow-wrap:anywhere}#status{color:#8a372b}</style>
+<h1>Read this chapter’s images</h1>
+<p>YomiScan needs permission to read the already-loaded page images from these hosts. Image analysis stays on your local backend. Chrome host permissions cover all paths on each listed host.</p>
+<ul id="hosts"></ul>
+<button id="grant">Allow image host access</button><button id="fallback">Use capture fallbacks</button>
+<p>Without access, some pages may need “Allow scroll capture” in YomiScan. You can revoke granted access in Chrome’s extension settings.</p>
+<p id="status" role="status"></p><script type="module" src="image-access.js"></script></html>

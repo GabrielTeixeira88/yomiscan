@@ -194,9 +194,10 @@ def test_skipped_blocks_keep_original_pixels(failure):
     if failure == "untranslated": analysis = replace(analysis, text_blocks=(replace(block, analysis=None),))
     if failure == "free":
         analysis = replace(analysis, regions=(replace(analysis.regions[0], metadata={"class": "text_free"}),))
-        # Free text on an open background remains uncertain. A verified enclosed
-        # bubble may now override the detector's coarse class (tested separately).
+        # Free text connected to artwork must remain untouched. Safe isolated
+        # free text on open paper is now covered by a separate regression.
         ImageDraw.Draw(image).rectangle((0, 0, 239, 8), fill="white")
+        ImageDraw.Draw(image).line((0, 70, 239, 70), fill="black", width=3)
     result = ConservativePageRenderer(engine, typesetter).render(image, analysis)
     assert result.blocks_rendered == 0
     assert result.rendered_image.tobytes() == image.tobytes()
@@ -277,6 +278,10 @@ def test_render_api_png_headers_invalid_image_and_failure():
         response = client.post("/api/v1/render-page", files={"file": ("page.png", buffer.getvalue())})
         assert response.status_code == 200 and response.headers["content-type"] == "image/png"
         assert response.headers["x-yomiscan-blocks-rendered"] == "1"
+        import json
+        coverage = json.loads(response.headers["x-yomiscan-coverage"])
+        assert coverage["total_text_blocks"] == 1
+        assert coverage["narration_rendered"] == 1
         assert Image.open(BytesIO(response.content)).size == image.size
         assert client.post("/api/v1/render-page", files={"file": ("bad", b"oops")}).status_code == 400
         assert client.post("/api/v1/render-page", files={"file": ("bad", b"")}).status_code == 400

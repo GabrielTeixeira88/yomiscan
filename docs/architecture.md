@@ -1,5 +1,11 @@
 # YomiScan architecture
 
+Rendering coverage now distinguishes bubble/narration, artwork text and preserved SFX.
+Tight masks and placement regions remain separate; a light-edged glyph fallback is
+local to rendering. Per-block stage diagnostics and aggregate coverage metrics travel
+through `PageRenderResult`; the PNG API exposes only aggregate counts in an additive
+header used by chapter summaries. See [coverage decisions and validation](phase-7-coverage.md).
+
 ## Phase 1: implemented OCR boundary
 
 Local cropped image → Pillow decoding → `OCREngine.recognize(image)` → `OCRResult`
@@ -178,7 +184,7 @@ number raw detections; JSON joins these IDs to final blocks and OCR/status. See 
 cache behavior, licensing, measured CPU results, and unresolved full-page evaluation.
 
 Single-page masking, inpainting and typesetting are implemented in Phase 6 below.
-Browser translated overlays remain future work.
+Browser translated overlays now consume this single-page pipeline through Phase 7.
 
 ## Phase 6: single-page rendering
 
@@ -215,9 +221,9 @@ timing headers, with no disk persistence. CLI debug mode writes numbered stages 
 Rendering depends on structured analysis, not the detector's model implementation.
 No additional inpainting model weights or system-installed fonts are required.
 
-The complete page boundary can be called by future browser image orchestration without
-understanding masks/layout. It currently has no chapter queue, browser replacement,
-lazy-loading observer, cache/session manager or Original/English UI. See the
+The complete page boundary is called by the Phase 7 browser orchestration without
+understanding masks/layout. The backend remains single-page only; queues, discovery,
+lazy-load observation, session caches and Original/English controls live in the extension. See the
 [Phase 6 decision and visual evaluation](phase-6-rendering.md).
 
 ## Replaceability
@@ -276,7 +282,7 @@ opt-in `--translate`, while image analysis translates by default with an explici
 `--no-translation` option. Models are constructed once per invocation, never per token.
 Dictionary attribution remains visible independently of generated English.
 
-## Translate Chapter: future orchestration only
+## Phase 7: implemented Translate Chapter orchestration
 
 ```text
 chapter reader
@@ -290,13 +296,38 @@ chapter reader
   → continue through chapter and newly lazy-loaded images
 ```
 
-The user-facing unit is a chapter; the internal image-processing unit is normally one
-manga page. A future caller can prioritize visible/current pages, then later pages,
-and react to lazy loading. It can associate ordered translation results with region
-IDs outside the engine and reuse one model across pages. A batch contains independent
-regions, not a concatenated chapter or dictionary tokens. Cross-region conversational
-context is not provided by the current translator. Future reading mode may add
-context-aware translation. No chapter discovery, page scheduling or browser image
-replacement is implemented here. Single-page detection/analysis are provided by
-PageAnalysisService; the rendering service adds masking, removal and typesetting. See the
-[model decision and evaluation](phase-3-translation.md).
+The user-facing unit is a chapter; the internal processing unit is one page. The extension's
+`chapter/discovery.ts` chooses a dominant column of sufficiently large loaded images,
+excluding common navigation/ad/avatar contexts. It exposes a small discovery interface
+for future strategies. `chapter/model.ts` owns typed page records and a serial queue.
+DOM element + selected source + dimensions + same-source reload revision identify a
+page. Contained source changes invalidate results; late stale jobs cannot replace newer ones.
+
+`chapter/session.ts` owns health checks, debounced DOM/load observation, viewport
+priority, source acquisition, result validation, per-session URL cache and lifecycle.
+`acquisition.ts` owns a typed fallback chain: verified extension-worker source fetch,
+safe page canvas, viewport crop and opt-in scroll stitching. `source-fetch.ts` resolves
+only active loaded-image tickets, enforces host permissions and bounded image responses.
+`image-access.html` requests optional host access from a direct extension-page gesture.
+`stitching.ts` restores scroll on every exit and keeps capture geometry separate from
+discovery/rendering. No backend URL fetching, whole-chapter screenshot or access bypass
+is implemented. See [acquisition and real-reader validation](phase-7-acquisition.md).
+
+`chapter/transport.ts` sends bounded image chunks through runtime ports to `offscreen.ts`.
+The extension-origin offscreen document makes long localhost render requests, serializes
+across chapter tabs, and releases intermediate buffers on completion/disconnect. It
+avoids service-worker fetch lifetime limits without exposing a web-accessible iframe
+bridge. No chapter-specific backend endpoint was needed. Existing Study Mode remains
+on its original worker screenshot/analysis path and shares the backend's busy guard.
+
+`chapter/overlay.ts` uses fixed pointer-transparent images inside closed Shadow DOM;
+their geometry follows source bounds, object-fit/position and ancestor clipping on
+scroll/resize. Site `src`, `srcset`, layout and original pixels are never rewritten.
+Only nearby overlay nodes retain decoded image sources; compressed Blob URLs are cached
+for instant Original/English toggles. Stop retains results and lets the current job
+finish; Clear/navigation revokes URLs and discards late results. Controls live in their
+own Shadow DOM. Study activation stops scheduling and selects Original before capture.
+
+No cross-region conversational context or translation-engine redesign is included.
+See [Phase 7 limits, lifecycle and browser validation](phase-7-chapter.md) and the
+[translation model decision](phase-3-translation.md).

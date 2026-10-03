@@ -11,6 +11,8 @@ from .inpainting import OpenCVInpaintingEngine
 from .masks import UniformBackgroundMaskGenerator, intersects
 from .typesetting import PillowTypesetter, Typesetter
 from .layout_regions import estimate_layout_region
+from .coverage import classify_text, failure_stage, coverage_metrics
+from .artwork import edged_text_mask
 
 logger = logging.getLogger(__name__)
 
@@ -39,21 +41,29 @@ class ConservativePageRenderer:
         layout_overlay = original.copy() if debug else None
         for block in analysis.text_blocks:
             reason = None
+            classes = {region_map[r].metadata.get("class", "") for r in block.region_ids if r in region_map}
+            category, category_reason = classify_text(block.category, block.original_text, classes)
             translation = block.analysis.translation if block.analysis is not None else None
             detail = details[block.id] = {"region_ids": block.region_ids, "detected": True,
                 "ocr": "success" if block.original_text else "failed_or_empty",
                 "analysis_status": block.status, "analysis_error": block.error_message,
                 "translation": "success" if translation and translation.translated_text.strip() else "unavailable", "mask": "not_attempted",
+                "mask_method": "uniform_components", "mask_recovery": "not_attempted",
                 "typesetting": "not_attempted", "inpainting": "not_attempted",
                 "layout": "not_attempted", "bbox": asdict(block.bbox),
                 "original_text": block.original_text,
+                "translated_text": translation.translated_text if translation else None,
+                "category": category, "category_reason": category_reason,
                 "ocr_review": "Extreme crop aspect ratio; inspect OCR against source" if block.bbox.height > 8*max(1, block.bbox.width) else None}
             if block.status != "success" or translation is None or not translation.translated_text.strip():
                 reason = "No successful translated text"
-            elif block.category in ("sfx", "possible_sfx"):
+            elif category == "sfx":
                 reason = "Sound effects preserved"
             box = block.bbox.clipped(*image.size)
             neighbors = [b.bbox for b in analysis.text_blocks if b.id != block.id]
+            if reason:
+                statuses.append(BlockRenderStatus(block.id, "skipped", reason))
+                continue
             if min(box.width, box.height) < 3:
                 reason = "Invalid or tiny text region"
             elif any(intersects(box, other) for other in neighbors):
@@ -66,6 +76,14 @@ class ConservativePageRenderer:
             stage = perf_counter()
             try:
                 mask = self.masks.generate(original, box)
+                # Free text and outlined lettering can sit over gray screentones.
+                # Recover only when every dark stroke is isolated by a light halo.
+                if not mask.safe and category != "sfx":
+                    recovered = edged_text_mask(original, box)
+                    detail["mask_recovery"] = "success" if recovered else "No complete light-edged glyph separation"
+                    if recovered is not None:
+                        mask = recovered
+                        detail["mask_method"] = "light_edged_glyphs"
             except MaskGenerationError:
                 detail["mask"] = "error"
                 logger.exception("Block %s masking failed", block.id)
@@ -86,6 +104,8 @@ class ConservativePageRenderer:
                 statuses.append(BlockRenderStatus(block.id, "skipped", "Layout region estimation failed; original preserved"))
                 continue
             detail["layout"] = estimated.kind
+            category, category_reason = classify_text(block.category, block.original_text, classes, estimated)
+            detail.update(category=category, category_reason=category_reason)
             detail["layout_bbox"] = asdict(estimated.bbox)
             detail["mask_crop_bbox"] = asdict(mask.crop_box)
             bounds = mask.final.getbbox()
@@ -94,17 +114,18 @@ class ConservativePageRenderer:
             # An enclosing interior can certify that rejected connected pixels are borders,
             # rather than rejecting a whole bubble because its detector box grazes them.
             safe = mask.safe or (estimated.enclosed and mask.reason == "Text area intersects an outline or connected artwork")
+            # Dense glyphs in a small verified bubble are not textured artwork.
+            # Require complete separation and uniform remaining paper before relaxing density.
+            safe |= (estimated.enclosed and mask.foreground_complete and mask.background_uniform
+                     and mask.reason == "Dense foreground or textured background")
             detail["mask"] = "success" if safe else "unsafe"
             detail["mask_check"] = mask.reason
-            is_free = any(region_map[r].metadata.get("class") == "text_free" for r in block.region_ids if r in region_map)
             if not safe:
                 typeset_ms += (perf_counter()-stage)*1000
                 statuses.append(BlockRenderStatus(block.id, "skipped", mask.reason))
                 continue
-            if is_free and not estimated.enclosed and block.category not in ("dialogue", "narration"):
-                typeset_ms += (perf_counter()-stage)*1000
-                statuses.append(BlockRenderStatus(block.id, "skipped", "Unclassified free text has no enclosed safe interior; review OCR/category"))
-                continue
+            # Ordinary free text uses the same tight glyph mask but only a bounded,
+            # verified plain placement area. No requirement for an enclosing bubble.
             area = estimated.bbox
             try:
                 layout = self.typesetter.layout_text(translation.translated_text, area)
@@ -174,19 +195,25 @@ class ConservativePageRenderer:
         for status in statuses:
             detail = details[status.block_id]
             detail.update(render=status.status, reason=status.reason, font_size=status.font_size)
+            detail["reason_code"] = failure_stage(detail, status.reason)
+            if status.status != "rendered":
+                logger.info("Page block %s category=%s stage=%s reason=%s", status.block_id,
+                            detail["category"], detail["reason_code"], status.reason)
             if debug:
                 draw = ImageDraw.Draw(layout_overlay)
                 box = BoundingBox(**detail["bbox"])
-                color = "green" if status.status == "rendered" else "red"
+                color = "green" if status.status == "rendered" else {"bubble": "red", "narration": "red",
+                    "artwork_text": "orange", "sfx": "purple"}.get(detail["category"], "gray")
                 draw.rectangle(box.coordinates(), outline=color, width=2)
                 if "layout_bbox" in detail:
                     draw.rectangle(BoundingBox(**detail["layout_bbox"]).coordinates(), outline="blue", width=2)
                 if detail.get("mask_bbox"):
                     draw.rectangle(BoundingBox(**detail["mask_bbox"]).coordinates(), outline="magenta", width=1)
-                draw.text((box.left, box.top), f"B{status.block_id} {status.status}", fill=color,
+                draw.text((box.left, box.top), f"B{status.block_id} {detail['category']} {detail['reason_code']}", fill=color,
                           stroke_width=1, stroke_fill="white")
         if debug:
             diagnostics["06-layout-status"] = layout_overlay
         return PageRenderResult(output, tuple(statuses), RenderProcessing(mask_ms, inpaint_ms, typeset_ms,
                                 (perf_counter()-start)*1000), asdict(analysis.processing), diagnostics,
-                                {"blocks": details, "filtered_regions": analysis.filtered_regions})
+                                {"blocks": details, "filtered_regions": analysis.filtered_regions,
+                                 "coverage": coverage_metrics(details, analysis.filtered_regions)})

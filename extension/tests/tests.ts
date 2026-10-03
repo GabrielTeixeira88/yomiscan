@@ -3,6 +3,9 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { analyzeCrop, httpError, parseAnalysis } from "../src/api";
 import { constrainPopup, resizePopup, popupPosition, sameViewport, screenshotRect, selectionRect, validSelection } from "../src/geometry";
+import "./chapter-tests";
+import "./acquisition-tests";
+import "./coverage-tests";
 
 const viewport = {width: 800, height: 600};
 test("manual popup movement preserves size and clamps all edges", () => {
@@ -113,7 +116,8 @@ test("aborted requests produce useful timeout guidance", async context => {
 test("manifest limits access to active tab and loopback; no content scripts run automatically", async () => {
   const manifest = JSON.parse(await readFile("manifest.json", "utf8"));
   assert.equal(manifest.manifest_version, 3);
-  assert.deepEqual(manifest.permissions, ["activeTab", "scripting"]);
+  assert.deepEqual(manifest.permissions, ["activeTab", "scripting", "offscreen"]);
   assert.deepEqual(manifest.host_permissions, ["http://127.0.0.1/*"]);
+  assert.deepEqual(manifest.optional_host_permissions, ["http://*/*", "https://*/*"]);
   assert.equal(manifest.content_scripts, undefined);
 });

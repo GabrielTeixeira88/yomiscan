@@ -5,6 +5,7 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import AbstractContextManager, asynccontextmanager
 import logging
+import json
 import os
 from io import BytesIO
 from pathlib import Path
@@ -53,6 +54,7 @@ def analyze_upload(service: ImageAnalysisService, data: bytes, page: bool = Fals
                     return Response(buffer.getvalue(), media_type="image/png", headers={
                         "X-YomiScan-Blocks-Rendered": str(result.blocks_rendered),
                         "X-YomiScan-Blocks-Skipped": str(result.blocks_skipped),
+                        "X-YomiScan-Coverage": json.dumps(result.diagnostics.get("coverage", {}), separators=(",", ":")),
                         "X-YomiScan-Processing-Ms": f"{result.analysis_processing.get('pipeline_total_ms', 0):.1f}",
                         "Cache-Control": "no-store",
                     })
@@ -105,7 +107,7 @@ def create_app(
         CORSMiddleware, allow_origins=origins,
         allow_origin_regex=None if origins else EXTENSION_ORIGIN,
         allow_methods=["GET", "POST"], allow_headers=["Content-Type", "X-YomiScan-Client"],
-        expose_headers=["X-YomiScan-Blocks-Rendered", "X-YomiScan-Blocks-Skipped", "X-YomiScan-Processing-Ms"],
+        expose_headers=["X-YomiScan-Blocks-Rendered", "X-YomiScan-Blocks-Skipped", "X-YomiScan-Processing-Ms", "X-YomiScan-Coverage"],
     )
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "[::1]"])
 

@@ -1,15 +1,16 @@
 {
   "manifest_version": 3,
-  "name": "YomiScan — Local Manga Study",
+  "name": "YomiScan — Local Manga Study & Reading",
   "version": "0.1.0",
-  "description": "Select a Japanese text region and study it using your local YomiScan backend.",
+  "description": "Study Japanese text or progressively translate supported image-based manga readers using a local backend.",
   "minimum_chrome_version": "120",
-  "permissions": ["activeTab", "scripting"],
+  "permissions": ["activeTab", "scripting", "offscreen"],
   "host_permissions": ["http://127.0.0.1/*"],
+  "optional_host_permissions": ["http://*/*", "https://*/*"],
   "background": {"service_worker": "background.js", "type": "module"},
-  "action": {"default_title": "YomiScan: select a Japanese text region"},
+  "action": {"default_title": "YomiScan: Study / Translate Chapter"},
   "commands": {
-    "_execute_action": {"suggested_key": {"default": "Ctrl+Shift+Y", "mac": "Command+Shift+Y"}}
+    "select-text": {"suggested_key": {"default": "Ctrl+Shift+Y", "mac": "Command+Shift+Y"}, "description": "Select Japanese text (Study Mode)"}
   },
-  "content_security_policy": {"extension_pages": "script-src 'self'; object-src 'none'; connect-src http://127.0.0.1:8765"}
+  "content_security_policy": {"extension_pages": "script-src 'self'; object-src 'none'; connect-src http: https:"}
 }
