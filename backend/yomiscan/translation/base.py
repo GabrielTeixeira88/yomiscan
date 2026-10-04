@@ -16,6 +16,11 @@ class TranslationResult:
     processing_time_ms: float
     metadata: dict[str, object] = field(default_factory=dict)
 
+    @property
+    def device(self) -> str:
+        """Compatible with existing result constructors and saved Phase 3 results."""
+        return str(self.metadata.get("device", "unknown"))
+
 
 class TranslationEngine(Protocol):
     def translate(self, text: str) -> TranslationResult: ...
@@ -23,6 +28,23 @@ class TranslationEngine(Protocol):
     def translate_many(self, texts: Sequence[str]) -> list[TranslationResult]:
         """Translate independent regions in order; [] returns []; blank items fail."""
         ...
+
+
+@dataclass(frozen=True)
+class TranslationContext:
+    previous: tuple[str, ...] = ()
+    following: tuple[str, ...] = ()
+    glossary: dict[str, str] = field(default_factory=dict)
+    tone: str = ("Natural manga dialogue. Preserve exact meaning and speaker tone. "
+                 "Output only the English translation, without notes or explanations. Do not invent missing information.")
+
+
+class ContextualTranslationEngine(TranslationEngine, Protocol):
+    """Optional capability; legacy engines/callers retain the original interface."""
+
+    def translate(self, text: str, *, context: TranslationContext | None = None) -> TranslationResult: ...
+
+    def translate_many(self, texts: Sequence[str], *, context: TranslationContext | None = None) -> list[TranslationResult]: ...
 
 
 class TranslationInitializationError(RuntimeError):

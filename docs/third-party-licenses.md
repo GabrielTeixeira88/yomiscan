@@ -1,5 +1,19 @@
 # Third-party resources
 
+## Optional manga translation benchmark
+
+The additional `staka/fugumt-ja-en` checkpoint declares **CC-BY-SA-4.0** (attribution
+and ShareAlike terms for adaptations). `facebook/nllb-200-distilled-600M` declares
+**CC-BY-NC-4.0**, restricting use to **non-commercial** purposes. These optional model
+weights are not MIT; NLLB is not an unrestricted commercial-compatible default.
+See the [NMT extension and license sources](translation-benchmark.md#nmt-extension-fugumt-and-nllb-600m).
+
+Hy-MT2 manga v5, Qwen3.5 VNTL and Qwen2.5 manga adapter publishers declare Apache-2.0;
+the tested Hy-MT2 and Qwen2.5 bases also declare Apache-2.0. VNTL currently publishes
+no weights, so its runtime artifact cannot yet be verified. No optional weights are
+bundled or relicensed under YomiScan MIT. llama.cpp is MIT; psutil is BSD-3-Clause.
+See [exact artifacts, primary sources and redistribution notes](translation-benchmark.md).
+
 YomiScan's MIT license covers its original code, not downloaded dictionaries, model
 weights, or third-party packages. No dictionary dataset is committed here.
 

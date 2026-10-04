@@ -10,7 +10,7 @@ from .analysis import ImageAnalysisResult, TextAnalyzer, analyze_image
 from .dictionary import SQLiteDictionary
 from .nlp import FugashiTokenizer
 from .ocr import MangaOCREngine, OCREngine
-from .translation import MarianTranslationEngine
+from .translation.factory import create_translation_engine
 from .translation.base import Device
 from .detection import ComicTextDetector, TextDetector
 from .page import PageAnalysisService, PageAnalysisResult
@@ -57,6 +57,11 @@ def open_local_service(
     """Create, use, and close this context on the same owning worker thread."""
     with SQLiteDictionary(dictionary_path) as dictionary:
         tokenizer = FugashiTokenizer()
-        translator = MarianTranslationEngine(device=device)
-        ocr = MangaOCREngine(force_cpu=device == "cpu")
-        yield ImageAnalysisService(ocr, TextAnalyzer(tokenizer, dictionary, translator), device=device)
+        translator = create_translation_engine(device=device)
+        try:
+            ocr = MangaOCREngine(force_cpu=device == "cpu")
+            yield ImageAnalysisService(ocr, TextAnalyzer(tokenizer, dictionary, translator), device=device)
+        finally:
+            close = getattr(translator, "close", None)
+            if close is not None:
+                close()

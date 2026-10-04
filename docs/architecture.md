@@ -1,5 +1,15 @@
 # YomiScan architecture
 
+Sentence translation also has opt-in manga adapters and an isolated benchmark.
+`translation/factory.py` selects the unchanged Marian default or a lazy local llama.cpp
+adapter, or a lazy direct Transformers NMT adapter (`fugumt`, `nllb-600m`).
+NMT batches independent sentences, without claiming dialogue context or glossary support.
+NLLB explicitly sets Japanese source and forces English target language. Optional
+`TranslationContext` capabilities preserve existing `TranslationEngine`
+callers and JMdict. The application owns one selected engine and closes its subprocess
+or model references with the service lifecycle. Chapter orchestration and rendering are unchanged.
+See [benchmark boundaries and evidence](translation-benchmark.md).
+
 Rendering coverage now distinguishes bubble/narration, artwork text and preserved SFX.
 Tight masks and placement regions remain separate; a light-edged glyph fallback is
 local to rendering. Per-block stage diagnostics and aggregate coverage metrics travel

@@ -1,0 +1,4291 @@
+{
+  "date": "2026-10-03",
+  "review_status": "Assistant qualitative inspection; independent human ratings pending",
+  "dataset_sha256": "c42c63888c36f63196a2c6feb79e9e7f1d6c7b26e6956d08509af02b9d0b5d7e",
+  "hardware": {
+    "cpu": "Intel Core i7-14700K",
+    "ram_gib": 32,
+    "gpu": "NVIDIA RTX 4070 SUPER 12 GiB",
+    "driver": "616.92"
+  },
+  "python": "3.13.9",
+  "torch": "2.14.0+cpu",
+  "llama_cpp": "b11380 / eec18f5d32099fb15d4ba15003a231bcc72757d5",
+  "sampling": {
+    "temperature": 0,
+    "seed": 0,
+    "repeat_penalty": 1,
+    "cache_prompt": false,
+    "context_size": 4096
+  },
+  "runs": [
+    {
+      "engine": "current",
+      "context_mode": "isolated",
+      "glossary": false,
+      "device_requested": "cpu",
+      "memory_before": {
+        "rss_bytes": 28430336,
+        "scope": "Python plus owned children; snapshot, not peak; includes shared pages"
+      },
+      "load_ms": 6357.905899989419,
+      "memory_loaded": {
+        "rss_bytes": 672833536,
+        "scope": "Python plus owned children; snapshot, not peak; includes shared pages"
+      },
+      "status": "completed",
+      "memory_after": {
+        "rss_bytes": 762957824,
+        "scope": "Python plus owned children; snapshot, not peak; includes shared pages"
+      },
+      "summary": {
+        "cases_ok": 46,
+        "cases_total": 46,
+        "first_case_ms": 131.12519998685457,
+        "mean_warm_ms_per_line": 111.296314401957,
+        "note": "Per-line page latency is amortized; batch time is not a sum of result timings",
+        "warm_repeated_line_ms": 120.4686716977586
+      },
+      "run_id": "current-cpu",
+      "cases": [
+        {
+          "id": "casual-1",
+          "category": "casual",
+          "sources": [
+            "何してんだよ"
+          ],
+          "references": [
+            "What are you doing?"
+          ],
+          "notes": "Rough surprise/reproach; do not invent an action.",
+          "status": "ok",
+          "translations": [
+            "What are you doing?"
+          ],
+          "run_ms": [
+            131.12519998685457,
+            108.92869997769594
+          ],
+          "translate_many_ms": 120.82979999831878,
+          "batch_translations": [
+            "What are you doing?"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "casual-2",
+          "category": "casual",
+          "sources": [
+            "知らねーよ"
+          ],
+          "references": [
+            "How should I know?"
+          ],
+          "notes": "Preserve negation and dismissiveness.",
+          "status": "ok",
+          "translations": [
+            "I don't know."
+          ],
+          "run_ms": [
+            170.04699999233708,
+            203.23700000881217
+          ],
+          "translate_many_ms": 180.03429999225773,
+          "batch_translations": [
+            "I don't know."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "casual-3",
+          "category": "casual",
+          "sources": [
+            "マジかよ"
+          ],
+          "references": [
+            "Seriously?"
+          ],
+          "notes": "Surprise, not a factual assertion.",
+          "status": "ok",
+          "translations": [
+            "Oh, my God."
+          ],
+          "run_ms": [
+            78.60549999168143,
+            85.24710001074709
+          ],
+          "translate_many_ms": 73.10879998840392,
+          "batch_translations": [
+            "Oh, my God."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "casual-4",
+          "category": "casual",
+          "sources": [
+            "やべぇ"
+          ],
+          "references": [],
+          "notes": "Ambiguous: trouble or impressed slang; avoid inventing context.",
+          "status": "ok",
+          "translations": [
+            "Oh, shit."
+          ],
+          "run_ms": [
+            72.22010000259615,
+            61.6810999927111
+          ],
+          "translate_many_ms": 80.93220001319423,
+          "batch_translations": [
+            "Oh, shit."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "casual-5",
+          "category": "casual",
+          "sources": [
+            "ふざけんな"
+          ],
+          "references": [
+            "Don't mess with me!"
+          ],
+          "notes": "Negative command; intensity may vary.",
+          "status": "ok",
+          "translations": [
+            "You gotta be kidding me."
+          ],
+          "run_ms": [
+            130.06190001033247,
+            132.83519999822602
+          ],
+          "translate_many_ms": 147.92149999993853,
+          "batch_translations": [
+            "You gotta be kidding me."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "subject-1",
+          "category": "omitted-subject",
+          "sources": [
+            "もう行った？"
+          ],
+          "references": [],
+          "notes": "Already went/left? Subject unspecified.",
+          "status": "ok",
+          "translations": [
+            "Have you gone yet?"
+          ],
+          "run_ms": [
+            91.17010000045411,
+            91.82880001026206
+          ],
+          "translate_many_ms": 85.14959999592975,
+          "batch_translations": [
+            "Have you gone yet?"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "subject-2",
+          "category": "omitted-subject",
+          "sources": [
+            "知らなかった。"
+          ],
+          "references": [
+            "I didn't know."
+          ],
+          "notes": "Past negative, not present refusal.",
+          "status": "ok",
+          "translations": [
+            "I didn't know."
+          ],
+          "run_ms": [
+            121.92330000107177,
+            124.46089999866672
+          ],
+          "translate_many_ms": 122.8003999858629,
+          "batch_translations": [
+            "I didn't know."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "subject-3",
+          "category": "omitted-subject",
+          "sources": [
+            "やったの？"
+          ],
+          "references": [],
+          "notes": "Did you/they do it? Do not assume sexual meaning.",
+          "status": "ok",
+          "translations": [
+            "Did you?"
+          ],
+          "run_ms": [
+            90.65800000098534,
+            91.80570000899024
+          ],
+          "translate_many_ms": 92.31789998011664,
+          "batch_translations": [
+            "Did you?"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "particle-1",
+          "category": "particles",
+          "sources": [
+            "そうだよな"
+          ],
+          "references": [
+            "Yeah, you're right."
+          ],
+          "notes": "Agreement/seeking agreement.",
+          "status": "ok",
+          "translations": [
+            "You're right."
+          ],
+          "run_ms": [
+            89.2978000047151,
+            84.02069998555817
+          ],
+          "translate_many_ms": 73.81870000972413,
+          "batch_translations": [
+            "You're right."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "particle-2",
+          "category": "particles",
+          "sources": [
+            "そうなのか"
+          ],
+          "references": [
+            "Is that so?"
+          ],
+          "notes": "Realization or inquiry; not agreement with invented detail.",
+          "status": "ok",
+          "translations": [
+            "Is that so?"
+          ],
+          "run_ms": [
+            69.72800000221469,
+            72.27439997950569
+          ],
+          "translate_many_ms": 64.39930002670735,
+          "batch_translations": [
+            "Is that so?"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "particle-3",
+          "category": "particles",
+          "sources": [
+            "何してるんだ？"
+          ],
+          "references": [
+            "What are you doing?"
+          ],
+          "notes": "Question with explanatory/reproachful tone.",
+          "status": "ok",
+          "translations": [
+            "What are you doing?"
+          ],
+          "run_ms": [
+            121.7737999977544,
+            118.69890001253225
+          ],
+          "translate_many_ms": 116.08779997914098,
+          "batch_translations": [
+            "What are you doing?"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "particle-4",
+          "category": "particles",
+          "sources": [
+            "行くぞ"
+          ],
+          "references": [
+            "Let's go!"
+          ],
+          "notes": "Forceful announcement/exhortation.",
+          "status": "ok",
+          "translations": [
+            "Let's go."
+          ],
+          "run_ms": [
+            84.80469998903573,
+            88.98719999706373
+          ],
+          "translate_many_ms": 79.05630001914687,
+          "batch_translations": [
+            "Let's go."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "particle-5",
+          "category": "particles",
+          "sources": [
+            "待てよ"
+          ],
+          "references": [
+            "Wait!"
+          ],
+          "notes": "Command, not past tense.",
+          "status": "ok",
+          "translations": [
+            "Wait a minute."
+          ],
+          "run_ms": [
+            107.2283000103198,
+            90.19710001302883
+          ],
+          "translate_many_ms": 97.95339999254793,
+          "batch_translations": [
+            "Wait a minute."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "contraction-1",
+          "category": "contractions",
+          "sources": [
+            "してんの？"
+          ],
+          "references": [],
+          "notes": "Are you doing it? Fragment needs context.",
+          "status": "ok",
+          "translations": [
+            "Are you?"
+          ],
+          "run_ms": [
+            89.82049999758601,
+            85.34970000619069
+          ],
+          "translate_many_ms": 79.84389999182895,
+          "batch_translations": [
+            "Are you?"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "contraction-2",
+          "category": "contractions",
+          "sources": [
+            "じゃねぇ"
+          ],
+          "references": [],
+          "notes": "Rough negative copula; incomplete predicate.",
+          "status": "ok",
+          "translations": [
+            "That's not true."
+          ],
+          "run_ms": [
+            108.42340000090189,
+            112.82310000387952
+          ],
+          "translate_many_ms": 115.48130001756363,
+          "batch_translations": [
+            "That's not true."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "contraction-3",
+          "category": "contractions",
+          "sources": [
+            "なきゃ"
+          ],
+          "references": [],
+          "notes": "Incomplete negative conditional/obligation; do not invent missing verb.",
+          "status": "ok",
+          "translations": [
+            "I have to."
+          ],
+          "run_ms": [
+            79.20960002229549,
+            91.71219999552704
+          ],
+          "translate_many_ms": 79.27139999810606,
+          "batch_translations": [
+            "I have to."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "contraction-4",
+          "category": "contractions",
+          "sources": [
+            "ちゃった"
+          ],
+          "references": [],
+          "notes": "Completion/regret suffix fragment; missing lexical verb.",
+          "status": "ok",
+          "translations": [
+            "Oh, my God."
+          ],
+          "run_ms": [
+            82.7687999990303,
+            81.68509998358786
+          ],
+          "translate_many_ms": 85.06720000877976,
+          "batch_translations": [
+            "Oh, my God."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "contraction-5",
+          "category": "contractions",
+          "sources": [
+            "とく"
+          ],
+          "references": [],
+          "notes": "Bare fragment ambiguous; distinguish from complete prep-action expression.",
+          "status": "ok",
+          "translations": [
+            "Oh, my God."
+          ],
+          "run_ms": [
+            83.95289999316446,
+            87.22970000235364
+          ],
+          "translate_many_ms": 84.98770001460798,
+          "batch_translations": [
+            "Oh, my God."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "contraction-6",
+          "category": "contractions",
+          "sources": [
+            "先に窓、閉めとくね。"
+          ],
+          "references": [
+            "I'll close the window first."
+          ],
+          "notes": "Doing something in advance, future intention.",
+          "status": "ok",
+          "translations": [
+            "I'll close the window first."
+          ],
+          "run_ms": [
+            137.3539000051096,
+            139.22599999932572
+          ],
+          "translate_many_ms": 141.01409999420866,
+          "batch_translations": [
+            "I'll close the window first."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "slang-1",
+          "category": "slang",
+          "sources": [
+            "ウケる"
+          ],
+          "references": [
+            "That's hilarious."
+          ],
+          "notes": "Casual amused response, not receive.",
+          "status": "ok",
+          "translations": [
+            "That's funny."
+          ],
+          "run_ms": [
+            104.72179998760112,
+            102.63780000968836
+          ],
+          "translate_many_ms": 102.79180001816712,
+          "batch_translations": [
+            "That's funny."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "slang-2",
+          "category": "slang",
+          "sources": [
+            "キモい"
+          ],
+          "references": [
+            "Gross."
+          ],
+          "notes": "Disgust/creepy, not physical illness necessarily.",
+          "status": "ok",
+          "translations": [
+            "That's gross."
+          ],
+          "run_ms": [
+            141.44010000745766,
+            109.35369998333044
+          ],
+          "translate_many_ms": 90.92490002512932,
+          "batch_translations": [
+            "That's gross."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "slang-3",
+          "category": "slang",
+          "sources": [
+            "ダサい"
+          ],
+          "references": [
+            "That's lame."
+          ],
+          "notes": "Uncool/tacky.",
+          "status": "ok",
+          "translations": [
+            "That's disgusting."
+          ],
+          "run_ms": [
+            97.44250000221655,
+            102.2639999864623
+          ],
+          "translate_many_ms": 103.65740000270307,
+          "batch_translations": [
+            "That's disgusting."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "slang-4",
+          "category": "slang",
+          "sources": [
+            "めっちゃ"
+          ],
+          "references": [],
+          "notes": "Intensifier fragment, not a complete proposition.",
+          "status": "ok",
+          "translations": [
+            "Wow."
+          ],
+          "run_ms": [
+            49.8444999975618,
+            54.33480002102442
+          ],
+          "translate_many_ms": 51.207799988333136,
+          "batch_translations": [
+            "Wow."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "slang-5",
+          "category": "slang",
+          "sources": [
+            "マジで"
+          ],
+          "references": [],
+          "notes": "Seriously/for real; interrogative intonation not specified.",
+          "status": "ok",
+          "translations": [
+            "I'm serious."
+          ],
+          "run_ms": [
+            84.49869998730719,
+            115.73250000947155
+          ],
+          "translate_many_ms": 79.12759997998364,
+          "batch_translations": [
+            "I'm serious."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "short-1",
+          "category": "ambiguous",
+          "sources": [
+            "別に"
+          ],
+          "references": [],
+          "notes": "Not really/nothing in particular; depends on prior question.",
+          "status": "ok",
+          "translations": [
+            "Nothing."
+          ],
+          "run_ms": [
+            110.54789999616332,
+            119.81949998880737
+          ],
+          "translate_many_ms": 113.40250002103858,
+          "batch_translations": [
+            "Nothing."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "short-2",
+          "category": "ambiguous",
+          "sources": [
+            "もう"
+          ],
+          "references": [],
+          "notes": "Already/enough/exasperation; no unique reference.",
+          "status": "ok",
+          "translations": [
+            "Shit."
+          ],
+          "run_ms": [
+            71.08769999467768,
+            71.93390000611544
+          ],
+          "translate_many_ms": 77.83769999514334,
+          "batch_translations": [
+            "Shit."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "short-3",
+          "category": "ambiguous",
+          "sources": [
+            "いい"
+          ],
+          "references": [],
+          "notes": "Good/okay/no thanks depending on context.",
+          "status": "ok",
+          "translations": [
+            "Okay."
+          ],
+          "run_ms": [
+            65.12949999887496,
+            65.90899999719113
+          ],
+          "translate_many_ms": 65.09380001807585,
+          "batch_translations": [
+            "Okay."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "short-4",
+          "category": "ambiguous",
+          "sources": [
+            "やだ"
+          ],
+          "references": [
+            "No, I don't want to."
+          ],
+          "notes": "Refusal/dislike, no invented object.",
+          "status": "ok",
+          "translations": [
+            "No."
+          ],
+          "run_ms": [
+            62.3976000060793,
+            68.35119999595918
+          ],
+          "translate_many_ms": 71.32749998709187,
+          "batch_translations": [
+            "No."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "short-5",
+          "category": "ambiguous",
+          "sources": [
+            "無理"
+          ],
+          "references": [
+            "No way."
+          ],
+          "notes": "Impossible/cannot do it.",
+          "status": "ok",
+          "translations": [
+            "I can't."
+          ],
+          "run_ms": [
+            91.6694000188727,
+            106.92319998634048
+          ],
+          "translate_many_ms": 120.89930000365712,
+          "batch_translations": [
+            "I can't."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "short-6",
+          "category": "ambiguous",
+          "sources": [
+            "最悪"
+          ],
+          "references": [
+            "This is the worst."
+          ],
+          "notes": "Negative evaluation.",
+          "status": "ok",
+          "translations": [
+            "Oh, my God."
+          ],
+          "run_ms": [
+            101.88440000638366,
+            71.8644000007771
+          ],
+          "translate_many_ms": 82.4117999873124,
+          "batch_translations": [
+            "Oh, my God."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "short-7",
+          "category": "ambiguous",
+          "sources": [
+            "大丈夫"
+          ],
+          "references": [
+            "It's okay."
+          ],
+          "notes": "May mean reassurance/refusal; subject unknown.",
+          "status": "ok",
+          "translations": [
+            "It's okay."
+          ],
+          "run_ms": [
+            91.13670000806451,
+            96.5849999920465
+          ],
+          "translate_many_ms": 93.76899999915622,
+          "batch_translations": [
+            "It's okay."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "polite-1",
+          "category": "polite",
+          "sources": [
+            "ありがとうございます"
+          ],
+          "references": [
+            "Thank you very much."
+          ],
+          "notes": "Politeness here is appropriate, not a flaw.",
+          "status": "ok",
+          "translations": [
+            "Thank you."
+          ],
+          "run_ms": [
+            95.93199999653734,
+            98.26550001162104
+          ],
+          "translate_many_ms": 90.65559998271056,
+          "batch_translations": [
+            "Thank you."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "polite-2",
+          "category": "polite",
+          "sources": [
+            "申し訳ありません"
+          ],
+          "references": [
+            "I'm very sorry."
+          ],
+          "notes": "Sincere formal apology.",
+          "status": "ok",
+          "translations": [
+            "I'm sorry."
+          ],
+          "run_ms": [
+            119.23070001648739,
+            116.80509999860078
+          ],
+          "translate_many_ms": 120.86029999773018,
+          "batch_translations": [
+            "I'm sorry."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "polite-3",
+          "category": "polite",
+          "sources": [
+            "どうなさいましたか"
+          ],
+          "references": [
+            "Is something wrong?"
+          ],
+          "notes": "Respectful inquiry, context permits 'What happened?'",
+          "status": "ok",
+          "translations": [
+            "What's wrong?"
+          ],
+          "run_ms": [
+            124.50730000273325,
+            107.86069999448955
+          ],
+          "translate_many_ms": 121.17359999683686,
+          "batch_translations": [
+            "What's wrong?"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "tone-rough",
+          "category": "character-tone",
+          "sources": [
+            "てめぇ、勝手に俺の荷物触んな！"
+          ],
+          "references": [
+            "Hey! Don't touch my stuff without asking!"
+          ],
+          "notes": "Rough prohibition; preserve whose belongings.",
+          "status": "ok",
+          "translations": [
+            "Don't touch my stuff!"
+          ],
+          "run_ms": [
+            152.3454000125639,
+            129.26990000414662
+          ],
+          "translate_many_ms": 153.03899999707937,
+          "batch_translations": [
+            "Don't touch my stuff!"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "tone-teen",
+          "category": "character-tone",
+          "sources": [
+            "え、これめっちゃかわいくない？"
+          ],
+          "references": [
+            "Wait, isn't this super cute?"
+          ],
+          "notes": "Casual positive rhetorical question.",
+          "status": "ok",
+          "translations": [
+            "Isn't this cute?"
+          ],
+          "run_ms": [
+            110.7592000043951,
+            119.9899000057485
+          ],
+          "translate_many_ms": 113.01969998748973,
+          "batch_translations": [
+            "Isn't this cute?"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "tone-arrogant",
+          "category": "character-tone",
+          "sources": [
+            "この俺に勝てると思ったのか？"
+          ],
+          "references": [
+            "You thought you could beat me?"
+          ],
+          "notes": "Arrogant challenge, opponent not speaker expected to lose.",
+          "status": "ok",
+          "translations": [
+            "You thought you could beat me?"
+          ],
+          "run_ms": [
+            126.0259999835398,
+            105.447500012815
+          ],
+          "translate_many_ms": 120.40630000410601,
+          "batch_translations": [
+            "You thought you could beat me?"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "tone-timid",
+          "category": "character-tone",
+          "sources": [
+            "あの、もしよかったら、一緒に帰りませんか。"
+          ],
+          "references": [
+            "Um, if you'd like, could we walk home together?"
+          ],
+          "notes": "Timid invitation, not command.",
+          "status": "ok",
+          "translations": [
+            "Um, if you'd like, why don't you go home with me?"
+          ],
+          "run_ms": [
+            214.05670000240207,
+            253.53390001691878
+          ],
+          "translate_many_ms": 252.54419998964295,
+          "batch_translations": [
+            "Um, if you'd like, why don't you go home with me?"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "negation-long",
+          "category": "longer",
+          "sources": [
+            "助けたくないんじゃない。今ここを離れたら、あの子まで危険になるんだ。"
+          ],
+          "references": [
+            "It's not that I don't want to help. If I leave now, that kid will be in danger too."
+          ],
+          "notes": "Critical double negation and conditional; do not reverse motivation.",
+          "status": "ok",
+          "translations": [
+            "I don't want to help. If I leave right now, I'll be in danger too."
+          ],
+          "run_ms": [
+            314.2936000076588,
+            326.3135000015609
+          ],
+          "translate_many_ms": 310.9444000001531,
+          "batch_translations": [
+            "I don't want to help. If I leave right now, I'll be in danger too."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "direction",
+          "category": "longer",
+          "sources": [
+            "先生に叱られたのは僕じゃなくて、弟だよ。"
+          ],
+          "references": [
+            "It was my little brother who got scolded by the teacher, not me."
+          ],
+          "notes": "Passive agent/patient and contrast must survive.",
+          "status": "ok",
+          "translations": [
+            "The teacher scolded me, not me, but my brother."
+          ],
+          "run_ms": [
+            266.4339999901131,
+            209.2040999850724
+          ],
+          "translate_many_ms": 213.07229998637922,
+          "batch_translations": [
+            "The teacher scolded me, not me, but my brother."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "ocr-damaged",
+          "category": "ocr",
+          "sources": [
+            "もう帰っナの？"
+          ],
+          "references": [],
+          "notes": "Synthetic OCR タ/ナ substitution for 帰った; report uncertainty rather than assert gold.",
+          "status": "ok",
+          "translations": [
+            "You're going home now?"
+          ],
+          "run_ms": [
+            98.92049999325536,
+            99.8799999943003
+          ],
+          "translate_many_ms": 116.28469999413937,
+          "batch_translations": [
+            "You're going home now?"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "visual-lines",
+          "category": "ocr",
+          "sources": [
+            "でも\n大丈夫"
+          ],
+          "references": [
+            "But it's okay."
+          ],
+          "notes": "One bubble split across visual lines.",
+          "status": "ok",
+          "translations": [
+            "But I'm fine."
+          ],
+          "run_ms": [
+            110.93240001355298,
+            94.35050000320189
+          ],
+          "translate_many_ms": 94.01729999808595,
+          "batch_translations": [
+            "But I'm fine."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "context-left",
+          "category": "context",
+          "sources": [
+            "もう帰った？"
+          ],
+          "references": [
+            "Has Ren already gone home?"
+          ],
+          "notes": "Context suggests absent Ren, not asking addressee if home yet.",
+          "status": "ok",
+          "translations": [
+            "Have you gone home yet?"
+          ],
+          "run_ms": [
+            87.73180001298897,
+            87.64199999859557
+          ],
+          "translate_many_ms": 84.96380000724457,
+          "batch_translations": [
+            "Have you gone home yet?"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "context-refusal",
+          "category": "context",
+          "sources": [
+            "いい。"
+          ],
+          "references": [
+            "No thanks."
+          ],
+          "notes": "Following context disambiguates refusal from acceptance.",
+          "status": "ok",
+          "translations": [
+            "Okay."
+          ],
+          "run_ms": [
+            64.76639999891631,
+            65.4011000005994
+          ],
+          "translate_many_ms": 69.13009998970665,
+          "batch_translations": [
+            "Okay."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "context-acceptance",
+          "category": "context",
+          "sources": [
+            "いい。"
+          ],
+          "references": [
+            "That's fine."
+          ],
+          "notes": "Approval, unlike context-refusal with same current line.",
+          "status": "ok",
+          "translations": [
+            "Okay."
+          ],
+          "run_ms": [
+            84.07430001534522,
+            86.98500000173226
+          ],
+          "translate_many_ms": 75.74989998829551,
+          "batch_translations": [
+            "Okay."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "page-training",
+          "category": "ordered-page",
+          "sources": [
+            "レン、まだ練習してるの？",
+            "うん。霊力がうまく使えなくて。",
+            "昨日よりは安定してるよ。",
+            "そう？じゃあ、もう一回だけ。",
+            "待って。手、震えてる。",
+            "大丈夫。無理はしないから。",
+            "さっきもそう言ったじゃん。",
+            "……分かった。今日はやめとく。"
+          ],
+          "references": [],
+          "notes": "Original synthetic eight-bubble scene. Compare names, terminology, concern, promise, reluctant concession. No gender supplied.",
+          "status": "ok",
+          "translations": [
+            "Len, are you still practicing?",
+            "Yeah. My psychic powers weren't working well.",
+            "It's more stable than yesterday.",
+            "I don't know. Just one more time.",
+            "Wait. Hands are shaking.",
+            "It's okay. I don't have to do it.",
+            "That's what you said earlier.",
+            "Okay. I'll stop today."
+          ],
+          "run_ms": [
+            1173.1279999949038,
+            1445.9532999899238
+          ],
+          "translate_many_ms": 470.3141000063624,
+          "batch_translations": [
+            "Len, are you still practicing?",
+            "Yeah. My psychic powers weren't working well.",
+            "It's more stable than yesterday.",
+            "I don't know. Just one more time.",
+            "Wait. Hands are shaking.",
+            "It's okay. I don't have to do it.",
+            "That's what you said earlier.",
+            "Okay. I'll stop today."
+          ],
+          "repeats_identical": true
+        }
+      ]
+    },
+    {
+      "engine": "hy-mt2-manga",
+      "context_mode": "isolated",
+      "glossary": false,
+      "device_requested": "cuda",
+      "memory_before": {
+        "rss_bytes": 45355008,
+        "scope": "Python plus owned children; snapshot, not peak; includes shared pages",
+        "gpu_snapshot": "NVIDIA GeForce RTX 4070 SUPER, 12282, 4228",
+        "gpu_scope": "Whole GPU used MiB, including other applications; snapshot, not peak"
+      },
+      "load_ms": 1494.61799999699,
+      "memory_loaded": {
+        "rss_bytes": 1619709952,
+        "scope": "Python plus owned children; snapshot, not peak; includes shared pages",
+        "gpu_snapshot": "NVIDIA GeForce RTX 4070 SUPER, 12282, 5805",
+        "gpu_scope": "Whole GPU used MiB, including other applications; snapshot, not peak"
+      },
+      "status": "completed",
+      "memory_after": {
+        "rss_bytes": 1650466816,
+        "scope": "Python plus owned children; snapshot, not peak; includes shared pages",
+        "gpu_snapshot": "NVIDIA GeForce RTX 4070 SUPER, 12282, 5800",
+        "gpu_scope": "Whole GPU used MiB, including other applications; snapshot, not peak"
+      },
+      "summary": {
+        "cases_ok": 46,
+        "cases_total": 46,
+        "first_case_ms": 78.50259999395348,
+        "mean_warm_ms_per_line": 79.04525815312176,
+        "note": "Per-line page latency is amortized; batch time is not a sum of result timings",
+        "warm_repeated_line_ms": 84.08792830294192
+      },
+      "run_id": "hy-gpu-v2",
+      "cases": [
+        {
+          "id": "casual-1",
+          "category": "casual",
+          "sources": [
+            "何してんだよ"
+          ],
+          "references": [
+            "What are you doing?"
+          ],
+          "notes": "Rough surprise/reproach; do not invent an action.",
+          "status": "ok",
+          "translations": [
+            "What are you doing?"
+          ],
+          "run_ms": [
+            78.50259999395348,
+            61.186600010842085
+          ],
+          "translate_many_ms": 60.05400000140071,
+          "batch_translations": [
+            "What are you doing?"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "casual-2",
+          "category": "casual",
+          "sources": [
+            "知らねーよ"
+          ],
+          "references": [
+            "How should I know?"
+          ],
+          "notes": "Preserve negation and dismissiveness.",
+          "status": "ok",
+          "translations": [
+            "I don't know."
+          ],
+          "run_ms": [
+            59.19579998590052,
+            62.415000022156164
+          ],
+          "translate_many_ms": 60.81130000529811,
+          "batch_translations": [
+            "I don't know."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "casual-3",
+          "category": "casual",
+          "sources": [
+            "マジかよ"
+          ],
+          "references": [
+            "Seriously?"
+          ],
+          "notes": "Surprise, not a factual assertion.",
+          "status": "ok",
+          "translations": [
+            "Seriously?"
+          ],
+          "run_ms": [
+            66.30730000324547,
+            49.8162999865599
+          ],
+          "translate_many_ms": 47.6724999898579,
+          "batch_translations": [
+            "Seriously?"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "casual-4",
+          "category": "casual",
+          "sources": [
+            "やべぇ"
+          ],
+          "references": [],
+          "notes": "Ambiguous: trouble or impressed slang; avoid inventing context.",
+          "status": "ok",
+          "translations": [
+            "Oh crap."
+          ],
+          "run_ms": [
+            44.45839999243617,
+            42.472600005567074
+          ],
+          "translate_many_ms": 40.81340000266209,
+          "batch_translations": [
+            "Oh crap."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "casual-5",
+          "category": "casual",
+          "sources": [
+            "ふざけんな"
+          ],
+          "references": [
+            "Don't mess with me!"
+          ],
+          "notes": "Negative command; intensity may vary.",
+          "status": "ok",
+          "translations": [
+            "Don't screw around."
+          ],
+          "run_ms": [
+            59.00360000669025,
+            57.02199999359436
+          ],
+          "translate_many_ms": 74.27529999404214,
+          "batch_translations": [
+            "Don't screw around."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "subject-1",
+          "category": "omitted-subject",
+          "sources": [
+            "もう行った？"
+          ],
+          "references": [],
+          "notes": "Already went/left? Subject unspecified.",
+          "status": "ok",
+          "translations": [
+            "Already gone?"
+          ],
+          "run_ms": [
+            44.53750001266599,
+            71.36890001129359
+          ],
+          "translate_many_ms": 44.53290000674315,
+          "batch_translations": [
+            "Already gone?"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "subject-2",
+          "category": "omitted-subject",
+          "sources": [
+            "知らなかった。"
+          ],
+          "references": [
+            "I didn't know."
+          ],
+          "notes": "Past negative, not present refusal.",
+          "status": "ok",
+          "translations": [
+            "I didn't know."
+          ],
+          "run_ms": [
+            74.66069998918101,
+            73.51919999928214
+          ],
+          "translate_many_ms": 85.8134999871254,
+          "batch_translations": [
+            "I didn't know."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "subject-3",
+          "category": "omitted-subject",
+          "sources": [
+            "やったの？"
+          ],
+          "references": [],
+          "notes": "Did you/they do it? Do not assume sexual meaning.",
+          "status": "ok",
+          "translations": [
+            "Did you get it?"
+          ],
+          "run_ms": [
+            55.632100004004315,
+            59.5000000030268
+          ],
+          "translate_many_ms": 53.8224000192713,
+          "batch_translations": [
+            "Did you get it?"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "particle-1",
+          "category": "particles",
+          "sources": [
+            "そうだよな"
+          ],
+          "references": [
+            "Yeah, you're right."
+          ],
+          "notes": "Agreement/seeking agreement.",
+          "status": "ok",
+          "translations": [
+            "Yeah, that's right."
+          ],
+          "run_ms": [
+            62.740900000790134,
+            65.66799999563955
+          ],
+          "translate_many_ms": 63.33659999654628,
+          "batch_translations": [
+            "Yeah, that's right."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "particle-2",
+          "category": "particles",
+          "sources": [
+            "そうなのか"
+          ],
+          "references": [
+            "Is that so?"
+          ],
+          "notes": "Realization or inquiry; not agreement with invented detail.",
+          "status": "ok",
+          "translations": [
+            "I see."
+          ],
+          "run_ms": [
+            58.38810000568628,
+            63.20920001599006
+          ],
+          "translate_many_ms": 51.421399984974414,
+          "batch_translations": [
+            "I see."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "particle-3",
+          "category": "particles",
+          "sources": [
+            "何してるんだ？"
+          ],
+          "references": [
+            "What are you doing?"
+          ],
+          "notes": "Question with explanatory/reproachful tone.",
+          "status": "ok",
+          "translations": [
+            "What are you doing?"
+          ],
+          "run_ms": [
+            75.2146000158973,
+            61.34760001441464
+          ],
+          "translate_many_ms": 81.2244999979157,
+          "batch_translations": [
+            "What are you doing?"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "particle-4",
+          "category": "particles",
+          "sources": [
+            "行くぞ"
+          ],
+          "references": [
+            "Let's go!"
+          ],
+          "notes": "Forceful announcement/exhortation.",
+          "status": "ok",
+          "translations": [
+            "Let's go."
+          ],
+          "run_ms": [
+            67.18700000783429,
+            83.12650001607835
+          ],
+          "translate_many_ms": 75.50340000307187,
+          "batch_translations": [
+            "Let's go."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "particle-5",
+          "category": "particles",
+          "sources": [
+            "待てよ"
+          ],
+          "references": [
+            "Wait!"
+          ],
+          "notes": "Command, not past tense.",
+          "status": "ok",
+          "translations": [
+            "Wait up."
+          ],
+          "run_ms": [
+            73.24900000821799,
+            76.38250000309199
+          ],
+          "translate_many_ms": 53.15749999135733,
+          "batch_translations": [
+            "Wait up."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "contraction-1",
+          "category": "contractions",
+          "sources": [
+            "してんの？"
+          ],
+          "references": [],
+          "notes": "Are you doing it? Fragment needs context.",
+          "status": "ok",
+          "translations": [
+            "...are you doing?"
+          ],
+          "run_ms": [
+            82.83020000089891,
+            81.27070000045933
+          ],
+          "translate_many_ms": 89.54690000973642,
+          "batch_translations": [
+            "...are you doing?"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "contraction-2",
+          "category": "contractions",
+          "sources": [
+            "じゃねぇ"
+          ],
+          "references": [],
+          "notes": "Rough negative copula; incomplete predicate.",
+          "status": "ok",
+          "translations": [
+            "See ya."
+          ],
+          "run_ms": [
+            68.31989999045618,
+            77.18369999201968
+          ],
+          "translate_many_ms": 79.89580000867136,
+          "batch_translations": [
+            "See ya."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "contraction-3",
+          "category": "contractions",
+          "sources": [
+            "なきゃ"
+          ],
+          "references": [],
+          "notes": "Incomplete negative conditional/obligation; do not invent missing verb.",
+          "status": "ok",
+          "translations": [
+            "I have to..."
+          ],
+          "run_ms": [
+            78.87609998579137,
+            82.25330000277609
+          ],
+          "translate_many_ms": 76.40019999234937,
+          "batch_translations": [
+            "I have to..."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "contraction-4",
+          "category": "contractions",
+          "sources": [
+            "ちゃった"
+          ],
+          "references": [],
+          "notes": "Completion/regret suffix fragment; missing lexical verb.",
+          "status": "ok",
+          "translations": [
+            "I did it."
+          ],
+          "run_ms": [
+            59.15439999080263,
+            83.02130000083707
+          ],
+          "translate_many_ms": 74.41919998382218,
+          "batch_translations": [
+            "I did it."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "contraction-5",
+          "category": "contractions",
+          "sources": [
+            "とく"
+          ],
+          "references": [],
+          "notes": "Bare fragment ambiguous; distinguish from complete prep-action expression.",
+          "status": "ok",
+          "translations": [
+            "Hah♡"
+          ],
+          "run_ms": [
+            72.13710001087748,
+            85.55459999479353
+          ],
+          "translate_many_ms": 68.70659999549389,
+          "batch_translations": [
+            "Hah♡"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "contraction-6",
+          "category": "contractions",
+          "sources": [
+            "先に窓、閉めとくね。"
+          ],
+          "references": [
+            "I'll close the window first."
+          ],
+          "notes": "Doing something in advance, future intention.",
+          "status": "ok",
+          "translations": [
+            "I'll close the window first."
+          ],
+          "run_ms": [
+            100.52539999014698,
+            91.6500999883283
+          ],
+          "translate_many_ms": 105.14390000025742,
+          "batch_translations": [
+            "I'll close the window first."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "slang-1",
+          "category": "slang",
+          "sources": [
+            "ウケる"
+          ],
+          "references": [
+            "That's hilarious."
+          ],
+          "notes": "Casual amused response, not receive.",
+          "status": "ok",
+          "translations": [
+            "That's hilarious."
+          ],
+          "run_ms": [
+            86.039299989352,
+            76.64119999390095
+          ],
+          "translate_many_ms": 81.53910000692122,
+          "batch_translations": [
+            "That's hilarious."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "slang-2",
+          "category": "slang",
+          "sources": [
+            "キモい"
+          ],
+          "references": [
+            "Gross."
+          ],
+          "notes": "Disgust/creepy, not physical illness necessarily.",
+          "status": "ok",
+          "translations": [
+            "Gross."
+          ],
+          "run_ms": [
+            72.18289998127148,
+            59.81370000517927
+          ],
+          "translate_many_ms": 60.2284999913536,
+          "batch_translations": [
+            "Gross."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "slang-3",
+          "category": "slang",
+          "sources": [
+            "ダサい"
+          ],
+          "references": [
+            "That's lame."
+          ],
+          "notes": "Uncool/tacky.",
+          "status": "ok",
+          "translations": [
+            "So tacky."
+          ],
+          "run_ms": [
+            74.4012999930419,
+            76.80169999366626
+          ],
+          "translate_many_ms": 78.29710000078194,
+          "batch_translations": [
+            "So tacky."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "slang-4",
+          "category": "slang",
+          "sources": [
+            "めっちゃ"
+          ],
+          "references": [],
+          "notes": "Intensifier fragment, not a complete proposition.",
+          "status": "ok",
+          "translations": [
+            "Damn, that's insane."
+          ],
+          "run_ms": [
+            100.37279999232851,
+            92.8585999936331
+          ],
+          "translate_many_ms": 83.8029999868013,
+          "batch_translations": [
+            "Damn, that's insane."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "slang-5",
+          "category": "slang",
+          "sources": [
+            "マジで"
+          ],
+          "references": [],
+          "notes": "Seriously/for real; interrogative intonation not specified.",
+          "status": "ok",
+          "translations": [
+            "Seriously."
+          ],
+          "run_ms": [
+            54.42949998541735,
+            63.231199979782104
+          ],
+          "translate_many_ms": 68.738999980269,
+          "batch_translations": [
+            "Seriously."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "short-1",
+          "category": "ambiguous",
+          "sources": [
+            "別に"
+          ],
+          "references": [],
+          "notes": "Not really/nothing in particular; depends on prior question.",
+          "status": "ok",
+          "translations": [
+            "It's nothing."
+          ],
+          "run_ms": [
+            63.183699996443465,
+            86.31769998464733
+          ],
+          "translate_many_ms": 62.47190001886338,
+          "batch_translations": [
+            "It's nothing."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "short-2",
+          "category": "ambiguous",
+          "sources": [
+            "もう"
+          ],
+          "references": [],
+          "notes": "Already/enough/exasperation; no unique reference.",
+          "status": "ok",
+          "translations": [
+            "Geez."
+          ],
+          "run_ms": [
+            63.051899982383475,
+            61.32629999774508
+          ],
+          "translate_many_ms": 65.66100000054576,
+          "batch_translations": [
+            "Geez."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "short-3",
+          "category": "ambiguous",
+          "sources": [
+            "いい"
+          ],
+          "references": [],
+          "notes": "Good/okay/no thanks depending on context.",
+          "status": "ok",
+          "translations": [
+            "Good."
+          ],
+          "run_ms": [
+            68.14280000980943,
+            46.87639998155646
+          ],
+          "translate_many_ms": 61.06700000236742,
+          "batch_translations": [
+            "Good."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "short-4",
+          "category": "ambiguous",
+          "sources": [
+            "やだ"
+          ],
+          "references": [
+            "No, I don't want to."
+          ],
+          "notes": "Refusal/dislike, no invented object.",
+          "status": "ok",
+          "translations": [
+            "No way."
+          ],
+          "run_ms": [
+            68.95069999154657,
+            63.914199999999255
+          ],
+          "translate_many_ms": 75.80590000725351,
+          "batch_translations": [
+            "No way."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "short-5",
+          "category": "ambiguous",
+          "sources": [
+            "無理"
+          ],
+          "references": [
+            "No way."
+          ],
+          "notes": "Impossible/cannot do it.",
+          "status": "ok",
+          "translations": [
+            "No way."
+          ],
+          "run_ms": [
+            64.94609999936074,
+            69.05510000069626
+          ],
+          "translate_many_ms": 71.12190002226271,
+          "batch_translations": [
+            "No way."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "short-6",
+          "category": "ambiguous",
+          "sources": [
+            "最悪"
+          ],
+          "references": [
+            "This is the worst."
+          ],
+          "notes": "Negative evaluation.",
+          "status": "ok",
+          "translations": [
+            "The worst."
+          ],
+          "run_ms": [
+            72.4243999866303,
+            64.30329999420792
+          ],
+          "translate_many_ms": 49.9714000034146,
+          "batch_translations": [
+            "The worst."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "short-7",
+          "category": "ambiguous",
+          "sources": [
+            "大丈夫"
+          ],
+          "references": [
+            "It's okay."
+          ],
+          "notes": "May mean reassurance/refusal; subject unknown.",
+          "status": "ok",
+          "translations": [
+            "It's fine."
+          ],
+          "run_ms": [
+            56.20279998402111,
+            54.3582999962382
+          ],
+          "translate_many_ms": 54.70400000922382,
+          "batch_translations": [
+            "It's fine."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "polite-1",
+          "category": "polite",
+          "sources": [
+            "ありがとうございます"
+          ],
+          "references": [
+            "Thank you very much."
+          ],
+          "notes": "Politeness here is appropriate, not a flaw.",
+          "status": "ok",
+          "translations": [
+            "Thank you very much."
+          ],
+          "run_ms": [
+            77.48749997699633,
+            63.479999982519075
+          ],
+          "translate_many_ms": 70.97749999957159,
+          "batch_translations": [
+            "Thank you very much."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "polite-2",
+          "category": "polite",
+          "sources": [
+            "申し訳ありません"
+          ],
+          "references": [
+            "I'm very sorry."
+          ],
+          "notes": "Sincere formal apology.",
+          "status": "ok",
+          "translations": [
+            "I'm very sorry."
+          ],
+          "run_ms": [
+            60.50570000661537,
+            84.89970001392066
+          ],
+          "translate_many_ms": 75.06450000801124,
+          "batch_translations": [
+            "I'm very sorry."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "polite-3",
+          "category": "polite",
+          "sources": [
+            "どうなさいましたか"
+          ],
+          "references": [
+            "Is something wrong?"
+          ],
+          "notes": "Respectful inquiry, context permits 'What happened?'",
+          "status": "ok",
+          "translations": [
+            "What's wrong?"
+          ],
+          "run_ms": [
+            71.12799998139963,
+            82.99160000751726
+          ],
+          "translate_many_ms": 81.64550000219606,
+          "batch_translations": [
+            "What's wrong?"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "tone-rough",
+          "category": "character-tone",
+          "sources": [
+            "てめぇ、勝手に俺の荷物触んな！"
+          ],
+          "references": [
+            "Hey! Don't touch my stuff without asking!"
+          ],
+          "notes": "Rough prohibition; preserve whose belongings.",
+          "status": "ok",
+          "translations": [
+            "Hey, don't touch my stuff without asking!"
+          ],
+          "run_ms": [
+            118.083299981663,
+            99.56949998741038
+          ],
+          "translate_many_ms": 125.73590001557022,
+          "batch_translations": [
+            "Hey, don't touch my stuff without asking!"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "tone-teen",
+          "category": "character-tone",
+          "sources": [
+            "え、これめっちゃかわいくない？"
+          ],
+          "references": [
+            "Wait, isn't this super cute?"
+          ],
+          "notes": "Casual positive rhetorical question.",
+          "status": "ok",
+          "translations": [
+            "Eh, isn't this super cute?"
+          ],
+          "run_ms": [
+            118.09080000966787,
+            89.5582000084687
+          ],
+          "translate_many_ms": 108.89659999520518,
+          "batch_translations": [
+            "Eh, isn't this super cute?"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "tone-arrogant",
+          "category": "character-tone",
+          "sources": [
+            "この俺に勝てると思ったのか？"
+          ],
+          "references": [
+            "You thought you could beat me?"
+          ],
+          "notes": "Arrogant challenge, opponent not speaker expected to lose.",
+          "status": "ok",
+          "translations": [
+            "You think you could beat me?"
+          ],
+          "run_ms": [
+            99.33629998704419,
+            93.10860000550747
+          ],
+          "translate_many_ms": 91.07789999688976,
+          "batch_translations": [
+            "You think you could beat me?"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "tone-timid",
+          "category": "character-tone",
+          "sources": [
+            "あの、もしよかったら、一緒に帰りませんか。"
+          ],
+          "references": [
+            "Um, if you'd like, could we walk home together?"
+          ],
+          "notes": "Timid invitation, not command.",
+          "status": "ok",
+          "translations": [
+            "Um, if it's okay with you, why don't you come home with me?"
+          ],
+          "run_ms": [
+            173.44409998622723,
+            167.8216999862343
+          ],
+          "translate_many_ms": 180.71620000409894,
+          "batch_translations": [
+            "Um, if it's okay with you, why don't you come home with me?"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "negation-long",
+          "category": "longer",
+          "sources": [
+            "助けたくないんじゃない。今ここを離れたら、あの子まで危険になるんだ。"
+          ],
+          "references": [
+            "It's not that I don't want to help. If I leave now, that kid will be in danger too."
+          ],
+          "notes": "Critical double negation and conditional; do not reverse motivation.",
+          "status": "ok",
+          "translations": [
+            "You don't want to save her? If we leave right now, that girl will be in danger too."
+          ],
+          "run_ms": [
+            207.85320000140928,
+            194.8706000111997
+          ],
+          "translate_many_ms": 195.29840000905097,
+          "batch_translations": [
+            "You don't want to save her? If we leave right now, that girl will be in danger too."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "direction",
+          "category": "longer",
+          "sources": [
+            "先生に叱られたのは僕じゃなくて、弟だよ。"
+          ],
+          "references": [
+            "It was my little brother who got scolded by the teacher, not me."
+          ],
+          "notes": "Passive agent/patient and contrast must survive.",
+          "status": "ok",
+          "translations": [
+            "It wasn't me who got scolded by the teacher, it was my little brother."
+          ],
+          "run_ms": [
+            180.75870000757277,
+            167.92499998700805
+          ],
+          "translate_many_ms": 181.00030001369305,
+          "batch_translations": [
+            "It wasn't me who got scolded by the teacher, it was my little brother."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "ocr-damaged",
+          "category": "ocr",
+          "sources": [
+            "もう帰っナの？"
+          ],
+          "references": [],
+          "notes": "Synthetic OCR タ/ナ substitution for 帰った; report uncertainty rather than assert gold.",
+          "status": "ok",
+          "translations": [
+            "Already home?"
+          ],
+          "run_ms": [
+            75.89600002393126,
+            50.572400010423735
+          ],
+          "translate_many_ms": 73.04059999296442,
+          "batch_translations": [
+            "Already home?"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "visual-lines",
+          "category": "ocr",
+          "sources": [
+            "でも\n大丈夫"
+          ],
+          "references": [
+            "But it's okay."
+          ],
+          "notes": "One bubble split across visual lines.",
+          "status": "ok",
+          "translations": [
+            "But it's okay."
+          ],
+          "run_ms": [
+            93.00979998079129,
+            73.48770002136007
+          ],
+          "translate_many_ms": 76.52729999972507,
+          "batch_translations": [
+            "But it's okay."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "context-left",
+          "category": "context",
+          "sources": [
+            "もう帰った？"
+          ],
+          "references": [
+            "Has Ren already gone home?"
+          ],
+          "notes": "Context suggests absent Ren, not asking addressee if home yet.",
+          "status": "ok",
+          "translations": [
+            "Already gone home?"
+          ],
+          "run_ms": [
+            58.56760000460781,
+            80.48450000933371
+          ],
+          "translate_many_ms": 75.51379999495111,
+          "batch_translations": [
+            "Already gone home?"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "context-refusal",
+          "category": "context",
+          "sources": [
+            "いい。"
+          ],
+          "references": [
+            "No thanks."
+          ],
+          "notes": "Following context disambiguates refusal from acceptance.",
+          "status": "ok",
+          "translations": [
+            "Good."
+          ],
+          "run_ms": [
+            60.58829999528825,
+            66.21820002328604
+          ],
+          "translate_many_ms": 58.37650000466965,
+          "batch_translations": [
+            "Good."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "context-acceptance",
+          "category": "context",
+          "sources": [
+            "いい。"
+          ],
+          "references": [
+            "That's fine."
+          ],
+          "notes": "Approval, unlike context-refusal with same current line.",
+          "status": "ok",
+          "translations": [
+            "Good."
+          ],
+          "run_ms": [
+            49.38169999513775,
+            60.402900009648874
+          ],
+          "translate_many_ms": 46.746999985771254,
+          "batch_translations": [
+            "Good."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "page-training",
+          "category": "ordered-page",
+          "sources": [
+            "レン、まだ練習してるの？",
+            "うん。霊力がうまく使えなくて。",
+            "昨日よりは安定してるよ。",
+            "そう？じゃあ、もう一回だけ。",
+            "待って。手、震えてる。",
+            "大丈夫。無理はしないから。",
+            "さっきもそう言ったじゃん。",
+            "……分かった。今日はやめとく。"
+          ],
+          "references": [],
+          "notes": "Original synthetic eight-bubble scene. Compare names, terminology, concern, promise, reluctant concession. No gender supplied.",
+          "status": "ok",
+          "translations": [
+            "Ren, are you still practicing?",
+            "Yeah. I can't use my spiritual power well.",
+            "It's more stable than yesterday.",
+            "Really? Then, just one more time.",
+            "Wait. My hand's shaking.",
+            "It's okay. I won't push you too hard.",
+            "You said so yourself just now.",
+            "...Got it. I'll call it off for today."
+          ],
+          "run_ms": [
+            931.9334999890998,
+            937.8038000140805
+          ],
+          "translate_many_ms": 953.669299982721,
+          "batch_translations": [
+            "Ren, are you still practicing?",
+            "Yeah. I can't use my spiritual power well.",
+            "It's more stable than yesterday.",
+            "Really? Then, just one more time.",
+            "Wait. My hand's shaking.",
+            "It's okay. I won't push you too hard.",
+            "You said so yourself just now.",
+            "...Got it. I'll call it off for today."
+          ],
+          "repeats_identical": true
+        }
+      ]
+    },
+    {
+      "engine": "qwen25-manga",
+      "context_mode": "isolated",
+      "glossary": false,
+      "device_requested": "cuda",
+      "memory_before": {
+        "rss_bytes": 51945472,
+        "scope": "Python plus owned children; snapshot, not peak; includes shared pages",
+        "gpu_snapshot": "NVIDIA GeForce RTX 4070 SUPER, 12282, 4225",
+        "gpu_scope": "Whole GPU used MiB, including other applications; snapshot, not peak"
+      },
+      "load_ms": 3076.5065000159666,
+      "memory_loaded": {
+        "rss_bytes": 5029711872,
+        "scope": "Python plus owned children; snapshot, not peak; includes shared pages",
+        "gpu_snapshot": "NVIDIA GeForce RTX 4070 SUPER, 12282, 9068",
+        "gpu_scope": "Whole GPU used MiB, including other applications; snapshot, not peak"
+      },
+      "status": "completed",
+      "memory_after": {
+        "rss_bytes": 5062647808,
+        "scope": "Python plus owned children; snapshot, not peak; includes shared pages",
+        "gpu_snapshot": "NVIDIA GeForce RTX 4070 SUPER, 12282, 8804",
+        "gpu_scope": "Whole GPU used MiB, including other applications; snapshot, not peak"
+      },
+      "summary": {
+        "cases_ok": 46,
+        "cases_total": 46,
+        "first_case_ms": 195.274600002449,
+        "mean_warm_ms_per_line": 215.0153513549689,
+        "note": "Per-line page latency is amortized; batch time is not a sum of result timings",
+        "warm_repeated_line_ms": 216.06551131776112
+      },
+      "run_id": "q25-gpu-v2",
+      "cases": [
+        {
+          "id": "casual-1",
+          "category": "casual",
+          "sources": [
+            "何してんだよ"
+          ],
+          "references": [
+            "What are you doing?"
+          ],
+          "notes": "Rough surprise/reproach; do not invent an action.",
+          "status": "ok",
+          "translations": [
+            "What are you doing?"
+          ],
+          "run_ms": [
+            195.274600002449,
+            187.35029999515973
+          ],
+          "translate_many_ms": 209.0889000101015,
+          "batch_translations": [
+            "What are you doing?"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "casual-2",
+          "category": "casual",
+          "sources": [
+            "知らねーよ"
+          ],
+          "references": [
+            "How should I know?"
+          ],
+          "notes": "Preserve negation and dismissiveness.",
+          "status": "ok",
+          "translations": [
+            "I don’t know."
+          ],
+          "run_ms": [
+            200.13879999169149,
+            218.17040001042187
+          ],
+          "translate_many_ms": 224.10859999945387,
+          "batch_translations": [
+            "I don’t know."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "casual-3",
+          "category": "casual",
+          "sources": [
+            "マジかよ"
+          ],
+          "references": [
+            "Seriously?"
+          ],
+          "notes": "Surprise, not a factual assertion.",
+          "status": "ok",
+          "translations": [
+            "Seriously? No way!"
+          ],
+          "run_ms": [
+            209.03980001457967,
+            205.71280000149272
+          ],
+          "translate_many_ms": 215.11659998213872,
+          "batch_translations": [
+            "Seriously? No way!"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "casual-4",
+          "category": "casual",
+          "sources": [
+            "やべぇ"
+          ],
+          "references": [],
+          "notes": "Ambiguous: trouble or impressed slang; avoid inventing context.",
+          "status": "ok",
+          "translations": [
+            "Oh crap."
+          ],
+          "run_ms": [
+            170.38769999635406,
+            165.82570000900887
+          ],
+          "translate_many_ms": 175.48619999433868,
+          "batch_translations": [
+            "Oh crap."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "casual-5",
+          "category": "casual",
+          "sources": [
+            "ふざけんな"
+          ],
+          "references": [
+            "Don't mess with me!"
+          ],
+          "notes": "Negative command; intensity may vary.",
+          "status": "ok",
+          "translations": [
+            "Don't be ridiculous."
+          ],
+          "run_ms": [
+            215.3808000148274,
+            215.91860000626184
+          ],
+          "translate_many_ms": 210.59500001138076,
+          "batch_translations": [
+            "Don't be ridiculous."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "subject-1",
+          "category": "omitted-subject",
+          "sources": [
+            "もう行った？"
+          ],
+          "references": [],
+          "notes": "Already went/left? Subject unspecified.",
+          "status": "ok",
+          "translations": [
+            "Did you already go?"
+          ],
+          "run_ms": [
+            214.5705999864731,
+            219.20339998905547
+          ],
+          "translate_many_ms": 231.32469999836758,
+          "batch_translations": [
+            "Did you already go?"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "subject-2",
+          "category": "omitted-subject",
+          "sources": [
+            "知らなかった。"
+          ],
+          "references": [
+            "I didn't know."
+          ],
+          "notes": "Past negative, not present refusal.",
+          "status": "ok",
+          "translations": [
+            "I didn’t know. (I really didn’t know.)"
+          ],
+          "run_ms": [
+            402.8942000004463,
+            366.20160000165924
+          ],
+          "translate_many_ms": 348.97009999258444,
+          "batch_translations": [
+            "I didn’t know. (I really didn’t know.)"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "subject-3",
+          "category": "omitted-subject",
+          "sources": [
+            "やったの？"
+          ],
+          "references": [],
+          "notes": "Did you/they do it? Do not assume sexual meaning.",
+          "status": "ok",
+          "translations": [
+            "You did it?"
+          ],
+          "run_ms": [
+            177.06509999698028,
+            156.21069999178872
+          ],
+          "translate_many_ms": 181.87130001024343,
+          "batch_translations": [
+            "You did it?"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "particle-1",
+          "category": "particles",
+          "sources": [
+            "そうだよな"
+          ],
+          "references": [
+            "Yeah, you're right."
+          ],
+          "notes": "Agreement/seeking agreement.",
+          "status": "ok",
+          "translations": [
+            "You’re right, aren’t you?"
+          ],
+          "run_ms": [
+            260.75119999586605,
+            269.44539998658
+          ],
+          "translate_many_ms": 244.8776000237558,
+          "batch_translations": [
+            "You’re right, aren’t you?"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "particle-2",
+          "category": "particles",
+          "sources": [
+            "そうなのか"
+          ],
+          "references": [
+            "Is that so?"
+          ],
+          "notes": "Realization or inquiry; not agreement with invented detail.",
+          "status": "ok",
+          "translations": [
+            "Is that so?"
+          ],
+          "run_ms": [
+            164.20860000653192,
+            174.05040000448935
+          ],
+          "translate_many_ms": 171.22370001743548,
+          "batch_translations": [
+            "Is that so?"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "particle-3",
+          "category": "particles",
+          "sources": [
+            "何してるんだ？"
+          ],
+          "references": [
+            "What are you doing?"
+          ],
+          "notes": "Question with explanatory/reproachful tone.",
+          "status": "ok",
+          "translations": [
+            "What are you doing?"
+          ],
+          "run_ms": [
+            180.14840001706034,
+            149.70320000429638
+          ],
+          "translate_many_ms": 132.87999999010935,
+          "batch_translations": [
+            "What are you doing?"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "particle-4",
+          "category": "particles",
+          "sources": [
+            "行くぞ"
+          ],
+          "references": [
+            "Let's go!"
+          ],
+          "notes": "Forceful announcement/exhortation.",
+          "status": "ok",
+          "translations": [
+            "Let’s go."
+          ],
+          "run_ms": [
+            116.61920000915416,
+            115.60319998534396
+          ],
+          "translate_many_ms": 134.09750000573695,
+          "batch_translations": [
+            "Let’s go."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "particle-5",
+          "category": "particles",
+          "sources": [
+            "待てよ"
+          ],
+          "references": [
+            "Wait!"
+          ],
+          "notes": "Command, not past tense.",
+          "status": "ok",
+          "translations": [
+            "Wait up!"
+          ],
+          "run_ms": [
+            101.7629999842029,
+            112.32559999916703
+          ],
+          "translate_many_ms": 123.541800014209,
+          "batch_translations": [
+            "Wait up!"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "contraction-1",
+          "category": "contractions",
+          "sources": [
+            "してんの？"
+          ],
+          "references": [],
+          "notes": "Are you doing it? Fragment needs context.",
+          "status": "ok",
+          "translations": [
+            "What is it? (impatiently)"
+          ],
+          "run_ms": [
+            216.3810000056401,
+            217.9337999841664
+          ],
+          "translate_many_ms": 202.63849999173544,
+          "batch_translations": [
+            "What is it? (impatiently)"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "contraction-2",
+          "category": "contractions",
+          "sources": [
+            "じゃねぇ"
+          ],
+          "references": [],
+          "notes": "Rough negative copula; incomplete predicate.",
+          "status": "ok",
+          "translations": [
+            "That’s not it."
+          ],
+          "run_ms": [
+            154.8624999995809,
+            162.13429998606443
+          ],
+          "translate_many_ms": 148.4599000250455,
+          "batch_translations": [
+            "That’s not it."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "contraction-3",
+          "category": "contractions",
+          "sources": [
+            "なきゃ"
+          ],
+          "references": [],
+          "notes": "Incomplete negative conditional/obligation; do not invent missing verb.",
+          "status": "ok",
+          "translations": [
+            "without you"
+          ],
+          "run_ms": [
+            109.85720000462607,
+            108.62710000947118
+          ],
+          "translate_many_ms": 82.83500000834465,
+          "batch_translations": [
+            "without you"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "contraction-4",
+          "category": "contractions",
+          "sources": [
+            "ちゃった"
+          ],
+          "references": [],
+          "notes": "Completion/regret suffix fragment; missing lexical verb.",
+          "status": "ok",
+          "translations": [
+            "Game over."
+          ],
+          "run_ms": [
+            101.77060001296923,
+            119.41709998063743
+          ],
+          "translate_many_ms": 125.98539999453351,
+          "batch_translations": [
+            "Game over."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "contraction-5",
+          "category": "contractions",
+          "sources": [
+            "とく"
+          ],
+          "references": [],
+          "notes": "Bare fragment ambiguous; distinguish from complete prep-action expression.",
+          "status": "ok",
+          "translations": [
+            "That’s enough. That’s quite enough."
+          ],
+          "run_ms": [
+            216.44660001038574,
+            206.95039999554865
+          ],
+          "translate_many_ms": 219.72990001086146,
+          "batch_translations": [
+            "That’s enough. That’s quite enough."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "contraction-6",
+          "category": "contractions",
+          "sources": [
+            "先に窓、閉めとくね。"
+          ],
+          "references": [
+            "I'll close the window first."
+          ],
+          "notes": "Doing something in advance, future intention.",
+          "status": "ok",
+          "translations": [
+            "First, close the window, okay?"
+          ],
+          "run_ms": [
+            200.53629999165423,
+            198.35669998428784
+          ],
+          "translate_many_ms": 199.91080000181682,
+          "batch_translations": [
+            "First, close the window, okay?"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "slang-1",
+          "category": "slang",
+          "sources": [
+            "ウケる"
+          ],
+          "references": [
+            "That's hilarious."
+          ],
+          "notes": "Casual amused response, not receive.",
+          "status": "ok",
+          "translations": [
+            "That’s funny. (said with sarcasm)"
+          ],
+          "run_ms": [
+            219.17149997898377,
+            233.44489998999052
+          ],
+          "translate_many_ms": 231.4778999716509,
+          "batch_translations": [
+            "That’s funny. (said with sarcasm)"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "slang-2",
+          "category": "slang",
+          "sources": [
+            "キモい"
+          ],
+          "references": [
+            "Gross."
+          ],
+          "notes": "Disgust/creepy, not physical illness necessarily.",
+          "status": "ok",
+          "translations": [
+            "That's seriously gross."
+          ],
+          "run_ms": [
+            153.37000001454726,
+            129.79649999761023
+          ],
+          "translate_many_ms": 150.26510000461712,
+          "batch_translations": [
+            "That's seriously gross."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "slang-3",
+          "category": "slang",
+          "sources": [
+            "ダサい"
+          ],
+          "references": [
+            "That's lame."
+          ],
+          "notes": "Uncool/tacky.",
+          "status": "ok",
+          "translations": [
+            "That's lame."
+          ],
+          "run_ms": [
+            112.50089999521151,
+            115.10480000288226
+          ],
+          "translate_many_ms": 127.5714999937918,
+          "batch_translations": [
+            "That's lame."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "slang-4",
+          "category": "slang",
+          "sources": [
+            "めっちゃ"
+          ],
+          "references": [],
+          "notes": "Intensifier fragment, not a complete proposition.",
+          "status": "ok",
+          "translations": [
+            "Dude, seriously!"
+          ],
+          "run_ms": [
+            141.60219999030232,
+            155.66590000526048
+          ],
+          "translate_many_ms": 153.28739999677055,
+          "batch_translations": [
+            "Dude, seriously!"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "slang-5",
+          "category": "slang",
+          "sources": [
+            "マジで"
+          ],
+          "references": [],
+          "notes": "Seriously/for real; interrogative intonation not specified.",
+          "status": "ok",
+          "translations": [
+            "Seriously, damn it!"
+          ],
+          "run_ms": [
+            138.83310000528581,
+            141.31010000710376
+          ],
+          "translate_many_ms": 130.4596000118181,
+          "batch_translations": [
+            "Seriously, damn it!"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "short-1",
+          "category": "ambiguous",
+          "sources": [
+            "別に"
+          ],
+          "references": [],
+          "notes": "Not really/nothing in particular; depends on prior question.",
+          "status": "ok",
+          "translations": [
+            "I don't care."
+          ],
+          "run_ms": [
+            134.75840000319295,
+            152.5190999964252
+          ],
+          "translate_many_ms": 146.67789998929948,
+          "batch_translations": [
+            "I don't care."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "short-2",
+          "category": "ambiguous",
+          "sources": [
+            "もう"
+          ],
+          "references": [],
+          "notes": "Already/enough/exasperation; no unique reference.",
+          "status": "ok",
+          "translations": [
+            "Not anymore."
+          ],
+          "run_ms": [
+            104.475599975558,
+            135.17559997853823
+          ],
+          "translate_many_ms": 110.51669999142177,
+          "batch_translations": [
+            "Not anymore."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "short-3",
+          "category": "ambiguous",
+          "sources": [
+            "いい"
+          ],
+          "references": [],
+          "notes": "Good/okay/no thanks depending on context.",
+          "status": "ok",
+          "translations": [
+            "Sure. No problem. Got it."
+          ],
+          "run_ms": [
+            210.5483000050299,
+            191.7601999884937
+          ],
+          "translate_many_ms": 190.91619999380782,
+          "batch_translations": [
+            "Sure. No problem. Got it."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "short-4",
+          "category": "ambiguous",
+          "sources": [
+            "やだ"
+          ],
+          "references": [
+            "No, I don't want to."
+          ],
+          "notes": "Refusal/dislike, no invented object.",
+          "status": "ok",
+          "translations": [
+            "No way."
+          ],
+          "run_ms": [
+            134.36719999299385,
+            111.42109998036176
+          ],
+          "translate_many_ms": 120.11409999104217,
+          "batch_translations": [
+            "No way."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "short-5",
+          "category": "ambiguous",
+          "sources": [
+            "無理"
+          ],
+          "references": [
+            "No way."
+          ],
+          "notes": "Impossible/cannot do it.",
+          "status": "ok",
+          "translations": [
+            "No way. No how. No chance. No shot. No dice. No."
+          ],
+          "run_ms": [
+            350.0048000132665,
+            348.9434999937657
+          ],
+          "translate_many_ms": 357.22679999889806,
+          "batch_translations": [
+            "No way. No how. No chance. No shot. No dice. No."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "short-6",
+          "category": "ambiguous",
+          "sources": [
+            "最悪"
+          ],
+          "references": [
+            "This is the worst."
+          ],
+          "notes": "Negative evaluation.",
+          "status": "ok",
+          "translations": [
+            "Worst-case scenario."
+          ],
+          "run_ms": [
+            157.47179999016225,
+            167.84819998429157
+          ],
+          "translate_many_ms": 153.46359999966808,
+          "batch_translations": [
+            "Worst-case scenario."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "short-7",
+          "category": "ambiguous",
+          "sources": [
+            "大丈夫"
+          ],
+          "references": [
+            "It's okay."
+          ],
+          "notes": "May mean reassurance/refusal; subject unknown.",
+          "status": "ok",
+          "translations": [
+            "You’re okay? (lit. Are you all right?)"
+          ],
+          "run_ms": [
+            269.7267000039574,
+            275.29789999243803
+          ],
+          "translate_many_ms": 282.64359998865984,
+          "batch_translations": [
+            "You’re okay? (lit. Are you all right?)"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "polite-1",
+          "category": "polite",
+          "sources": [
+            "ありがとうございます"
+          ],
+          "references": [
+            "Thank you very much."
+          ],
+          "notes": "Politeness here is appropriate, not a flaw.",
+          "status": "ok",
+          "translations": [
+            "Thank you."
+          ],
+          "run_ms": [
+            128.07420000899583,
+            123.28999998862855
+          ],
+          "translate_many_ms": 121.60020001465455,
+          "batch_translations": [
+            "Thank you."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "polite-2",
+          "category": "polite",
+          "sources": [
+            "申し訳ありません"
+          ],
+          "references": [
+            "I'm very sorry."
+          ],
+          "notes": "Sincere formal apology.",
+          "status": "ok",
+          "translations": [
+            "I’m sorry. (formally)"
+          ],
+          "run_ms": [
+            255.6023000215646,
+            274.28370001143776
+          ],
+          "translate_many_ms": 260.3551999782212,
+          "batch_translations": [
+            "I’m sorry. (formally)"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "polite-3",
+          "category": "polite",
+          "sources": [
+            "どうなさいましたか"
+          ],
+          "references": [
+            "Is something wrong?"
+          ],
+          "notes": "Respectful inquiry, context permits 'What happened?'",
+          "status": "ok",
+          "translations": [
+            "What happened to you?"
+          ],
+          "run_ms": [
+            183.3856999874115,
+            198.62590002594516
+          ],
+          "translate_many_ms": 179.10639999900013,
+          "batch_translations": [
+            "What happened to you?"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "tone-rough",
+          "category": "character-tone",
+          "sources": [
+            "てめぇ、勝手に俺の荷物触んな！"
+          ],
+          "references": [
+            "Hey! Don't touch my stuff without asking!"
+          ],
+          "notes": "Rough prohibition; preserve whose belongings.",
+          "status": "ok",
+          "translations": [
+            "Don't touch my stuff, got it?!"
+          ],
+          "run_ms": [
+            304.85139999655075,
+            291.82540002511814
+          ],
+          "translate_many_ms": 275.005700008478,
+          "batch_translations": [
+            "Don't touch my stuff, got it?!"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "tone-teen",
+          "category": "character-tone",
+          "sources": [
+            "え、これめっちゃかわいくない？"
+          ],
+          "references": [
+            "Wait, isn't this super cute?"
+          ],
+          "notes": "Casual positive rhetorical question.",
+          "status": "ok",
+          "translations": [
+            "Whoa, isn't this super cute?"
+          ],
+          "run_ms": [
+            281.7966000002343,
+            292.27419997914694
+          ],
+          "translate_many_ms": 286.44869997515343,
+          "batch_translations": [
+            "Whoa, isn't this super cute?"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "tone-arrogant",
+          "category": "character-tone",
+          "sources": [
+            "この俺に勝てると思ったのか？"
+          ],
+          "references": [
+            "You thought you could beat me?"
+          ],
+          "notes": "Arrogant challenge, opponent not speaker expected to lose.",
+          "status": "ok",
+          "translations": [
+            "Did you really think you could beat me?"
+          ],
+          "run_ms": [
+            296.3312999927439,
+            277.4611999921035
+          ],
+          "translate_many_ms": 266.2236999894958,
+          "batch_translations": [
+            "Did you really think you could beat me?"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "tone-timid",
+          "category": "character-tone",
+          "sources": [
+            "あの、もしよかったら、一緒に帰りませんか。"
+          ],
+          "references": [
+            "Um, if you'd like, could we walk home together?"
+          ],
+          "notes": "Timid invitation, not command.",
+          "status": "ok",
+          "translations": [
+            "Hey, if you don’t mind, why don’t we go home together?"
+          ],
+          "run_ms": [
+            408.2393000135198,
+            440.93129999237135
+          ],
+          "translate_many_ms": 446.66469999356195,
+          "batch_translations": [
+            "Hey, if you don’t mind, why don’t we go home together?"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "negation-long",
+          "category": "longer",
+          "sources": [
+            "助けたくないんじゃない。今ここを離れたら、あの子まで危険になるんだ。"
+          ],
+          "references": [
+            "It's not that I don't want to help. If I leave now, that kid will be in danger too."
+          ],
+          "notes": "Critical double negation and conditional; do not reverse motivation.",
+          "status": "ok",
+          "translations": [
+            "I don’t want to help you. Once we leave this place, that kid will be in danger too."
+          ],
+          "run_ms": [
+            598.674699984258,
+            581.9501999940258
+          ],
+          "translate_many_ms": 593.1783999840263,
+          "batch_translations": [
+            "I don’t want to help you. Once we leave this place, that kid will be in danger too."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "direction",
+          "category": "longer",
+          "sources": [
+            "先生に叱られたのは僕じゃなくて、弟だよ。"
+          ],
+          "references": [
+            "It was my little brother who got scolded by the teacher, not me."
+          ],
+          "notes": "Passive agent/patient and contrast must survive.",
+          "status": "ok",
+          "translations": [
+            "The teacher scolded wasn't me—it was my little brother."
+          ],
+          "run_ms": [
+            415.74100000434555,
+            393.5295999981463
+          ],
+          "translate_many_ms": 416.27399998833425,
+          "batch_translations": [
+            "The teacher scolded wasn't me—it was my little brother."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "ocr-damaged",
+          "category": "ocr",
+          "sources": [
+            "もう帰っナの？"
+          ],
+          "references": [],
+          "notes": "Synthetic OCR タ/ナ substitution for 帰った; report uncertainty rather than assert gold.",
+          "status": "ok",
+          "translations": [
+            "You’re really heading home already?"
+          ],
+          "run_ms": [
+            257.5502999825403,
+            245.20579999079928
+          ],
+          "translate_many_ms": 245.50049999379553,
+          "batch_translations": [
+            "You’re really heading home already?"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "visual-lines",
+          "category": "ocr",
+          "sources": [
+            "でも\n大丈夫"
+          ],
+          "references": [
+            "But it's okay."
+          ],
+          "notes": "One bubble split across visual lines.",
+          "status": "ok",
+          "translations": [
+            "But don't worry. Everything's gonna be okay."
+          ],
+          "run_ms": [
+            335.1646999944933,
+            351.1545999790542
+          ],
+          "translate_many_ms": 343.2778999849688,
+          "batch_translations": [
+            "But don't worry. Everything's gonna be okay."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "context-left",
+          "category": "context",
+          "sources": [
+            "もう帰った？"
+          ],
+          "references": [
+            "Has Ren already gone home?"
+          ],
+          "notes": "Context suggests absent Ren, not asking addressee if home yet.",
+          "status": "ok",
+          "translations": [
+            "You’re already home?"
+          ],
+          "run_ms": [
+            196.08779999543913,
+            202.82209999277256
+          ],
+          "translate_many_ms": 199.2137999914121,
+          "batch_translations": [
+            "You’re already home?"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "context-refusal",
+          "category": "context",
+          "sources": [
+            "いい。"
+          ],
+          "references": [
+            "No thanks."
+          ],
+          "notes": "Following context disambiguates refusal from acceptance.",
+          "status": "ok",
+          "translations": [
+            "Okay."
+          ],
+          "run_ms": [
+            127.74659998831339,
+            125.22940000053495
+          ],
+          "translate_many_ms": 147.82159999595024,
+          "batch_translations": [
+            "Okay."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "context-acceptance",
+          "category": "context",
+          "sources": [
+            "いい。"
+          ],
+          "references": [
+            "That's fine."
+          ],
+          "notes": "Approval, unlike context-refusal with same current line.",
+          "status": "ok",
+          "translations": [
+            "Okay."
+          ],
+          "run_ms": [
+            116.93300001206808,
+            141.72770001459867
+          ],
+          "translate_many_ms": 133.16929998109117,
+          "batch_translations": [
+            "Okay."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "page-training",
+          "category": "ordered-page",
+          "sources": [
+            "レン、まだ練習してるの？",
+            "うん。霊力がうまく使えなくて。",
+            "昨日よりは安定してるよ。",
+            "そう？じゃあ、もう一回だけ。",
+            "待って。手、震えてる。",
+            "大丈夫。無理はしないから。",
+            "さっきもそう言ったじゃん。",
+            "……分かった。今日はやめとく。"
+          ],
+          "references": [],
+          "notes": "Original synthetic eight-bubble scene. Compare names, terminology, concern, promise, reluctant concession. No gender supplied.",
+          "status": "ok",
+          "translations": [
+            "Rin, are you still practicing?",
+            "Yeah. I just can’t seem to get my magic to work right.",
+            "It’s getting a little more stable than it was yesterday.",
+            "Really? Then one more time.",
+            "Wait. My hand’s shaking.",
+            "You’re okay. Just don’t push yourself, that’s all.",
+            "You said that just a minute ago.",
+            "...Got it. I’m calling it quits today."
+          ],
+          "run_ms": [
+            2198.342700023204,
+            1783.7325000145938
+          ],
+          "translate_many_ms": 1730.7627000263892,
+          "batch_translations": [
+            "Rin, are you still practicing?",
+            "Yeah. I just can’t seem to get my magic to work right.",
+            "It’s getting a little more stable than it was yesterday.",
+            "Really? Then one more time.",
+            "Wait. My hand’s shaking.",
+            "You’re okay. Just don’t push yourself, that’s all.",
+            "You said that just a minute ago.",
+            "...Got it. I’m calling it quits today."
+          ],
+          "repeats_identical": true
+        }
+      ]
+    },
+    {
+      "engine": "hy-mt2-manga",
+      "context_mode": "isolated",
+      "glossary": false,
+      "device_requested": "cpu",
+      "memory_before": {
+        "rss_bytes": 52355072,
+        "scope": "Python plus owned children; snapshot, not peak; includes shared pages",
+        "gpu_snapshot": "NVIDIA GeForce RTX 4070 SUPER, 12282, 3977",
+        "gpu_scope": "Whole GPU used MiB, including other applications; snapshot, not peak"
+      },
+      "load_ms": 1293.4823999821674,
+      "memory_loaded": {
+        "rss_bytes": 1836220416,
+        "scope": "Python plus owned children; snapshot, not peak; includes shared pages",
+        "gpu_snapshot": "NVIDIA GeForce RTX 4070 SUPER, 12282, 4204",
+        "gpu_scope": "Whole GPU used MiB, including other applications; snapshot, not peak"
+      },
+      "status": "completed",
+      "memory_after": {
+        "rss_bytes": 1895378944,
+        "scope": "Python plus owned children; snapshot, not peak; includes shared pages",
+        "gpu_snapshot": "NVIDIA GeForce RTX 4070 SUPER, 12282, 4292",
+        "gpu_scope": "Whole GPU used MiB, including other applications; snapshot, not peak"
+      },
+      "summary": {
+        "cases_ok": 10,
+        "cases_total": 10,
+        "first_case_ms": 300.66680000163615,
+        "mean_warm_ms_per_line": 269.0792799927294,
+        "note": "Per-line page latency is amortized; batch time is not a sum of result timings",
+        "warm_repeated_line_ms": 269.0792799927294
+      },
+      "run_id": "hy-cpu",
+      "cases": [
+        {
+          "id": "casual-1",
+          "category": "casual",
+          "sources": [
+            "何してんだよ"
+          ],
+          "references": [
+            "What are you doing?"
+          ],
+          "notes": "Rough surprise/reproach; do not invent an action.",
+          "status": "ok",
+          "translations": [
+            "What are you doing?"
+          ],
+          "run_ms": [
+            300.66680000163615,
+            326.66989997960627
+          ],
+          "translate_many_ms": 278.8037999998778,
+          "batch_translations": [
+            "What are you doing?"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "casual-2",
+          "category": "casual",
+          "sources": [
+            "知らねーよ"
+          ],
+          "references": [
+            "How should I know?"
+          ],
+          "notes": "Preserve negation and dismissiveness.",
+          "status": "ok",
+          "translations": [
+            "I don't know."
+          ],
+          "run_ms": [
+            315.949100011494,
+            302.137099992251
+          ],
+          "translate_many_ms": 278.0250999785494,
+          "batch_translations": [
+            "I don't know."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "casual-3",
+          "category": "casual",
+          "sources": [
+            "マジかよ"
+          ],
+          "references": [
+            "Seriously?"
+          ],
+          "notes": "Surprise, not a factual assertion.",
+          "status": "ok",
+          "translations": [
+            "Seriously?"
+          ],
+          "run_ms": [
+            242.30589999933727,
+            265.5147999757901
+          ],
+          "translate_many_ms": 238.7583999952767,
+          "batch_translations": [
+            "Seriously?"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "casual-4",
+          "category": "casual",
+          "sources": [
+            "やべぇ"
+          ],
+          "references": [],
+          "notes": "Ambiguous: trouble or impressed slang; avoid inventing context.",
+          "status": "ok",
+          "translations": [
+            "Oh crap."
+          ],
+          "run_ms": [
+            260.0668999948539,
+            221.39839999726973
+          ],
+          "translate_many_ms": 210.850199975539,
+          "batch_translations": [
+            "Oh crap."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "casual-5",
+          "category": "casual",
+          "sources": [
+            "ふざけんな"
+          ],
+          "references": [
+            "Don't mess with me!"
+          ],
+          "notes": "Negative command; intensity may vary.",
+          "status": "ok",
+          "translations": [
+            "Don't screw around."
+          ],
+          "run_ms": [
+            270.47980000497773,
+            290.50350000034086
+          ],
+          "translate_many_ms": 280.7408999942709,
+          "batch_translations": [
+            "Don't screw around."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "subject-1",
+          "category": "omitted-subject",
+          "sources": [
+            "もう行った？"
+          ],
+          "references": [],
+          "notes": "Already went/left? Subject unspecified.",
+          "status": "ok",
+          "translations": [
+            "Already gone?"
+          ],
+          "run_ms": [
+            232.48070001136512,
+            233.25350001687184
+          ],
+          "translate_many_ms": 246.56149998190813,
+          "batch_translations": [
+            "Already gone?"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "subject-2",
+          "category": "omitted-subject",
+          "sources": [
+            "知らなかった。"
+          ],
+          "references": [
+            "I didn't know."
+          ],
+          "notes": "Past negative, not present refusal.",
+          "status": "ok",
+          "translations": [
+            "I didn't know."
+          ],
+          "run_ms": [
+            291.0599999886472,
+            279.9191999947652
+          ],
+          "translate_many_ms": 268.94400001037866,
+          "batch_translations": [
+            "I didn't know."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "subject-3",
+          "category": "omitted-subject",
+          "sources": [
+            "やったの？"
+          ],
+          "references": [],
+          "notes": "Did you/they do it? Do not assume sexual meaning.",
+          "status": "ok",
+          "translations": [
+            "Did you get it?"
+          ],
+          "run_ms": [
+            263.4150999947451,
+            283.08429999742657
+          ],
+          "translate_many_ms": 249.10069999168627,
+          "batch_translations": [
+            "Did you get it?"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "particle-1",
+          "category": "particles",
+          "sources": [
+            "そうだよな"
+          ],
+          "references": [
+            "Yeah, you're right."
+          ],
+          "notes": "Agreement/seeking agreement.",
+          "status": "ok",
+          "translations": [
+            "Yeah, that's right."
+          ],
+          "run_ms": [
+            291.6471000062302,
+            273.78389998921193
+          ],
+          "translate_many_ms": 304.5618000032846,
+          "batch_translations": [
+            "Yeah, that's right."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "particle-2",
+          "category": "particles",
+          "sources": [
+            "そうなのか"
+          ],
+          "references": [
+            "Is that so?"
+          ],
+          "notes": "Realization or inquiry; not agreement with invented detail.",
+          "status": "ok",
+          "translations": [
+            "I see."
+          ],
+          "run_ms": [
+            207.18379999743775,
+            214.52819998376071
+          ],
+          "translate_many_ms": 229.2474999849219,
+          "batch_translations": [
+            "I see."
+          ],
+          "repeats_identical": true
+        }
+      ]
+    },
+    {
+      "engine": "qwen25-manga",
+      "context_mode": "page",
+      "glossary": false,
+      "device_requested": "cuda",
+      "memory_before": {
+        "rss_bytes": 52285440,
+        "scope": "Python plus owned children; snapshot, not peak; includes shared pages",
+        "gpu_snapshot": "NVIDIA GeForce RTX 4070 SUPER, 12282, 4007",
+        "gpu_scope": "Whole GPU used MiB, including other applications; snapshot, not peak"
+      },
+      "load_ms": 2756.737300020177,
+      "memory_loaded": {
+        "rss_bytes": 5029466112,
+        "scope": "Python plus owned children; snapshot, not peak; includes shared pages",
+        "gpu_snapshot": "NVIDIA GeForce RTX 4070 SUPER, 12282, 8832",
+        "gpu_scope": "Whole GPU used MiB, including other applications; snapshot, not peak"
+      },
+      "status": "completed_with_errors",
+      "memory_after": {
+        "rss_bytes": 5060882432,
+        "scope": "Python plus owned children; snapshot, not peak; includes shared pages",
+        "gpu_snapshot": "NVIDIA GeForce RTX 4070 SUPER, 12282, 8824",
+        "gpu_scope": "Whole GPU used MiB, including other applications; snapshot, not peak"
+      },
+      "summary": {
+        "cases_ok": 3,
+        "cases_total": 4,
+        "first_case_ms": 178.77889997907914,
+        "mean_warm_ms_per_line": 182.01446666110618,
+        "note": "Per-line page latency is amortized; batch time is not a sum of result timings",
+        "warm_repeated_line_ms": 182.01446666110618
+      },
+      "run_id": "q25-context",
+      "cases": [
+        {
+          "id": "context-left",
+          "category": "context",
+          "sources": [
+            "もう帰った？"
+          ],
+          "references": [
+            "Has Ren already gone home?"
+          ],
+          "notes": "Context suggests absent Ren, not asking addressee if home yet.",
+          "status": "ok",
+          "translations": [
+            "You’re back already?"
+          ],
+          "run_ms": [
+            178.77889997907914,
+            131.78319999133237
+          ],
+          "translate_many_ms": 149.93349998258054,
+          "batch_translations": [
+            "You’re already home?"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "context-refusal",
+          "category": "context",
+          "sources": [
+            "いい。"
+          ],
+          "references": [
+            "No thanks."
+          ],
+          "notes": "Following context disambiguates refusal from acceptance.",
+          "status": "ok",
+          "translations": [
+            "Sure. No thanks. I’m full."
+          ],
+          "run_ms": [
+            206.35930000571534,
+            230.3539999993518
+          ],
+          "translate_many_ms": 107.86370001733303,
+          "batch_translations": [
+            "Okay."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "context-acceptance",
+          "category": "context",
+          "sources": [
+            "いい。"
+          ],
+          "references": [
+            "That's fine."
+          ],
+          "notes": "Approval, unlike context-refusal with same current line.",
+          "status": "ok",
+          "translations": [
+            "Sure. Keep going with this plan."
+          ],
+          "run_ms": [
+            193.02399997832254,
+            183.90619999263436
+          ],
+          "translate_many_ms": 114.03040000004694,
+          "batch_translations": [
+            "Okay."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "page-training",
+          "category": "ordered-page",
+          "sources": [
+            "レン、まだ練習してるの？",
+            "うん。霊力がうまく使えなくて。",
+            "昨日よりは安定してるよ。",
+            "そう？じゃあ、もう一回だけ。",
+            "待って。手、震えてる。",
+            "大丈夫。無理はしないから。",
+            "さっきもそう言ったじゃん。",
+            "……分かった。今日はやめとく。"
+          ],
+          "references": [],
+          "notes": "Original synthetic eight-bubble scene. Compare names, terminology, concern, promise, reluctant concession. No gender supplied.",
+          "status": "error",
+          "error": "Local model output did not finish normally: length"
+        }
+      ]
+    },
+    {
+      "engine": "qwen25-manga",
+      "context_mode": "previous",
+      "glossary": false,
+      "device_requested": "cuda",
+      "memory_before": {
+        "rss_bytes": 52285440,
+        "scope": "Python plus owned children; snapshot, not peak; includes shared pages",
+        "gpu_snapshot": "NVIDIA GeForce RTX 4070 SUPER, 12282, 3998",
+        "gpu_scope": "Whole GPU used MiB, including other applications; snapshot, not peak"
+      },
+      "load_ms": 2962.2109000047203,
+      "memory_loaded": {
+        "rss_bytes": 5029859328,
+        "scope": "Python plus owned children; snapshot, not peak; includes shared pages",
+        "gpu_snapshot": "NVIDIA GeForce RTX 4070 SUPER, 12282, 8824",
+        "gpu_scope": "Whole GPU used MiB, including other applications; snapshot, not peak"
+      },
+      "status": "completed",
+      "memory_after": {
+        "rss_bytes": 5072138240,
+        "scope": "Python plus owned children; snapshot, not peak; includes shared pages",
+        "gpu_snapshot": "NVIDIA GeForce RTX 4070 SUPER, 12282, 8829",
+        "gpu_scope": "Whole GPU used MiB, including other applications; snapshot, not peak"
+      },
+      "summary": {
+        "cases_ok": 4,
+        "cases_total": 4,
+        "first_case_ms": 145.254599978216,
+        "mean_warm_ms_per_line": 208.32594061994314,
+        "note": "Per-line page latency is amortized; batch time is not a sum of result timings",
+        "warm_repeated_line_ms": 308.35824545250614
+      },
+      "run_id": "q25-previous",
+      "cases": [
+        {
+          "id": "context-left",
+          "category": "context",
+          "sources": [
+            "もう帰った？"
+          ],
+          "references": [
+            "Has Ren already gone home?"
+          ],
+          "notes": "Context suggests absent Ren, not asking addressee if home yet.",
+          "status": "ok",
+          "translations": [
+            "You’re back already?"
+          ],
+          "run_ms": [
+            145.254599978216,
+            162.14869997929782
+          ],
+          "translate_many_ms": 173.30439999932423,
+          "batch_translations": [
+            "You’re already home?"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "context-refusal",
+          "category": "context",
+          "sources": [
+            "いい。"
+          ],
+          "references": [
+            "No thanks."
+          ],
+          "notes": "Following context disambiguates refusal from acceptance.",
+          "status": "ok",
+          "translations": [
+            "Sure."
+          ],
+          "run_ms": [
+            126.3461000053212,
+            94.52590000000782
+          ],
+          "translate_many_ms": 102.9162000049837,
+          "batch_translations": [
+            "Okay."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "context-acceptance",
+          "category": "context",
+          "sources": [
+            "いい。"
+          ],
+          "references": [
+            "That's fine."
+          ],
+          "notes": "Approval, unlike context-refusal with same current line.",
+          "status": "ok",
+          "translations": [
+            "Sure. Go ahead with the plan."
+          ],
+          "run_ms": [
+            215.8071000012569,
+            211.10960000078194
+          ],
+          "translate_many_ms": 94.69560001161881,
+          "batch_translations": [
+            "Okay."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "page-training",
+          "category": "ordered-page",
+          "sources": [
+            "レン、まだ練習してるの？",
+            "うん。霊力がうまく使えなくて。",
+            "昨日よりは安定してるよ。",
+            "そう？じゃあ、もう一回だけ。",
+            "待って。手、震えてる。",
+            "大丈夫。無理はしないから。",
+            "さっきもそう言ったじゃん。",
+            "……分かった。今日はやめとく。"
+          ],
+          "references": [],
+          "notes": "Original synthetic eight-bubble scene. Compare names, terminology, concern, promise, reluctant concession. No gender supplied.",
+          "status": "ok",
+          "translations": [
+            "Rin, are you still practicing?",
+            "Yeah. I can’t seem to get my magic powers under control.",
+            "It’s more stable than yesterday. / Yeah. It’s getting a little more stable.",
+            "Really? Just one more time, then.",
+            "Wait. Your hands are shaking.",
+            "I’m fine. I just don’t want to push myself too hard.",
+            "You just said that a minute ago. / I did. / I can’t seem to control my spiritual energy. / I’m getting better than yesterday, though. / So you’re saying that again? / Wait. Your hands are shaking. / I’m fine. I won’t push myself.",
+            "…Got it. I’ll quit today."
+          ],
+          "run_ms": [
+            2917.7238999982364,
+            2924.15649999748
+          ],
+          "translate_many_ms": 1851.5937000047415,
+          "batch_translations": [
+            "Rin, are you still practicing?",
+            "Yeah. I just can’t seem to get my magic to work right.",
+            "It’s getting a little more stable than it was yesterday.",
+            "Really? Then one more time.",
+            "Wait. My hand’s shaking.",
+            "You’re okay. Just don’t push yourself, that’s all.",
+            "You said that just a minute ago.",
+            "...Got it. I’m calling it quits today."
+          ],
+          "repeats_identical": true
+        }
+      ]
+    },
+    {
+      "engine": "qwen25-manga",
+      "context_mode": "page",
+      "glossary": true,
+      "device_requested": "cuda",
+      "memory_before": {
+        "rss_bytes": 52289536,
+        "scope": "Python plus owned children; snapshot, not peak; includes shared pages",
+        "gpu_snapshot": "NVIDIA GeForce RTX 4070 SUPER, 12282, 3998",
+        "gpu_scope": "Whole GPU used MiB, including other applications; snapshot, not peak"
+      },
+      "load_ms": 2808.4321999922395,
+      "memory_loaded": {
+        "rss_bytes": 5029613568,
+        "scope": "Python plus owned children; snapshot, not peak; includes shared pages",
+        "gpu_snapshot": "NVIDIA GeForce RTX 4070 SUPER, 12282, 8821",
+        "gpu_scope": "Whole GPU used MiB, including other applications; snapshot, not peak"
+      },
+      "status": "completed",
+      "memory_after": {
+        "rss_bytes": 5110771712,
+        "scope": "Python plus owned children; snapshot, not peak; includes shared pages",
+        "gpu_snapshot": "NVIDIA GeForce RTX 4070 SUPER, 12282, 8823",
+        "gpu_scope": "Whole GPU used MiB, including other applications; snapshot, not peak"
+      },
+      "summary": {
+        "cases_ok": 4,
+        "cases_total": 4,
+        "first_case_ms": 140.7304999884218,
+        "mean_warm_ms_per_line": 250.1327968757323,
+        "note": "Per-line page latency is amortized; batch time is not a sum of result timings",
+        "warm_repeated_line_ms": 375.0357636361679
+      },
+      "run_id": "q25-glossary",
+      "cases": [
+        {
+          "id": "context-left",
+          "category": "context",
+          "sources": [
+            "もう帰った？"
+          ],
+          "references": [
+            "Has Ren already gone home?"
+          ],
+          "notes": "Context suggests absent Ren, not asking addressee if home yet.",
+          "status": "ok",
+          "translations": [
+            "You’re back already?"
+          ],
+          "run_ms": [
+            140.7304999884218,
+            130.45480000437237
+          ],
+          "translate_many_ms": 146.40259998850524,
+          "batch_translations": [
+            "You’re already home?"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "context-refusal",
+          "category": "context",
+          "sources": [
+            "いい。"
+          ],
+          "references": [
+            "No thanks."
+          ],
+          "notes": "Following context disambiguates refusal from acceptance.",
+          "status": "ok",
+          "translations": [
+            "Sure. No thanks. I’m full."
+          ],
+          "run_ms": [
+            207.8027999959886,
+            218.67259999271482
+          ],
+          "translate_many_ms": 111.06840000138618,
+          "batch_translations": [
+            "Okay."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "context-acceptance",
+          "category": "context",
+          "sources": [
+            "いい。"
+          ],
+          "references": [
+            "That's fine."
+          ],
+          "notes": "Approval, unlike context-refusal with same current line.",
+          "status": "ok",
+          "translations": [
+            "Sure. Keep going with this plan."
+          ],
+          "run_ms": [
+            182.40329998661764,
+            204.99490000656806
+          ],
+          "translate_many_ms": 86.16710000205785,
+          "batch_translations": [
+            "Okay."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "page-training",
+          "category": "ordered-page",
+          "sources": [
+            "レン、まだ練習してるの？",
+            "うん。霊力がうまく使えなくて。",
+            "昨日よりは安定してるよ。",
+            "そう？じゃあ、もう一回だけ。",
+            "待って。手、震えてる。",
+            "大丈夫。無理はしないから。",
+            "さっきもそう言ったじゃん。",
+            "……分かった。今日はやめとく。"
+          ],
+          "references": [],
+          "notes": "Original synthetic eight-bubble scene. Compare names, terminology, concern, promise, reluctant concession. No gender supplied.",
+          "status": "ok",
+          "translations": [
+            "Ren, are you still practicing? / You’re still working on it? / I see. / So you’re still at it? / Wait. Your hand’s trembling. / It’s okay. I won’t push you. / I said that just a minute ago. / …I get it. I’ll stop today.",
+            "Yeah. I just can’t seem to get my spirit energy under control.",
+            "It’s more stable than it was yesterday. / It is? Just one more time, then. / Wait. Your hand’s trembling. / It’s okay. I won’t push myself. / You said the same thing just now. / …I get it. I’ll call it quits today.",
+            "Really? Then one more time.",
+            "Wait. Your hands are shaking.",
+            "It’s okay. I won’t push myself.",
+            "…You said that just now, too.",
+            "…Got it. I’ll quit today."
+          ],
+          "run_ms": [
+            3530.78539998387,
+            3571.271099994192
+          ],
+          "translate_many_ms": 1772.6792999892496,
+          "batch_translations": [
+            "Rin, are you still practicing?",
+            "Yeah. I just can’t seem to get my magic to work right.",
+            "It’s getting a little more stable than it was yesterday.",
+            "Really? Then one more time.",
+            "Wait. My hand’s shaking.",
+            "You’re okay. Just don’t push yourself, that’s all.",
+            "You said that just a minute ago.",
+            "...Got it. I’m calling it quits today."
+          ],
+          "repeats_identical": true
+        }
+      ]
+    },
+    {
+      "engine": "hy-mt2-manga",
+      "context_mode": "isolated",
+      "glossary": true,
+      "device_requested": "cuda",
+      "memory_before": {
+        "rss_bytes": 52293632,
+        "scope": "Python plus owned children; snapshot, not peak; includes shared pages",
+        "gpu_snapshot": "NVIDIA GeForce RTX 4070 SUPER, 12282, 3994",
+        "gpu_scope": "Whole GPU used MiB, including other applications; snapshot, not peak"
+      },
+      "load_ms": 1265.0320999964606,
+      "memory_loaded": {
+        "rss_bytes": 1623998464,
+        "scope": "Python plus owned children; snapshot, not peak; includes shared pages",
+        "gpu_snapshot": "NVIDIA GeForce RTX 4070 SUPER, 12282, 5577",
+        "gpu_scope": "Whole GPU used MiB, including other applications; snapshot, not peak"
+      },
+      "status": "completed",
+      "memory_after": {
+        "rss_bytes": 1660039168,
+        "scope": "Python plus owned children; snapshot, not peak; includes shared pages",
+        "gpu_snapshot": "NVIDIA GeForce RTX 4070 SUPER, 12282, 5574",
+        "gpu_scope": "Whole GPU used MiB, including other applications; snapshot, not peak"
+      },
+      "summary": {
+        "cases_ok": 4,
+        "cases_total": 4,
+        "first_case_ms": 71.43499999074265,
+        "mean_warm_ms_per_line": 44.18125936717843,
+        "note": "Per-line page latency is amortized; batch time is not a sum of result timings",
+        "warm_repeated_line_ms": 59.31454545299692
+      },
+      "run_id": "hy-glossary",
+      "cases": [
+        {
+          "id": "context-left",
+          "category": "context",
+          "sources": [
+            "もう帰った？"
+          ],
+          "references": [
+            "Has Ren already gone home?"
+          ],
+          "notes": "Context suggests absent Ren, not asking addressee if home yet.",
+          "status": "ok",
+          "translations": [
+            "Already gone home?"
+          ],
+          "run_ms": [
+            71.43499999074265,
+            53.968299995176494
+          ],
+          "translate_many_ms": 59.73670000093989,
+          "batch_translations": [
+            "Already gone home?"
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "context-refusal",
+          "category": "context",
+          "sources": [
+            "いい。"
+          ],
+          "references": [
+            "No thanks."
+          ],
+          "notes": "Following context disambiguates refusal from acceptance.",
+          "status": "ok",
+          "translations": [
+            "Good."
+          ],
+          "run_ms": [
+            28.232800017576665,
+            27.177799987839535
+          ],
+          "translate_many_ms": 44.57410000031814,
+          "batch_translations": [
+            "Good."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "context-acceptance",
+          "category": "context",
+          "sources": [
+            "いい。"
+          ],
+          "references": [
+            "That's fine."
+          ],
+          "notes": "Approval, unlike context-refusal with same current line.",
+          "status": "ok",
+          "translations": [
+            "Good."
+          ],
+          "run_ms": [
+            28.060799988452345,
+            27.616799983661622
+          ],
+          "translate_many_ms": 28.447499993490055,
+          "batch_translations": [
+            "Good."
+          ],
+          "repeats_identical": true
+        },
+        {
+          "id": "page-training",
+          "category": "ordered-page",
+          "sources": [
+            "レン、まだ練習してるの？",
+            "うん。霊力がうまく使えなくて。",
+            "昨日よりは安定してるよ。",
+            "そう？じゃあ、もう一回だけ。",
+            "待って。手、震えてる。",
+            "大丈夫。無理はしないから。",
+            "さっきもそう言ったじゃん。",
+            "……分かった。今日はやめとく。"
+          ],
+          "references": [],
+          "notes": "Original synthetic eight-bubble scene. Compare names, terminology, concern, promise, reluctant concession. No gender supplied.",
+          "status": "ok",
+          "translations": [
+            "Ren, are you still practicing?",
+            "Yeah. I can't use my spirit energy right.",
+            "It's more stable than yesterday.",
+            "Really? Then, just one more time.",
+            "Wait. My hand's shaking.",
+            "It's okay. I won't push you too hard.",
+            "I told you so just now.",
+            "...Got it. I'll call it off today."
+          ],
+          "run_ms": [
+            570.0040000083391,
+            543.6971000162885
+          ],
+          "translate_many_ms": 586.0526000033133,
+          "batch_translations": [
+            "Ren, are you still practicing?",
+            "Yeah. I can't use my spiritual power well.",
+            "It's more stable than yesterday.",
+            "Really? Then, just one more time.",
+            "Wait. My hand's shaking.",
+            "It's okay. I won't push you too hard.",
+            "You said so yourself just now.",
+            "...Got it. I'll call it off for today."
+          ],
+          "repeats_identical": true
+        }
+      ]
+    },
+    {
+      "engine": "qwen35-vntl",
+      "context_mode": "isolated",
+      "glossary": false,
+      "device_requested": "auto",
+      "memory_before": {
+        "rss_bytes": 52297728,
+        "scope": "Python plus owned children; snapshot, not peak; includes shared pages",
+        "gpu_snapshot": "NVIDIA GeForce RTX 4070 SUPER, 12282, 3998",
+        "gpu_scope": "Whole GPU used MiB, including other applications; snapshot, not peak"
+      },
+      "status": "unavailable",
+      "error": "0xBrandon/Qwen3.5-4B-VNTL-V1 has no configured local artifact. Qwen3.5 VNTL's published revision bf7b11333a9ef958ed4646dcc18dea9f757a6e08 contains no weights; do not substitute the base model. See docs/translation-benchmark.md.",
+      "summary": {
+        "cases_ok": 0,
+        "cases_total": 46,
+        "first_case_ms": null,
+        "mean_warm_ms_per_line": null,
+        "note": "Per-line page latency is amortized; batch time is not a sum of result timings",
+        "warm_repeated_line_ms": null
+      },
+      "run_id": "q35-unavailable",
+      "cases": []
+    }
+  ]
+}

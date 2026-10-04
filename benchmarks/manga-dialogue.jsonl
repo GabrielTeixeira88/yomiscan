@@ -1,0 +1,46 @@
+{"id":"casual-1","category":"casual","texts":["何してんだよ"],"references":["What are you doing?"],"notes":"Rough surprise/reproach; do not invent an action."}
+{"id":"casual-2","category":"casual","texts":["知らねーよ"],"references":["How should I know?"],"notes":"Preserve negation and dismissiveness."}
+{"id":"casual-3","category":"casual","texts":["マジかよ"],"references":["Seriously?"],"notes":"Surprise, not a factual assertion."}
+{"id":"casual-4","category":"casual","texts":["やべぇ"],"notes":"Ambiguous: trouble or impressed slang; avoid inventing context."}
+{"id":"casual-5","category":"casual","texts":["ふざけんな"],"references":["Don't mess with me!"],"notes":"Negative command; intensity may vary."}
+{"id":"subject-1","category":"omitted-subject","texts":["もう行った？"],"notes":"Already went/left? Subject unspecified."}
+{"id":"subject-2","category":"omitted-subject","texts":["知らなかった。"],"references":["I didn't know."],"notes":"Past negative, not present refusal."}
+{"id":"subject-3","category":"omitted-subject","texts":["やったの？"],"notes":"Did you/they do it? Do not assume sexual meaning."}
+{"id":"particle-1","category":"particles","texts":["そうだよな"],"references":["Yeah, you're right."],"notes":"Agreement/seeking agreement."}
+{"id":"particle-2","category":"particles","texts":["そうなのか"],"references":["Is that so?"],"notes":"Realization or inquiry; not agreement with invented detail."}
+{"id":"particle-3","category":"particles","texts":["何してるんだ？"],"references":["What are you doing?"],"notes":"Question with explanatory/reproachful tone."}
+{"id":"particle-4","category":"particles","texts":["行くぞ"],"references":["Let's go!"],"notes":"Forceful announcement/exhortation."}
+{"id":"particle-5","category":"particles","texts":["待てよ"],"references":["Wait!"],"notes":"Command, not past tense."}
+{"id":"contraction-1","category":"contractions","texts":["してんの？"],"notes":"Are you doing it? Fragment needs context."}
+{"id":"contraction-2","category":"contractions","texts":["じゃねぇ"],"notes":"Rough negative copula; incomplete predicate."}
+{"id":"contraction-3","category":"contractions","texts":["なきゃ"],"notes":"Incomplete negative conditional/obligation; do not invent missing verb."}
+{"id":"contraction-4","category":"contractions","texts":["ちゃった"],"notes":"Completion/regret suffix fragment; missing lexical verb."}
+{"id":"contraction-5","category":"contractions","texts":["とく"],"notes":"Bare fragment ambiguous; distinguish from complete prep-action expression."}
+{"id":"contraction-6","category":"contractions","texts":["先に窓、閉めとくね。"],"references":["I'll close the window first."],"notes":"Doing something in advance, future intention."}
+{"id":"slang-1","category":"slang","texts":["ウケる"],"references":["That's hilarious."],"notes":"Casual amused response, not receive."}
+{"id":"slang-2","category":"slang","texts":["キモい"],"references":["Gross."],"notes":"Disgust/creepy, not physical illness necessarily."}
+{"id":"slang-3","category":"slang","texts":["ダサい"],"references":["That's lame."],"notes":"Uncool/tacky."}
+{"id":"slang-4","category":"slang","texts":["めっちゃ"],"notes":"Intensifier fragment, not a complete proposition."}
+{"id":"slang-5","category":"slang","texts":["マジで"],"notes":"Seriously/for real; interrogative intonation not specified."}
+{"id":"short-1","category":"ambiguous","texts":["別に"],"notes":"Not really/nothing in particular; depends on prior question."}
+{"id":"short-2","category":"ambiguous","texts":["もう"],"notes":"Already/enough/exasperation; no unique reference."}
+{"id":"short-3","category":"ambiguous","texts":["いい"],"notes":"Good/okay/no thanks depending on context."}
+{"id":"short-4","category":"ambiguous","texts":["やだ"],"references":["No, I don't want to."],"notes":"Refusal/dislike, no invented object."}
+{"id":"short-5","category":"ambiguous","texts":["無理"],"references":["No way."],"notes":"Impossible/cannot do it."}
+{"id":"short-6","category":"ambiguous","texts":["最悪"],"references":["This is the worst."],"notes":"Negative evaluation."}
+{"id":"short-7","category":"ambiguous","texts":["大丈夫"],"references":["It's okay."],"notes":"May mean reassurance/refusal; subject unknown."}
+{"id":"polite-1","category":"polite","texts":["ありがとうございます"],"references":["Thank you very much."],"notes":"Politeness here is appropriate, not a flaw."}
+{"id":"polite-2","category":"polite","texts":["申し訳ありません"],"references":["I'm very sorry."],"notes":"Sincere formal apology."}
+{"id":"polite-3","category":"polite","texts":["どうなさいましたか"],"references":["Is something wrong?"],"notes":"Respectful inquiry, context permits 'What happened?'"}
+{"id":"tone-rough","category":"character-tone","texts":["てめぇ、勝手に俺の荷物触んな！"],"references":["Hey! Don't touch my stuff without asking!"],"notes":"Rough prohibition; preserve whose belongings."}
+{"id":"tone-teen","category":"character-tone","texts":["え、これめっちゃかわいくない？"],"references":["Wait, isn't this super cute?"],"notes":"Casual positive rhetorical question."}
+{"id":"tone-arrogant","category":"character-tone","texts":["この俺に勝てると思ったのか？"],"references":["You thought you could beat me?"],"notes":"Arrogant challenge, opponent not speaker expected to lose."}
+{"id":"tone-timid","category":"character-tone","texts":["あの、もしよかったら、一緒に帰りませんか。"],"references":["Um, if you'd like, could we walk home together?"],"notes":"Timid invitation, not command."}
+{"id":"negation-long","category":"longer","texts":["助けたくないんじゃない。今ここを離れたら、あの子まで危険になるんだ。"],"references":["It's not that I don't want to help. If I leave now, that kid will be in danger too."],"notes":"Critical double negation and conditional; do not reverse motivation."}
+{"id":"direction","category":"longer","texts":["先生に叱られたのは僕じゃなくて、弟だよ。"],"references":["It was my little brother who got scolded by the teacher, not me."],"notes":"Passive agent/patient and contrast must survive."}
+{"id":"ocr-damaged","category":"ocr","texts":["もう帰っナの？"],"notes":"Synthetic OCR タ/ナ substitution for 帰った; report uncertainty rather than assert gold."}
+{"id":"visual-lines","category":"ocr","texts":["でも\n大丈夫"],"references":["But it's okay."],"notes":"One bubble split across visual lines."}
+{"id":"context-left","category":"context","texts":["もう帰った？"],"previous":["レンの靴がない。さっきまでここにいたのに。"],"following":["うん、家から電話が来たから。"],"references":["Has Ren already gone home?"],"notes":"Context suggests absent Ren, not asking addressee if home yet."}
+{"id":"context-refusal","category":"context","texts":["いい。"],"previous":["おかわり、いる？"],"following":["お腹いっぱいだから。"],"references":["No thanks."],"notes":"Following context disambiguates refusal from acceptance."}
+{"id":"context-acceptance","category":"context","texts":["いい。"],"previous":["この計画で進めてもいい？"],"following":["そのまま続けて。"],"references":["That's fine."],"notes":"Approval, unlike context-refusal with same current line."}
+{"id":"page-training","category":"ordered-page","texts":["レン、まだ練習してるの？","うん。霊力がうまく使えなくて。","昨日よりは安定してるよ。","そう？じゃあ、もう一回だけ。","待って。手、震えてる。","大丈夫。無理はしないから。","さっきもそう言ったじゃん。","……分かった。今日はやめとく。"],"glossary":{"レン":"Ren","霊力":"spirit energy"},"notes":"Original synthetic eight-bubble scene. Compare names, terminology, concern, promise, reluctant concession. No gender supplied."}

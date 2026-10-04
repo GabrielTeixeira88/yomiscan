@@ -21,6 +21,16 @@ forms, POS, conjugation information, and candidate English dictionary meanings.
 
 ## Setup (Windows / PowerShell)
 
+Optional manga translation adapters and a reproducible benchmark are available.
+The default remains OPUS-MT: Hy-MT2 showed useful gains but still made meaning errors,
+Qwen2.5 added unsupported dialogue, and the requested Qwen3.5 VNTL repository has no
+weights. See [setup, measured results and recommendation](docs/translation-benchmark.md).
+Optional `fugumt` and `nllb-600m` engines were also tested on the same dataset.
+Fugu was fast on CPU but still lost important meanings; NLLB was slower and did not
+establish an accuracy advantage. OPUS remains the default. Fugu weights are
+CC-BY-SA-4.0; NLLB weights are **non-commercial CC-BY-NC-4.0**, separate from project MIT.
+Normal startup does not download or load these experimental models.
+
 Install Git, Python **3.13.9**, and [uv](https://docs.astral.sh/uv/getting-started/installation/).
 From the repository root:
 
