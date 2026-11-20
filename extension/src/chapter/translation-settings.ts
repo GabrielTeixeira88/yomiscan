@@ -100,18 +100,22 @@ export class TranslationSettings {
     this.fields.disabled=true;
     try{
       const result=await this.request(operation,payload) as {id?:string};
+      // The write already succeeded. Retire affected output even when the
+      // following profile read is busy/offline; this tab does not receive its broadcast.
+      if(operation!=='create-series')this.invalidate(String(payload.scope),
+        typeof payload.target_language==='string'?payload.target_language:undefined,operation==='delete-series',false);
       const scope=operation==='create-series'?result.id:operation==='delete-series'?'global':this.scope.value;
       await this.load(scope||'global',this.target.value);
     }catch(error){this.status.textContent=error instanceof Error?error.message:'Glossary change failed';this.fields.disabled=false;}
   }
-  invalidate(scope:string,target?:string,deleted=false):void {
+  invalidate(scope:string,target?:string,deleted=false,reload=true):void {
     if(deleted&&scope===this.options.series_id){
       this.options={...this.options,series_id:'global',glossary_version:null};this.apply(this.current);
-      if(this.element.open)void this.load('global',this.target.value);return;
+      if(reload&&this.element.open)void this.load('global',this.target.value);return;
     }
     if(this.options.glossary_enabled&&(scope==='global'||scope===this.options.series_id)&&(!target||target===this.options.target_language)){
       this.options={...this.options,glossary_version:null};this.apply(this.current);
     }
-    if(this.element.open)void this.load(this.scope.value,this.target.value);
+    if(reload&&this.element.open)void this.load(this.scope.value,this.target.value);
   }
 }

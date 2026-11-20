@@ -139,7 +139,10 @@ class TextAnalyzer:
         if encoded is not None:
             try:
                 previous = TypeAdapter(list[TranslationResult | None]).validate_json(encoded)
-                if len(previous) != len(texts) or any(t is not None and t.source_text != text for t, text in zip(previous, texts, strict=True)):
+                if len(previous) != len(texts) or any(
+                    (t is None and self._translator is not None and bool(text.strip())) or
+                    (t is not None and (t.source_text != text or not t.translated_text.strip()))
+                    for t, text in zip(previous, texts, strict=True)):
                     raise ValueError("Cached translation does not match exact ordered sources")
                 translations = [replace(t, processing_time_ms=0.0) if t is not None else None for t in previous]
                 restored = True

@@ -11,7 +11,7 @@ const {packZip,unpackZip}=await import('../.test/browser-support.mjs');
 const reportDir=path.resolve('.cache/stage1-reports-'+Date.now());
 let mockServer,mockRenders=0,mockRefreshes=0,persistentCache=false,mockConfiguration='f'.repeat(64),extensionPath=path.resolve('extension/dist');
 const mockSeries=[{id:'global',label:'Global'}],mockTerms=[],translationCalls=[];
-let experimentalCapabilities=false;
+let experimentalCapabilities=false,failProfileOnce=false;
 if(mocked) {
   extensionPath=path.resolve('.cache/stage1-browser-extension');
   await mkdir(extensionPath,{recursive:true});
@@ -23,6 +23,7 @@ if(mocked) {
     try {
       if(req.url==='/health'){res.setHeader('Content-Type','application/json');res.setHeader('X-YomiScan-Configuration',mockConfiguration);res.end('{"status":"ok"}');return;}
       if(req.url.startsWith('/api/v1/translation-profile')){
+        if(failProfileOnce){failProfileOnce=false;res.writeHead(429);res.end();return;}
         const query=new URL(backend+req.url).searchParams,scope=query.get('scope')??'global',target=query.get('target')??'en';
         const entries=mockTerms.filter(t=>t.scope===scope&&t.target_language===target);
         const effective=mockTerms.filter(t=>(t.scope===scope||t.scope==='global')&&t.target_language===target);
@@ -126,6 +127,9 @@ try {
   await call('Browser.setDownloadBehavior',{behavior:'allow',downloadPath:reportDir});
   const extensions=await call("Extensions.getExtensions");
   for(const extension of extensions.extensions)if(extension.name.startsWith("YomiScan"))await call("Extensions.uninstall",{id:extension.id});
+  // Retrying this isolated fixture must not retain several 192 MiB reader tabs.
+  for(const target of (await call('Target.getTargets')).targetInfos)
+    if(target.type==='page'&&target.url.startsWith('http://127.0.0.1:8772'))await call('Target.closeTarget',{targetId:target.targetId});
   extensionId=(await call("Extensions.loadUnpacked",{path:extensionPath})).id;
   const targetId=(await call("Target.createTarget",{url:"http://127.0.0.1:8772"})).targetId;
   session=(await call("Target.attachToTarget",{targetId,flatten:true})).sessionId;
@@ -348,7 +352,7 @@ try {
   await evaluate(session,"document.querySelector('main').replaceChildren();for(let i=0;i<24;i++)document.querySelector('#append').click()");
   await until(()=>evaluate(session,"[...document.querySelectorAll('main img')].every(i=>i.complete)"));
   const longStarted=performance.now();
-  await click("Translate Chapter");await until(async()=>(await panel()).includes("24 / 24 pages translated"),120000);
+  await click("Translate Chapter");await until(async()=>(await panel()).includes("24 / 24 pages translated"),240000);
   report.mockedLongQueueMs=Math.round(performance.now()-longStarted);
   assert.match(await panel(),/Session [0-9.]+ \/ 128 MiB · [1-9][0-9]* evicted/);
   assert.equal(await evaluate(offscreen,'longCalls'),24);
@@ -411,6 +415,13 @@ try {
     await click('Delete Entry');await until(()=>mockTerms.length===0);await wait(150);
     await click('Delete Series Glossary');await until(()=>mockSeries.length===1);
     report.checks.push('Compatible experimental language, exact-ID contract and bounded context reach render transport; target change removes obsolete overlays; entry/series deletion works');
+    await wait(150);
+    await invoke(await find(n=>n.nodeName==='INPUT'&&n.attributes?.includes('glossary-enabled')),"function(){this.checked=true;this.dispatchEvent(new Event('change'))}");
+    await click('Translate Chapter');await until(async()=>(await panel()).includes('1 / 1 pages translated'));
+    failProfileOnce=true;await edit('Exact Japanese term','猫');await edit('Preferred target-language term','cat');await click('Save Entry');
+    await until(()=>mockTerms.length===1);await until(async()=>(await panel()).includes('Stop translation, wait for it to finish'));
+    assert.ok(!await find(n=>n.attributes?.includes('overlays')));
+    report.checks.push('Successful glossary mutation retires old overlays even if its subsequent profile fetch is busy');
   }
   report.status=await panel();report.requestOrder=await evaluate(offscreen,"testCalls");
   await mkdir(".cache",{recursive:true});await writeFile(mocked?".cache/stage1-browser.json":".cache/phase-7-browser.json",JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));

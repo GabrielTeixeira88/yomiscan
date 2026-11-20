@@ -118,3 +118,30 @@ def test_cancel_and_timeout_are_errors_not_retry_or_partial_success(monkeypatch)
     with pytest.raises(StructuredTranslationError) as error:
         runtime.generate_json([], {}, max_tokens=128)
     assert error.value.code == "timeout"
+
+
+def test_cancellation_during_http_stops_only_owned_runtime_and_returns_no_result(monkeypatch):
+    from threading import Timer
+    from urllib.error import URLError
+    import yomiscan.translation.manga as manga
+    runtime = LlamaServer(Path("fake.gguf"), executable=Path("fake.exe"))
+    cancelled, stopped = Event(), Event()
+    class Process:
+        def poll(self): return 0 if stopped.is_set() else None
+        def terminate(self): stopped.set()
+        def wait(self, timeout=None): return 0
+    process = Process()
+    runtime.process, runtime.url = process, "http://127.0.0.1:12345"
+    monkeypatch.setattr(runtime, "load", lambda: None)
+    def post(*args, **kwargs):
+        assert stopped.wait(2), "cancel must interrupt owned process while HTTP is in flight"
+        raise URLError("owned runtime stopped")
+    monkeypatch.setattr(manga, "urlopen", post)
+    timer = Timer(.02, cancelled.set);timer.start()
+    try:
+        with pytest.raises(StructuredTranslationError) as error:
+            runtime.generate_json([], {}, max_tokens=128, cancel=cancelled)
+        assert error.value.code == "cancelled" and stopped.is_set()
+        assert runtime.process is None and runtime.device == "unloaded"
+    finally:
+        timer.join()

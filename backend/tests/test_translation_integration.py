@@ -147,6 +147,24 @@ def test_restart_restores_target_context_glossary_entries_and_cache_independentl
     restarted.close()
 
 
+def test_structurally_incomplete_typed_cache_entry_cannot_become_a_successful_page(tmp_path):
+    service, counts, _ = configured(tmp_path)
+    options = TranslationOptions(mode="structured-page")
+    result = service.translate_and_render_page(page(), options=options)
+    stage = next(s for s in result.diagnostics["cache"]["stages"] if s["stage"] == "translation")
+    service.cache.put("translation", stage["key"], b"[null,null]")
+    counts.clear()
+    restored = service.translate_and_render_page(page(), options=options)
+    assert counts["translation"] == 1
+    assert counts["detection"] == counts["ocr"] == counts["lexical"] == 0
+    repaired = next(s for s in restored.diagnostics["cache"]["stages"] if s["stage"] == "translation")
+    assert repaired["source"] == "corrupt" and repaired["restored"] is False
+    counts.clear()
+    service.translate_and_render_page(page(), options=options)
+    assert counts == Counter()
+    service.close()
+
+
 def test_glossary_api_crud_protection_options_and_clear_separation(tmp_path):
     headers = {"X-YomiScan-Client": "study-extension-v1", "Origin": "chrome-extension://"+"a"*32}
     @contextmanager
