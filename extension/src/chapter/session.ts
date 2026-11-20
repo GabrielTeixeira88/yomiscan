@@ -1,7 +1,7 @@
 import {ChapterQueue,SkipPage,WaitForViewport,viewportPriority,type ViewMode,type PageRecord} from "./model";
 import {GenericPageDiscovery,type MangaPageCandidate,type PageDiscoveryStrategy,type DiscoveryDecision} from "./discovery";
 import {ChapterOverlays,type PageImageResult} from "./overlay";
-import {PageImageAcquirer,AcquisitionError,canvasPixels,currentViewport,verifyTicket,type AcquisitionAttempt,type CaptureTicket,type PagePixels} from "./acquisition";
+import {PageImageAcquirer,AcquisitionError,canvasPixels,currentViewport,verifyTicket,type CaptureTicket,type PagePixels} from "./acquisition";
 import {fetchFromExtension} from './source-client';
 import {imageHost} from './source-fetch';
 import {stitchPage} from './stitching';
@@ -9,6 +9,7 @@ import {validSelection,type Rect} from '../geometry';
 import {renderPage,ConfigurationChanged} from "./transport";
 import {createPageReport,type PageReportContext,type ReportOptions} from './reports';
 export interface ChapterSummary { active:boolean; total:number; translated:number; failed:number; skipped:number; processing:number|null; message:string; view:ViewMode }
+const SESSION_BUDGET=128*1024*1024,FAILURE_REPORT_BUDGET=256*1024;
 
 export class ChapterTranslationSession {
   readonly queue:ChapterQueue<MangaPageCandidate,PageImageResult>;
@@ -33,15 +34,14 @@ export class ChapterTranslationSession {
   allowStitch=false;
   private acquiring:AbortController|null=null;
   private sourceTicket:{id:string;candidate:MangaPageCandidate}|null=null;
-  private acquisitionDiagnostics=new WeakMap<HTMLImageElement,AcquisitionAttempt[]>();
-  private pageDiagnostics=new WeakMap<object,PageReportContext>();
+  private failureReports=new Map<object,{context:PageReportContext;bytes:number}>();
   private exporting=false;
   private downloads=new Set<string>();
   constructor(private changed:(status:ChapterSummary)=>void,private hideControls:(hidden:boolean)=>void,
               private discovery:PageDiscoveryStrategy=new GenericPageDiscovery()) {
     this.queue=new ChapterQueue({process:(page,signal)=>this.process(page,signal),
       priority:page=>{const r=page.source.image.getBoundingClientRect();return viewportPriority(r.top,r.bottom,innerHeight);},
-      cache:{budget:128*1024*1024,size:r=>r.bytes,protected:p=>{
+      cache:{budget:SESSION_BUDGET-FAILURE_REPORT_BUDGET,size:r=>r.bytes,protected:p=>{
         const r=p.source.image.getBoundingClientRect();return r.bottom>0&&r.top<innerHeight&&r.right>0&&r.left<innerWidth;
       }},
       release:result=>{this.overlays.release(result.url);URL.revokeObjectURL(result.url);},changed:()=>this.update()});
@@ -49,6 +49,19 @@ export class ChapterTranslationSession {
     window.addEventListener("pagehide",()=>this.dispose(),{once:true,signal:this.lifetime.signal});
   }
   get isDisposed():boolean{return this.disposed;}
+  memoryStats():{bytes:number;budget:number;evictions:number} {
+    const cache=this.queue.cacheStats();
+    return {...cache,bytes:cache.bytes+[...this.failureReports.values()].reduce((n,r)=>n+r.bytes,0),budget:SESSION_BUDGET};
+  }
+  private rememberFailure(page:object,context:PageReportContext):void {
+    this.failureReports.delete(page);
+    const encoded=JSON.stringify(context),bytes=Math.max(new TextEncoder().encode(encoded).length,encoded.length*2)+1024;
+    if(bytes>FAILURE_REPORT_BUDGET)return;
+    while(this.failureReports.size && (this.failureReports.size>=3 ||
+      [...this.failureReports.values()].reduce((n,r)=>n+r.bytes,bytes)>FAILURE_REPORT_BUDGET))
+      this.failureReports.delete(this.failureReports.keys().next().value!);
+    this.failureReports.set(page,{context,bytes});
+  }
   summary():ChapterSummary {
     const pages=[...this.queue.pages.values()];
     return {active:this.queue.active,total:pages.length,translated:pages.filter(p=>p.state==="translated"||p.state==="evicted").length,
@@ -116,12 +129,12 @@ export class ChapterTranslationSession {
       page.source.image.isConnected&&(page.source.image.currentSrc||page.source.image.src)===page.source.source;
     if(!current())return;
     const unpin=this.queue.pin(page.key);this.exporting=true;
-    const context=result?.reportContext??this.pageDiagnostics.get(page)??{
+    const context=result?.reportContext??this.failureReports.get(page)?.context??{
       page_id:page.id,width:page.source.width,height:page.source.height,state:page.state,timings:{}};
     this.notice=`Preparing page ${page.id} report…`;this.update();
     try {
       const rendered=options.rendered&&result?await(await fetch(result.url)).blob():undefined;
-      const report=await createPageReport({...context,session_cache:this.queue.cacheStats()},result?.snapshot,options,
+      const report=await createPageReport({...context,session_cache:this.memoryStats()},result?.snapshot,options,
         {original:result?.original,rendered});
       if(!current())throw new Error('Page changed during report preparation; export cancelled.');
       const url=URL.createObjectURL(report);this.downloads.add(url);
@@ -140,7 +153,8 @@ export class ChapterTranslationSession {
       accepted:d.accepted,reason:d.reason,page:this.queue.pages.get(d.image)?.id,state:this.queue.pages.get(d.image)?.state})));
     console.table([...this.queue.pages.values()].map(p=>({id:p.id,state:p.state,attempts:p.attempts,error:p.error,
       rendered:p.result?.rendered,skipped:p.result?.skipped})));
-    console.table([...this.queue.pages.values()].flatMap(p=>(this.acquisitionDiagnostics.get(p.source.image)??[]).map(a=>({page:p.id,...a}))));
+    console.table([...this.queue.pages.values()].flatMap(p=>(p.result?.reportContext?.acquisition?.attempts??
+      this.failureReports.get(p)?.context.acquisition?.attempts??[]).map(a=>({page:p.id,...a}))));
     console.table([...this.queue.pages.values()].filter(p=>p.result).map(p=>({page:p.id,...p.result?.coverage})));
   }
   private observe():void {
@@ -186,19 +200,24 @@ export class ChapterTranslationSession {
       const identity=`${this.generation}|${signature}|${this.versions.get(candidate.image)??0}`;
       this.queue.register(candidate.image,identity,candidate);this.intersection?.observe(candidate.image);
     }
+    const records=new Set<object>(this.queue.pages.values());
+    for(const page of this.failureReports.keys())if(!records.has(page))this.failureReports.delete(page);
     this.update();
   }
   private async process(page:PageRecord<MangaPageCandidate,PageImageResult>,signal:AbortSignal):Promise<PageImageResult> {
     const candidate=page.source,start=performance.now();
     const context:PageReportContext={page_id:page.id,job_id:`${page.id}-${page.attempts}`,width:candidate.width,height:candidate.height,
       state:'processing',extension_version:chrome.runtime.getManifest().version,timings:{}};
-    this.pageDiagnostics.set(page,context);
+    let failed=false;
     try {return await this.processImage(candidate,signal,context,page.refreshing===true);}
     catch(error){
+      failed=true;
       if(error instanceof ConfigurationChanged){this.dispose();this.changed({...this.summary(),message:error.message});}
       context.state=signal.aborted||error instanceof SkipPage?'skipped':'failed';context.error_code=signal.aborted?'cancelled':
       error instanceof AcquisitionError?'acquisition_failed':'page_processing_failed';throw error;}
-    finally {context.timings.total_ms=performance.now()-start;}
+    finally {context.timings.total_ms=performance.now()-start;
+      if(failed && !this.disposed && this.queue.pages.get(page.key)===page)this.rememberFailure(page,context);
+      else this.failureReports.delete(page);}
   }
   private async processImage(candidate:MangaPageCandidate,signal:AbortSignal,context:PageReportContext,refresh:boolean):Promise<PageImageResult> {
     const acquisitionStart=performance.now();
@@ -223,11 +242,10 @@ export class ChapterTranslationSession {
     let pixels:PagePixels;
     try {
       const acquired=await acquirer.acquire(candidate,acquisitionSignal);pixels=acquired;
-      this.acquisitionDiagnostics.set(candidate.image,acquired.attempts);
       context.acquisition={method:acquired.method,attempts:acquired.attempts};
       context.width=pixels.width;context.height=pixels.height;
     } catch(error) {
-      if(error instanceof AcquisitionError){this.acquisitionDiagnostics.set(candidate.image,error.attempts);
+      if(error instanceof AcquisitionError){
         context.acquisition={attempts:error.attempts};}
       throw error;
     } finally {this.acquiring=null;context.timings.acquisition_ms=performance.now()-acquisitionStart;}
@@ -294,7 +312,7 @@ export class ChapterTranslationSession {
   private disconnect():void {this.observer?.disconnect();this.intersection?.disconnect();this.events?.abort();clearTimeout(this.discoveryTimer);}
   dispose():void {
     if(this.disposed)return;this.disposed=true;this.startVersion++;this.disconnect();clearInterval(this.navigationTimer);this.lifetime.abort();this.queue.dispose();this.overlays.dispose();
-    this.pageDiagnostics=new WeakMap();
+    this.failureReports.clear();
     for(const url of this.downloads)URL.revokeObjectURL(url);this.downloads.clear();
     this.changed({active:false,total:0,translated:0,failed:0,skipped:0,processing:null,view:"original",message:"Session cleared. Activate Translate Chapter for this reader."});
   }

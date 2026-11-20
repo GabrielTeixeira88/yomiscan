@@ -93,7 +93,7 @@ export async function createPageReport(context:PageReportContext,snapshot:PageSn
       input_sha256:hash(context.input_sha256)?context.input_sha256:null,
       pixel_sha256:hash(snapshot?.image.pixel_sha256)?snapshot.image.pixel_sha256:null},
     models:models(snapshot?.models),counts:pick(snapshot?.counts,['rendered','preserved','undetected']),
-    canonical_pixels:pick(snapshot?.image.canonical_pixels,['sha256','normalization','width','height','mode']),
+    canonical_pixels:pick(snapshot?.image.canonical_pixels,['sha256','normalization','width','height','mode','canonical_mode']),
     cache:{...pick(snapshot?.cache,['schema','persistent_enabled','memory_bytes','memory_limit','disk_bytes','disk_limit',
       'hits','misses','evictions','corruptions','refresh','error_code']),
       stages:(Array.isArray(object(snapshot?.cache).stages)?object(snapshot?.cache).stages as unknown[]:[]).map(

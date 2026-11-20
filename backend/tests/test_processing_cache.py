@@ -173,6 +173,22 @@ def test_pixels_resolution_and_reencoding_identity(tmp_path):
     service.close()
 
 
+def test_canonical_identity_preserves_library_alpha_palette_and_mode(tmp_path):
+    service, counts, *_ = resources(tmp_path)
+    first = Image.new("RGBA", (120, 80), (255, 255, 255, 255))
+    second = Image.new("RGBA", (120, 80), (255, 255, 255, 10))
+    assert pixel_identity(first) != pixel_identity(second)
+    assert service.translate_and_render_page(first).rendered_image.getpixel((0, 0))[3] == 255
+    assert service.translate_and_render_page(second).rendered_image.getpixel((0, 0))[3] == 10
+    palette = Image.new("P", (1, 1))
+    palette.putpalette([255, 0, 0]+[0]*765)
+    old = pixel_identity(palette)
+    palette.putpalette([0, 255, 0]+[0]*765)
+    assert pixel_identity(palette) != old
+    assert pixel_identity(first.convert("RGB")) != pixel_identity(first)
+    service.close()
+
+
 def test_translation_and_render_refresh_reuse_extraction_and_lexical(tmp_path):
     service, counts, *_ = resources(tmp_path)
     service.translate_and_render_page(page())
@@ -286,6 +302,17 @@ def test_cache_rejects_cross_thread_access_and_invalid_settings(tmp_path):
     assert failures and "owning" in failures[0]
     with pytest.raises(ValueError):
         cache.configure(True, 0)
+
+
+@pytest.mark.parametrize("bad_payload", ["text-in-blob-column", 123])
+def test_sqlite_payload_type_corruption_is_a_miss(tmp_path, bad_payload):
+    cache = ProcessingCache(tmp_path, enabled=True, memory_bytes=0)
+    cache.put("test", "corrupt", b"good bytes")
+    with cache._db:
+        cache._db.execute("UPDATE entries SET payload=?", (bad_payload,))
+    assert cache.get("test", "corrupt")[0] is None
+    assert cache.corruptions == 1
+    cache.close()
 
 
 def test_cache_api_consent_localhost_validation_refresh_and_generation(tmp_path):

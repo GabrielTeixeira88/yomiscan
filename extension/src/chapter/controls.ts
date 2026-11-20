@@ -106,7 +106,7 @@ export class ChapterControls {
     this.status.textContent=`${status.translated} / ${status.total} pages translated · ${status.failed} failed · ${status.skipped} skipped\n`+
       (status.processing?`Page ${status.processing} processing…`:status.active&&!pending?"Known pages finished; watching for lazy-loaded pages.":"")+
       '\n'+status.message;
-    if(this.session){const cache=this.session.queue.cacheStats(),evicted=[...this.session.queue.pages.values()].filter(p=>p.state==='evicted').length;
+    if(this.session){const cache=this.session.memoryStats(),evicted=[...this.session.queue.pages.values()].filter(p=>p.state==='evicted').length;
       this.status.textContent+=`\nSession ${(cache.bytes/1024/1024).toFixed(1)} / ${(cache.budget/1024/1024).toFixed(0)} MiB · ${evicted} evicted (reload on view)`;}
     const errors=this.session?[...this.session.queue.pages.values()].filter(p=>p.error&&!p.cancelled).slice(0,3).map(p=>`Page ${p.id}: ${p.error}`):[];
     const results=this.session?[...this.session.queue.pages.values()].flatMap(p=>p.result?[p.result]:[]):[];

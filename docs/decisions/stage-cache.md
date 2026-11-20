@@ -6,7 +6,9 @@ Implement the browser result LRU first. The existing serial chapter queue owns
 results, byte accounting, eviction and export pins. Visible pages and active
 refreshes retain their output. An evicted page is eligible for normal processing
 when it becomes visible, provided it can fit. Eviction itself never schedules work.
-Original report pixels belong to the same result and budget as its PNG/snapshot.
+Original report pixels and successful diagnostics belong to the same result and
+budget as its PNG/snapshot. Up to three failed-job contexts share a reserved 256 KiB
+within the 128 MiB session budget; eviction does not leave successful WeakMap copies.
 Blob URLs are detached from overlays before revocation. In-flight acquisition,
 transport and a single report download have separate bounded transient lifetimes.
 
@@ -17,7 +19,7 @@ local SQLite database containing checksummed BLOBs. A transaction publishes the
 metadata and payload together; there are no external artifact files to orphan.
 SQLite and inference remain on the existing single owning worker.
 
-Canonical decoded RGB pixels identify an image, separately from the existing
+Canonical decoded colors, alpha and source mode identify an image, separately from the existing
 uploaded-byte diagnostic digest. Each stage key includes its effective inputs,
 upstream identity and algorithm/configuration/artifact identity. Unknown effective
 model identities bypass reusable entries. Translation remains a native ordered

@@ -31,8 +31,12 @@ def digest(value: object) -> str:
 
 def pixel_identity(image: Image.Image) -> dict[str, object]:
     """API decoding already applies EXIF transpose. Byte digest keeps its old meaning."""
-    rgb = image.convert("RGB")
-    header = {"normalization": "exif-rgb-v1", "width": rgb.width, "height": rgb.height, "mode": "RGB"}
+    # HTTP input is normalized RGB. Library callers may use alpha or palettes;
+    # their actual colors/alpha and output mode must also participate in identity.
+    mode = "RGBA" if image.mode in ("RGBA", "LA") or "transparency" in image.info else "RGB"
+    rgb = image.convert(mode)
+    header = {"normalization": "decoded-colors-v1", "width": rgb.width, "height": rgb.height,
+              "mode": image.mode, "canonical_mode": mode}
     h = hashlib.sha256(canonical_json(header))
     h.update(rgb.tobytes())
     return {**header, "sha256": h.hexdigest()}
@@ -165,7 +169,7 @@ class ProcessingCache:
                 row = self._db.execute("SELECT payload,checksum FROM entries WHERE stage=? AND key=?", identity).fetchone() if self._db else None
                 if row is not None:
                     payload, checksum = row
-                    if len(payload) > MAX_ENTRY or hashlib.sha256(payload).hexdigest() != checksum:
+                    if not isinstance(payload, bytes) or not isinstance(checksum, str) or len(payload) > MAX_ENTRY or hashlib.sha256(payload).hexdigest() != checksum:
                         self.discard(stage, key)
                     else:
                         with self._db:
@@ -260,6 +264,8 @@ class ProcessingCache:
         if self._db is not None:
             self._db.close()
             self._db = None
+        self._ram.clear()
+        self._memory = 0
 
 
 @dataclass
@@ -286,6 +292,9 @@ class CacheRequest:
     def invalid(self, stage: str, key: str | None) -> None:
         if key is not None:
             self.cache.discard(stage, key)
+        if self.stages[-1]["restored"]:
+            self.cache.hits -= 1
+            self.cache.misses += 1
         self.stages[-1].update(source="corrupt", restored=False)
 
     def metadata(self) -> dict[str, object]:

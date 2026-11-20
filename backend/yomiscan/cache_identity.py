@@ -41,7 +41,7 @@ def algorithm(*files: str) -> str:
 
 def folder_identity(folder: Path) -> dict[str, str] | None:
     suffixes = {".json", ".bin", ".safetensors", ".onnx", ".txt", ".model", ".gguf", ".dic", ".spm", ".vocab"}
-    files = sorted(p for p in folder.iterdir() if p.is_file() and p.suffix in suffixes)
+    files = sorted(p for p in folder.iterdir() if p.is_file() and (p.suffix in suffixes or p.name in ("dicrc", "mecabrc")))
     return {p.name: file_identity(p) for p in files} if files else None
 
 
@@ -94,15 +94,6 @@ def component_identity(component: Any) -> object | None:
     try:
         # Third-party adapters below are enumerated deliberately. An arbitrary
         # diagnostic_metadata() method is NOT an effective configuration contract.
-        if name == "yomiscan.dictionary.sqlite.SQLiteDictionary":
-            path = component._path
-            return {"database": file_identity(path), "wal": file_identity(Path(str(path)+"-wal")) if Path(str(path)+"-wal").exists() else None,
-                    "schema": component._connection.execute("PRAGMA user_version").fetchone()[0],
-                    "algorithm": algorithm("dictionary/sqlite.py", "dictionary/models.py", "japanese.py")}
-        if name == "yomiscan.nlp.fugashi.FugashiTokenizer":
-            import unidic_lite
-            return {"unidic": folder_identity(Path(unidic_lite.DICDIR)), **versions("fugashi", "unidic-lite"),
-                    "algorithm": algorithm("nlp/fugashi.py", "japanese.py")}
         if name == "yomiscan.rendering.renderer.ConservativePageRenderer":
             from .rendering.inpainting import OpenCVInpaintingEngine
             from .rendering.typesetting import PillowTypesetter

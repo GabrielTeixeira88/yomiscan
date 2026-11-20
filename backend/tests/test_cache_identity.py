@@ -3,6 +3,8 @@
 from types import SimpleNamespace
 from pathlib import Path
 import json
+from dataclasses import asdict
+import sqlite3
 import pytest
 
 from yomiscan.cache import digest
@@ -13,6 +15,8 @@ from yomiscan.ocr.manga_ocr import MangaOCREngine
 from yomiscan.ocr.onnx import ONNXMangaOCREngine
 from yomiscan.ocr.transformers import TransformersOCREngine
 from yomiscan.rendering.renderer import ConservativePageRenderer
+from yomiscan.dictionary import SQLiteDictionary, DictionaryEntry
+from yomiscan.dictionary.models import DictionarySense
 
 
 class Generation:
@@ -84,3 +88,27 @@ def test_renderer_font_and_inpainting_settings_are_independent():
     assert digest(first) != digest(second)
     renderer.inpainter.radius += 1
     assert digest(second) != digest(component_identity(renderer))
+
+
+def test_dictionary_identity_and_lookup_reopen_atomically_replaced_database(tmp_path):
+    def build(path, meaning):
+        db = sqlite3.connect(path)
+        with db:
+            db.executescript("CREATE TABLE entries(entry_id INTEGER PRIMARY KEY,payload TEXT);"
+                             "CREATE TABLE forms(form TEXT,entry_id INTEGER); PRAGMA user_version=1;")
+            entry = DictionaryEntry(1, ("猫",), (), (DictionarySense((meaning,), ("noun",)),))
+            db.execute("INSERT INTO entries VALUES(1,?)", (json.dumps(asdict(entry)),))
+            db.execute("INSERT INTO forms VALUES('猫',1)")
+        db.close()
+    target, replacement = tmp_path/"dictionary.sqlite3", tmp_path/"replacement.sqlite3"
+    build(target, "cat")
+    with SQLiteDictionary(target) as dictionary:
+        first = dictionary.cache_identity()
+        assert dictionary.lookup("猫")[0].senses[0].glosses == ("cat",)
+        build(replacement, "updated cat")
+        try:
+            replacement.replace(target)
+        except PermissionError:
+            pytest.skip("Windows locks open SQLite files; stop the backend before reimporting JMdict")
+        assert dictionary.cache_identity() != first
+        assert dictionary.lookup("猫")[0].senses[0].glosses == ("updated cat",)

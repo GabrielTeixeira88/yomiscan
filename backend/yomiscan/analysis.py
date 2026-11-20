@@ -135,7 +135,7 @@ class TextAnalyzer:
                         cache.invalid("lexical", lexical_key)
                 if lexical is None:
                     lexical = self._analyze_lexical(text, None)
-                    if cache:
+                    if cache and lexical_identity == [component_identity(self._tokenizer), component_identity(self._dictionary)]:
                         cache.put("lexical", lexical_key, TypeAdapter(TextAnalysisResult).dump_json(lexical))
                 results.append(replace(lexical, translation=translation))
             except (TokenizerError, DictionaryError) as exc:
