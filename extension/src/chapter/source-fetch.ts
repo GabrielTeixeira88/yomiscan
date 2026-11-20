@@ -11,13 +11,13 @@ export function imageHost(source: string): string | null {
 export async function fetchSourceImage(source: string, signal: AbortSignal,
   permitted: (origin: string) => Promise<boolean>, request: typeof fetch = fetch): Promise<Blob> {
   const host = imageHost(source);
-  if (!host) throw new ManualAcquisitionError("Source is not an HTTP(S) image");
-  if (!await permitted(host)) throw new ManualAcquisitionError(`Image-host permission not granted: ${new URL(source).hostname}`);
+  if (!host) throw new ManualAcquisitionError("Source is not an HTTP(S) image",'unsupported_source');
+  if (!await permitted(host)) throw new ManualAcquisitionError(`Image-host permission not granted: ${new URL(source).hostname}`,'permission_denied');
   signal.throwIfAborted();
   const response = await request(source, {credentials: "include", redirect: "error", signal});
-  if (!response.ok) throw new ManualAcquisitionError(`Image source returned HTTP ${response.status}${[401,403].includes(response.status) ? ' (authentication/hotlink policy; no bypass attempted)' : ''}`);
+  if (!response.ok) throw new ManualAcquisitionError(`Image source returned HTTP ${response.status}${[401,403].includes(response.status) ? ' (authentication/hotlink policy; no bypass attempted)' : ''}`,'http_'+response.status);
   const mime = response.headers.get('content-type')?.split(';')[0].trim().toLowerCase();
-  if (!mime || !['image/png','image/jpeg','image/webp'].includes(mime)) throw new ManualAcquisitionError(`Unsupported source content type: ${mime || 'missing'}`);
+  if (!mime || !['image/png','image/jpeg','image/webp'].includes(mime)) throw new ManualAcquisitionError(`Unsupported source content type: ${mime || 'missing'}`,'unsupported_source');
   if (Number(response.headers.get('content-length')) > MAX_INPUT) throw new ManualAcquisitionError('Source image exceeds 10 MiB');
   const reader = response.body?.getReader();
   if (!reader) throw new Error('Empty source image response');
@@ -62,6 +62,7 @@ export function installSourceFetch(): void {
       })().catch(error => {
         console.warn('YomiScan source acquisition failed',error);
         if (connected) port.postMessage({type:'error', manualRetry:error instanceof ManualAcquisitionError,
+          errorCode:error instanceof ManualAcquisitionError?error.code:undefined,
           error:controller.signal.aborted ? 'Source image fetch timed out' :
           error instanceof Error ? error.message : 'Source image fetch failed'});
       }).finally(() => clearTimeout(timer));

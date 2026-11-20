@@ -9,6 +9,7 @@ from .analysis import TextAnalyzer, TextAnalysisResult
 from .detection import BoundingBox, TextDetector, TextRegion
 from .japanese import contains_japanese
 from .ocr import OCREngine, OCRRecognitionError
+from .translation import TranslationError
 from .page_layout import group_regions, reading_order
 
 logger = logging.getLogger(__name__)
@@ -37,6 +38,10 @@ class TextBlock:
     category: str = "unknown"
     status: Literal["success", "error", "filtered"] = "success"
     error_message: str | None = None
+    ocr_engine: str | None = None
+    ocr_metadata: dict[str, object] = field(default_factory=dict)
+    ocr_ms: float | None = None
+    failure_stage: str | None = None
 
 
 @dataclass(frozen=True)
@@ -88,10 +93,11 @@ class PageAnalysisService:
             try:
                 with image.crop(box.coordinates()) as crop:
                     recognized = self.ocr.recognize(crop)
-                block = replace(block, original_text=recognized.text)
+                block = replace(block, original_text=recognized.text, ocr_engine=recognized.engine,
+                                ocr_metadata=recognized.metadata, ocr_ms=recognized.processing_time_ms)
             except OCRRecognitionError:
                 logger.exception("Page block %s OCR failed", index)
-                block = replace(block, status="error", error_message="OCR failed for this block.")
+                block = replace(block, status="error", error_message="OCR failed for this block.", failure_stage="ocr")
             finally:
                 ocr_ms += (perf_counter() - ocr_start) * 1000
             if block.status == "error":
@@ -107,7 +113,8 @@ class PageAnalysisService:
         elapsed = (perf_counter() - analysis_start) * 1000
         for i, result in zip(eligible, results, strict=True):
             if isinstance(result, Exception):
-                blocks[i] = replace(blocks[i], status="error", error_message="Text analysis failed for this block.")
+                blocks[i] = replace(blocks[i], status="error", error_message="Text analysis failed for this block.",
+                                    failure_stage="translation" if isinstance(result, TranslationError) else "analysis")
             else:
                 analysis_ms += result.processing_time_ms
                 blocks[i] = replace(blocks[i], analysis=result)

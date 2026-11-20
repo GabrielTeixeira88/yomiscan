@@ -5,7 +5,7 @@ import type {MangaPageCandidate} from "./discovery";
 export const currentViewport=():Viewport=>({width:innerWidth,height:innerHeight,scrollX,scrollY,scale:visualViewport?.scale??1});
 export interface PagePixels {blob:Blob;width:number;height:number;capture?:{scaleX:number;scaleY:number;x:number;y:number;width:number;height:number}}
 export type AcquisitionMethod='direct-extension-fetch'|'canvas'|'viewport-capture'|'stitched-capture';
-export interface AcquisitionAttempt {method:AcquisitionMethod;success:boolean;reason?:string}
+export interface AcquisitionAttempt {method:AcquisitionMethod;success:boolean;reason?:string;code?:string}
 export interface AcquiredPage extends PagePixels {method:AcquisitionMethod;attempts:AcquisitionAttempt[]}
 export class AcquisitionError extends SkipPage {
   override readonly retryWhenVisible:boolean;
@@ -40,7 +40,8 @@ export class PageImageAcquirer {
       } catch(error) {
         signal.throwIfAborted();
         causes.push(error);
-        attempts.push({method,success:false,reason:error instanceof Error?error.message:'Acquisition failed'});
+        attempts.push({method,success:false,reason:error instanceof Error?error.message:'Acquisition failed',
+          code:error instanceof ManualAcquisitionError?error.code:error instanceof WaitForViewport?'wait_for_viewport':'strategy_failed'});
       }
     }
     throw new AcquisitionError(attempts,causes);

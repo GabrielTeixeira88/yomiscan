@@ -188,8 +188,10 @@ export class StudyPopup {
       const value=className==="original"?data.original_text:data.translation;
       const copy=element('button',className==="original"?'Copy Japanese':'Copy English','copy');
       copy.setAttribute('aria-label',className==="original"?'Copy original Japanese':'Copy English sentence translation');
+      copy.lang='en';
       copy.disabled=!value;
       const feedback=element('p','','copy-feedback');feedback.setAttribute('role','status');
+      feedback.lang='en';
       copy.addEventListener('click',()=>{void copyStudyText(value??'').then(message=>{
         if(this.listeners.signal.aborted || !section.isConnected)return;
         feedback.textContent=message;

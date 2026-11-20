@@ -26,7 +26,8 @@ export function fetchFromExtension(id: string, signal: AbortSignal): Promise<Pag
              message.width<=0 || message.height<=0 || message.width*message.height>12_000_000 ||
              !['image/png','image/jpeg','image/webp'].includes(message.mime))throw new Error('Invalid source image response');
           finish(undefined,{blob:new Blob(parts,{type:message.mime}),width:message.width,height:message.height});
-        } else if(message.type==='error')finish(message.manualRetry===true?new ManualAcquisitionError(message.error):new Error(message.error));
+        } else if(message.type==='error')finish(message.manualRetry===true?new ManualAcquisitionError(message.error,
+          typeof message.errorCode==='string'&&/^[a-z0-9_]{1,40}$/.test(message.errorCode)?message.errorCode:'manual_retry'):new Error(message.error));
       } catch(error){finish(error instanceof Error?error:new Error('Invalid image transfer'));}
     });
     port.postMessage({id});

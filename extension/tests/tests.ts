@@ -7,6 +7,7 @@ import {copyStudyText} from '../src/popup';
 import "./chapter-tests";
 import "./acquisition-tests";
 import "./coverage-tests";
+import "./report-tests";
 
 const viewport = {width: 800, height: 600};
 test("study copy writes exact Japanese/English and reports clipboard failures safely",async()=>{

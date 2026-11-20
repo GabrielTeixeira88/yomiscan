@@ -1,9 +1,47 @@
-// Opt-in integration check against an isolated Chrome profile and real local backend.
+// Opt-in isolated Chrome check. --mock-backend runs entirely model-free on port 8774.
 // Run from repository root after building extension/dist. No browser-test dependencies.
 import http from "node:http";
-import {readFile,writeFile,mkdir} from "node:fs/promises";
+import {readFile,writeFile,mkdir,readdir} from "node:fs/promises";
+import {createHash} from 'node:crypto';
 import assert from "node:assert/strict";
 import path from "node:path";
+
+const mocked=process.argv.includes('--mock-backend'),backend=`http://127.0.0.1:${mocked?8774:8765}`;
+const {packZip,unpackZip}=await import('../.test/browser-support.mjs');
+const reportDir=path.resolve('.cache/stage1-reports-'+Date.now());
+let mockServer,mockRenders=0,extensionPath=path.resolve('extension/dist');
+if(mocked) {
+  extensionPath=path.resolve('.cache/stage1-browser-extension');
+  await mkdir(extensionPath,{recursive:true});
+  for(const name of await readdir('extension/dist')) {
+    const source=await readFile(path.join('extension/dist',name),'utf8');
+    await writeFile(path.join(extensionPath,name),source.replaceAll('127.0.0.1:8765','127.0.0.1:8774'));
+  }
+  mockServer=http.createServer(async(req,res)=>{
+    try {
+      if(req.url==='/health'){res.setHeader('Content-Type','application/json');res.end('{"status":"ok"}');return;}
+      const request=new Request(backend+req.url,{method:'POST',headers:req.headers,body:req,duplex:'half'});
+      const form=await request.formData(),file=form.get('file'),bytes=new Uint8Array(await file.arrayBuffer());
+      if(req.url.startsWith('/api/v1/render-page'))mockRenders++;
+      await new Promise(resolve=>setTimeout(resolve,250));
+      if(req.url.startsWith('/api/v1/analyze-image')) {
+        res.setHeader('Content-Type','application/json');res.end(JSON.stringify({
+          original_text:'でも大丈夫',translation:'But it is okay.',tokens:[],processing:{ocr_ms:0,translation_ms:0,analysis_ms:0,total_ms:0}}));return;
+      }
+      const width=(bytes[16]*2**24+bytes[17]*65536+bytes[18]*256+bytes[19])>>>0;
+      const height=(bytes[20]*2**24+bytes[21]*65536+bytes[22]*256+bytes[23])>>>0;
+      const snapshot={schema_version:1,build:{version:'fixture',revision:null},image:{
+        width,height,input_sha256:createHash('sha256').update(bytes).digest('hex')},models:{},regions:[],
+        blocks:[{id:1,region_ids:[],ocr:{status:'success',confidence:null},translation:{status:'success'},
+          render:{status:'rendered',reason_code:'rendered'},text:{original:'でも大丈夫',translation:'But it is okay.'}}],
+        timings:{analysis:{ocr_ms:0}},counts:{rendered:1,preserved:0,undetected:null}};
+      const archive=packZip([{name:'rendered.png',data:bytes},
+        {name:'snapshot.json',data:new TextEncoder().encode(JSON.stringify(snapshot))}]);
+      res.setHeader('Content-Type','application/zip');res.end(Buffer.from(await archive.arrayBuffer()));
+    } catch {res.writeHead(500);res.end();}
+  });
+  await new Promise(resolve=>mockServer.listen(8774,'127.0.0.1',resolve));
+}
 
 const server=http.createServer(async(req,res)=>{
   try {
@@ -23,19 +61,20 @@ const crossServer=http.createServer((req,res)=>{
 });
 await new Promise(resolve=>server.listen(8772,"127.0.0.1",resolve));
 await new Promise(resolve=>crossServer.listen(8773,"127.0.0.1",resolve));
-const version=await(await fetch("http://127.0.0.1:9231/json/version")).json();
+const version=await(await fetch(`http://127.0.0.1:${process.env.YOMISCAN_TEST_CDP_PORT??9231}/json/version`)).json();
 const ws=new WebSocket(version.webSocketDebuggerUrl);
 await new Promise(resolve=>ws.addEventListener("open",resolve,{once:true}));
-let next=0;const callbacks=new Map();
-ws.addEventListener("message",event=>{const m=JSON.parse(event.data);if(m.id){const c=callbacks.get(m.id);callbacks.delete(m.id);m.error?c.reject(new Error(JSON.stringify(m.error))):c.resolve(m.result);}});
+let next=0;const callbacks=new Map(),contexts=[];
+ws.addEventListener("message",event=>{const m=JSON.parse(event.data);if(m.id){const c=callbacks.get(m.id);callbacks.delete(m.id);m.error?c.reject(new Error(JSON.stringify(m.error))):c.resolve(m.result);}
+  else if(m.method==='Runtime.executionContextCreated')contexts.push({session:m.sessionId,...m.params.context});});
 function call(method,params={},sessionId){return new Promise((resolve,reject)=>{const id=++next;callbacks.set(id,{resolve,reject});ws.send(JSON.stringify({id,method,params,sessionId}));});}
 const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
-async function evaluate(session,expression){const r=await call("Runtime.evaluate",{expression,returnByValue:true,awaitPromise:true},session);if(r.exceptionDetails)throw new Error(JSON.stringify(r.exceptionDetails));return r.result.value;}
+async function evaluate(session,expression,contextId){const r=await call("Runtime.evaluate",{expression,contextId,returnByValue:true,awaitPromise:true},session);if(r.exceptionDetails)throw new Error(JSON.stringify(r.exceptionDetails));return r.result.value;}
 async function until(check,timeout=60000){const end=Date.now()+timeout;while(Date.now()<end){const value=await check();if(value)return value;await wait(100);}throw new Error("Timed out");}
 function nodes(root){return [root,...(root.children??[]).flatMap(nodes),...(root.shadowRoots??[]).flatMap(nodes)];}
 let session,worker,extensionId,offscreen;
 async function find(predicate){const doc=await call("DOM.getDocument",{depth:-1,pierce:true},session);return nodes(doc.root).find(predicate);}
-async function invoke(node,fn){const o=await call("DOM.resolveNode",{nodeId:node.nodeId},session);const r=await call("Runtime.callFunctionOn",{objectId:o.object.objectId,functionDeclaration:fn,returnByValue:true},session);return r.result.value;}
+async function invoke(node,fn){const o=await call("DOM.resolveNode",{nodeId:node.nodeId},session);const r=await call("Runtime.callFunctionOn",{objectId:o.object.objectId,functionDeclaration:fn,returnByValue:true,awaitPromise:true,userGesture:true},session);if(r.exceptionDetails)throw new Error(JSON.stringify(r.exceptionDetails));return r.result.value;}
 const byClass=name=>n=>n.attributes?.includes(name);
 let panelObject;
 async function panel(){
@@ -48,12 +87,14 @@ async function panel(){
   return (await call("Runtime.callFunctionOn",{objectId:panelObject,functionDeclaration:"function(){return this.innerText}",returnByValue:true},session)).result.value;
 }
 async function click(text){const n=await find(n=>n.nodeName==="BUTTON"&&n.children?.some(c=>c.nodeValue===text));assert.ok(n,`Button ${text}`);await invoke(n,"function(){this.click()}");}
-const report={browser:version.Browser,checks:[]};
+const report={browser:version.Browser,mockedBackend:mocked,modelInference:!mocked,checks:[]};
 try {
-  assert.equal((await fetch("http://127.0.0.1:8765/health")).status,200);
+  assert.equal((await fetch(backend+"/health")).status,200);
+  await mkdir(reportDir,{recursive:true});
+  await call('Browser.setDownloadBehavior',{behavior:'allow',downloadPath:reportDir});
   const extensions=await call("Extensions.getExtensions");
   for(const extension of extensions.extensions)if(extension.name.startsWith("YomiScan"))await call("Extensions.uninstall",{id:extension.id});
-  extensionId=(await call("Extensions.loadUnpacked",{path:path.resolve("extension/dist")})).id;
+  extensionId=(await call("Extensions.loadUnpacked",{path:extensionPath})).id;
   const targetId=(await call("Target.createTarget",{url:"http://127.0.0.1:8772"})).targetId;
   session=(await call("Target.attachToTarget",{targetId,flatten:true})).sessionId;
   await call("Page.enable",{},session);await call("DOM.enable",{},session);
@@ -66,10 +107,11 @@ try {
   async function activate(){await call("Extensions.triggerAction",{id:extensionId,targetId:tabTarget.targetId});await until(()=>find(byClass("chapter-panel")));}
   await activate();await evaluate(session,"document.querySelector('#page-3').scrollIntoView()");await click("Translate Chapter");
   await until(async()=>(await panel()).includes("Page 3 processing"));report.checks.push("Visible page 3 prioritized before pages 1/2; avatars/logos excluded");
+  if(mocked)await until(()=>mockRenders>0); // Stop after acquisition, while backend work is in flight.
   await click("Stop Translation");
   await evaluate(session,"document.querySelector('#page-4').scrollIntoView()");
   await until(async()=>(await panel()).includes("1 / 5 pages translated"));
-  report.checks.push("Stop cancels queued work; scrolling during in-flight real inference works and its result is retained");
+  report.checks.push("Stop cancels queued work; scrolling during in-flight processing works and its result is retained");
   const offTarget=await until(async()=>(await call("Target.getTargets")).targetInfos.find(t=>t.url.includes(extensionId+"/offscreen.html")));
   offscreen=(await call("Target.attachToTarget",{targetId:offTarget.targetId,flatten:true})).sessionId;
   await evaluate(offscreen,`globalThis.testCalls=[];globalThis.failPage2=true;const nativeFetch=fetch;globalThis.fetch=async(url,options)=>{
@@ -78,7 +120,7 @@ try {
     if(id===2&&failPage2){failPage2=false;return new Response('',{status:500});}
     return nativeFetch(url,options);};`);
   await click("Translate Chapter");await until(async()=>(await panel()).includes("4 / 5 pages translated")&&(await panel()).includes("1 failed"),120000);
-  report.checks.push("Progressive real page rendering; injected page-2 HTTP failure does not stop later pages");
+  report.checks.push("Progressive page responses; injected page-2 HTTP failure does not stop later pages");
   const count=await evaluate(offscreen,"testCalls.length");await click("Original");await wait(100);
   assert.equal(await evaluate(session,"getComputedStyle(document.querySelector('[data-yomiscan=overlays]')).visibility"),"hidden");
   await click("English");await wait(100);
@@ -87,6 +129,61 @@ try {
   await wait(300);assert.equal(await evaluate(offscreen,"testCalls.length"),count);report.checks.push("Original/English toggles reuse cached results");
   await click("Retry Failed / Skipped");await until(async()=>(await panel()).includes("5 / 5 pages translated"),60000);
   report.checks.push("Explicit retry recovers failed page");
+  const pageSelector=await find(n=>n.nodeName==='SELECT');
+  await invoke(pageSelector,"function(){this.value='1'}");
+  await evaluate(session,"document.querySelector('#page-1').scrollIntoView()");await wait(150);
+  const beforeRefresh=await evaluate(offscreen,'testCalls.length');
+  await click('Retranslate Page');
+  await until(async()=>await evaluate(offscreen,'testCalls.length')===beforeRefresh+1);
+  await until(async()=>(await panel()).includes('5 / 5 pages translated'));
+  report.checks.push('Successful-page refresh reruns only the selected page');
+  await evaluate(offscreen,`const refreshFetch=fetch;globalThis.failRefresh=true;globalThis.fetch=async(url,options)=>{
+    if(failRefresh){failRefresh=false;return new Response('',{status:500});}return refreshFetch(url,options);};`);
+  await click('Retranslate Page');
+  await until(async()=>(await panel()).includes('Refresh failed; previous translation retained.'));
+  assert.ok((await panel()).includes('5 / 5 pages translated'));
+  await click('Original');await click('English');
+  report.checks.push('Failed refresh retains usable translation and Original/English toggles');
+  const callsBeforeExport=await evaluate(offscreen,'testCalls.length');
+  await click('Export Page Report');
+  const metadataFile=await until(async()=>(await readdir(reportDir)).find(name=>name.endsWith('.zip')));
+  const exported=await unpackZip(new Blob([await readFile(path.join(reportDir,metadataFile))]));
+  assert.deepEqual([...exported.keys()],['manifest.json','regions.json','timings.json']);
+  const manifest=JSON.parse(new TextDecoder().decode(exported.get('manifest.json')));
+  assert.equal(manifest.page.id,1);assert.equal(manifest.inclusions.text,false);
+  assert.ok(!JSON.stringify(manifest).includes('127.0.0.1'));
+  if(mocked) {
+    const options=nodes((await call('DOM.getDocument',{depth:-1,pierce:true},session)).root)
+      .filter(n=>n.nodeName==='INPUT'&&n.attributes?.includes('checkbox'));
+    for(const option of options.slice(-3))await invoke(option,"function(){this.checked=true;this.dispatchEvent(new Event('change'))}");
+    const prior=new Set(await readdir(reportDir));await click('Export Page Report');
+    const fullFile=await until(async()=>(await readdir(reportDir)).find(name=>name.endsWith('.zip')&&!prior.has(name)));
+    const full=await unpackZip(new Blob([await readFile(path.join(reportDir,fullFile))]));
+    assert.ok(full.has('optional/translation-debug.json'));assert.ok(full.has('optional/original.png'));assert.ok(full.has('optional/rendered.png'));
+    assert.ok(new TextDecoder().decode(full.get('optional/translation-debug.json')).includes('大丈夫'));
+  }
+  assert.equal(await evaluate(offscreen,'testCalls.length'),callsBeforeExport);
+  report.checks.push('Explicit local diagnostic download has metadata-only default; optional image/text inclusions tested in mock mode; export performs no inference');
+  if(mocked) {
+    await call('Runtime.enable',{},session);
+    const contentContext=contexts.find(c=>c.session===session&&c.origin===`chrome-extension://${extensionId}`);
+    assert.ok(contentContext,'extension content execution context');
+    // Hold optional PNG encoding while the same image receives a newer completed job.
+    // Its image hash is unchanged: result ownership must still cancel the old export.
+    await evaluate(session,`globalThis.holdReport=true;const convert=OffscreenCanvas.prototype.convertToBlob;
+      OffscreenCanvas.prototype.convertToBlob=async function(options){
+        if(holdReport){holdReport=false;await new Promise(resolve=>globalThis.releaseReport=resolve);}
+        return convert.call(this,options);};`,contentContext.id);
+    const downloadsBefore=new Set(await readdir(reportDir));
+    await click('Export Page Report');
+    await until(()=>evaluate(session,"typeof releaseReport==='function'",contentContext.id));
+    const calls=await evaluate(offscreen,'testCalls.length');await click('Retranslate Page');
+    await until(async()=>await evaluate(offscreen,'testCalls.length')===calls+1&&(await panel()).includes('5 / 5 pages translated'));
+    await evaluate(session,'releaseReport()',contentContext.id);
+    await until(async()=>(await panel()).includes('Page changed during report preparation; export cancelled.'));
+    assert.deepEqual(new Set(await readdir(reportDir)),downloadsBefore);
+    report.checks.push('Export cancelled when a newer job replaced its result, even with identical source pixels; no stale ZIP downloaded');
+  }
   await evaluate(session,"document.querySelector('#lazy').click();document.querySelector('#append').click()");
   await until(async()=>(await panel()).includes("7 / 7 pages translated"),120000);report.checks.push("data-src load and appended page discovered without restarting session");
   await call("Emulation.setDeviceMetricsOverride",{width:900,height:900,deviceScaleFactor:1,mobile:false},session);
@@ -110,8 +207,28 @@ try {
   await call("Input.dispatchMouseEvent",{type:"mouseMoved",x:crop.x+crop.width,y:crop.y+crop.height,button:"left",buttons:1},session);
   await call("Input.dispatchMouseEvent",{type:"mouseReleased",x:crop.x+crop.width,y:crop.y+crop.height,button:"left",clickCount:1},session);
   await until(async()=>{const p=await find(byClass("panel"));return p&&(await invoke(p,"function(){return this.innerText}")).includes("WORD BREAKDOWN");},30000);
-  assert.ok((await invoke(await find(byClass("panel")),"function(){return this.innerText}")).includes("大丈夫"),"Study must OCR Japanese, not the English overlay");
-  report.checks.push("Study captures ORIGINAL Japanese and returns actual OCR/translation/dictionary popup after chapter rendering");
+  assert.ok((await invoke(await find(byClass("panel")),"function(){return this.innerText}")).includes("大丈夫"));
+  report.checks.push(mocked?"Study selection/popup works with mocked analysis":"Study captures original Japanese with actual OCR/translation/dictionary");
+  await call('Browser.grantPermissions',{permissions:['clipboardReadWrite','clipboardSanitizedWrite'],origin:'http://127.0.0.1:8772'});
+  await click('Copy Japanese');
+  await until(async()=>(await invoke(await find(byClass('panel')),"function(){return this.innerText}")).includes('Copied.'));
+  assert.ok((await evaluate(session,'navigator.clipboard.readText()')).includes('大丈夫'));
+  await click('Copy English');
+  await until(async()=>!(await evaluate(session,'navigator.clipboard.readText()')).includes('大丈夫'));
+  const popup=await find(byClass('panel')),header=popup.children.find(n=>n.nodeName==='HEADER');
+  const headerRect=await invoke(header,"function(){const r=this.getBoundingClientRect();return {x:r.x+30,y:r.y+12}}");
+  await call('Input.dispatchMouseEvent',{type:'mousePressed',...headerRect,button:'left',clickCount:1},session);
+  await call('Input.dispatchMouseEvent',{type:'mouseMoved',x:40,y:50,button:'left',buttons:1},session);
+  await call('Input.dispatchMouseEvent',{type:'mouseReleased',x:40,y:50,button:'left',clickCount:1},session);
+  const oldBounds=await invoke(popup,"function(){const r=this.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height}}");
+  const corner=await find(n=>n.attributes?.includes('resize resize-corner'));
+  const cornerPoint=await invoke(corner,"function(){const r=this.getBoundingClientRect();return {x:r.right-8,y:r.bottom-8}}");
+  await call('Input.dispatchMouseEvent',{type:'mousePressed',...cornerPoint,button:'left',clickCount:1},session);
+  await call('Input.dispatchMouseEvent',{type:'mouseMoved',x:cornerPoint.x+30,y:cornerPoint.y+20,button:'left',buttons:1},session);
+  await call('Input.dispatchMouseEvent',{type:'mouseReleased',x:cornerPoint.x+30,y:cornerPoint.y+20,button:'left',clickCount:1},session);
+  const resizedWidth=await invoke(await find(byClass('panel')),"function(){return this.getBoundingClientRect().width}");
+  assert.ok(resizedWidth>oldBounds.width,JSON.stringify({oldBounds,cornerPoint,resizedWidth}));
+  report.checks.push('Study Copy Japanese/English succeeds with clipboard user gesture; popup remains draggable/resizable');
   await call("Input.dispatchKeyEvent",{type:"keyDown",key:"Escape",code:"Escape",windowsVirtualKeyCode:27},session);
   await activate();await click("Translate Chapter");await evaluate(session,"document.querySelector('#swap').click()");
   await until(async()=>await evaluate(offscreen,"testCalls.includes(99)"),30000);
@@ -121,7 +238,7 @@ try {
   report.checks.push("SPA URL navigation destroys chapter overlays/session");
   await click("Clear Session");await until(async()=>!await find(n=>n.attributes?.includes("overlays")));
   report.checks.push("Clear removes overlays and releases session results");
-  await call("Network.enable",{},worker);await call("Network.setBlockedURLs",{urls:["http://127.0.0.1:8765/*"]},worker);
+  await call("Network.enable",{},worker);await call("Network.setBlockedURLs",{urls:[backend+"/*"]},worker);
   await click("Translate Chapter");await until(async()=>(await panel()).includes("not running"));report.checks.push("Offline health check fails before queuing chapter requests");
   await call("Network.setBlockedURLs",{urls:[]},worker);
   await click("Clear Session");
@@ -183,6 +300,6 @@ try {
   await click("Clear Session");
   report.checks.push("24-page synthetic queue and cleanup (mocked render responses; not a model-quality benchmark)");
   report.status=await panel();report.requestOrder=await evaluate(offscreen,"testCalls");
-  await mkdir(".cache",{recursive:true});await writeFile(".cache/phase-7-browser.json",JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
-}catch(error){console.error(error);if(session)console.error("Controls:",await panel());process.exitCode=1;}
-finally{ws.close();server.closeAllConnections();server.close();crossServer.closeAllConnections();crossServer.close();}
+  await mkdir(".cache",{recursive:true});await writeFile(mocked?".cache/stage1-browser.json":".cache/phase-7-browser.json",JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
+}catch(error){console.error(error);console.error("Completed checks:",report.checks);if(session)console.error("Controls:",await panel());process.exitCode=1;}
+finally{ws.close();server.closeAllConnections();server.close();crossServer.closeAllConnections();crossServer.close();mockServer?.closeAllConnections();mockServer?.close();}

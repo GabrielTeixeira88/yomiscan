@@ -40,6 +40,10 @@ class NMTTranslationEngine:
         self._model = self._tokenizer = self._torch = None
         self._target_id: int | None = None
 
+    def diagnostic_metadata(self) -> dict[str, object]:
+        return {"engine": self.engine, "model": self.spec.model, "revision": self.spec.revision, "device": self.device,
+                "batch_size": self.batch_size, "num_beams": self.num_beams}
+
     def load(self) -> None:
         if self._model is not None:
             return

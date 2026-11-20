@@ -1,5 +1,6 @@
-import {CHUNK, MAX_INPUT, MAX_OUTPUT, encodeChunk, decodeChunk} from "./chapter/wire";
-import {parseCoverage} from './chapter/coverage';
+import {CHUNK, MAX_INPUT, encodeChunk, decodeChunk} from "./chapter/wire";
+import {readRenderResponse} from './chapter/render-response';
+import {imageHash} from './chapter/reports';
 
 // Serialize across chapter tabs too. Study requests still use the backend busy guard.
 let tail: Promise<void> = Promise.resolve();
@@ -36,22 +37,13 @@ chrome.runtime.onConnect.addListener(port => {
           try {
             controller.signal.throwIfAborted();
             const form=new FormData(); form.append("file",blob,mime==='image/jpeg'?'page.jpg':mime==='image/webp'?'page.webp':'page.png');
-            const response=await fetch("http://127.0.0.1:8765/api/v1/render-page",{method:"POST",body:form,
+            const inputHash=await imageHash(blob);
+            const response=await fetch("http://127.0.0.1:8765/api/v1/render-page?diagnostics=true",{method:"POST",body:form,
               headers:{"X-YomiScan-Client":"study-extension-v1"},signal:controller.signal,credentials:"omit",redirect:"error",cache:"no-store"});
-            if(!response.ok) throw new Error(response.status===429 ? "Backend is busy. Retry after the current operation finishes." :
-              response.status===503 ? "Backend resources unavailable. Check the server terminal." : `Local page rendering failed (HTTP ${response.status}).`);
-            if(response.headers.get("content-type")?.split(";")[0]!=="image/png") throw new Error("Backend did not return a PNG image");
-            const rendered=response.headers.get("X-YomiScan-Blocks-Rendered"),skipped=response.headers.get("X-YomiScan-Blocks-Skipped");
-            const rawCoverage=response.headers.get('X-YomiScan-Coverage');
-            const coverage=parseCoverage(rawCoverage===null?undefined:JSON.parse(rawCoverage));
-            if(rendered===null || skipped===null || !/^\d+$/.test(rendered) || !/^\d+$/.test(skipped))throw new Error("Backend returned invalid rendering metadata");
-            const reader=response.body!.getReader(); const output: Uint8Array<ArrayBuffer>[]=[]; let bytes=0;
-            while(true) { const item=await reader.read(); if(item.done) break; bytes+=item.value.length;
-              if(bytes>MAX_OUTPUT) { await reader.cancel(); throw new Error("Rendered page exceeds 32 MiB"); }
-              output.push(new Uint8Array(item.value)); }
-            const result=new Blob(output,{type:"image/png"}); output.length=0;
+            const page=await readRenderResponse(response,inputHash),result=page.blob;
             for(let offset=0; connected && offset<result.size; offset+=CHUNK) send({type:"chunk",data:await encodeChunk(result.slice(offset,offset+CHUNK))});
-            send({type:"result", rendered:Number(rendered), skipped:Number(skipped),coverage});
+            send({type:"result", rendered:page.rendered, skipped:page.skipped,coverage:page.coverage,
+              snapshot:page.snapshot,input_sha256:inputHash});
           } catch(error) {
             console.warn("YomiScan page request failed",error);
             fail(controller.signal.aborted ? new Error("Page request cancelled or timed out; backend may still be finishing") :

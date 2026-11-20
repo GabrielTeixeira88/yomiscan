@@ -12,6 +12,7 @@ export class ChapterControls {
   private sessionURL=location.href;
   private stitchEnabled=false;
   private pageSelect=document.createElement('select');
+  private exportButton:HTMLButtonElement;
   constructor(selectText:()=>void) {
     this.host.dataset.yomiscan="controls";
     this.host.style.cssText="all:initial!important;position:fixed!important;top:12px!important;right:12px!important;z-index:2147483646!important;";
@@ -41,6 +42,23 @@ export class ChapterControls {
     this.pageSelect.setAttribute('aria-label','Chapter page');
     pageLabel.append(this.pageSelect);panel.append(pageLabel,
       button('Retranslate Page',()=>this.current().refreshPage(this.selectedPageId())));
+    const inclusions={text:false,original:false,rendered:false};
+    const reportOptions=document.createElement('details'),reportTitle=document.createElement('summary');
+    reportTitle.textContent='Report inclusions (metadata only by default)';reportOptions.append(reportTitle);
+    for(const [key,label] of [['text','Include OCR and translation text'],['original','Include original page image'],
+      ['rendered','Include translated page image']] as const) {
+      const row=document.createElement('label'),box=document.createElement('input');box.type='checkbox';
+      box.addEventListener('change',()=>{inclusions[key]=box.checked;});
+      row.style.display='block';row.append(box,document.createTextNode(label));reportOptions.append(row);
+    }
+    const privacy=document.createElement('small');
+    privacy.textContent='Reports download locally. Text/images may contain private or copyrighted content; review before sharing. Recent originals are retained in memory only.';
+    reportOptions.append(privacy);
+    this.exportButton=button('Export Page Report',()=>{
+      this.exportButton.disabled=true;
+      void this.current().exportPageReport(this.selectedPageId(),{...inclusions}).finally(()=>{this.exportButton.disabled=false;});
+    });
+    panel.append(this.exportButton,reportOptions);
     const help=document.createElement("small");help.textContent="Selected pages stay on this machine. CPU processing may take time.";panel.append(help);
     const details=document.createElement("details"),summary=document.createElement("summary");summary.textContent="Developer diagnostics";
     details.append(summary,button("Log discovery / states",()=>this.current().diagnostics()));panel.append(details);
@@ -65,7 +83,8 @@ export class ChapterControls {
     this.original.setAttribute("aria-pressed",String(status.view==="original"));this.english.setAttribute("aria-pressed",String(status.view==="english"));
     const pending=this.session?[...this.session.queue.pages.values()].some(p=>p.state==="queued"):false;
     this.status.textContent=`${status.translated} / ${status.total} pages translated · ${status.failed} failed · ${status.skipped} skipped\n`+
-      (status.processing?`Page ${status.processing} processing…`:status.active&&!pending?"Known pages finished; watching for lazy-loaded pages.":status.message);
+      (status.processing?`Page ${status.processing} processing…`:status.active&&!pending?"Known pages finished; watching for lazy-loaded pages.":"")+
+      '\n'+status.message;
     const errors=this.session?[...this.session.queue.pages.values()].filter(p=>p.error&&!p.cancelled).slice(0,3).map(p=>`Page ${p.id}: ${p.error}`):[];
     const results=this.session?[...this.session.queue.pages.values()].flatMap(p=>p.result?[p.result]:[]):[];
     this.warning.textContent=errors.join("\n")+'\n'+coverageSummary(results);

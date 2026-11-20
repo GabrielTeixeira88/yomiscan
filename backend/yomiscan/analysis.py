@@ -63,6 +63,11 @@ class TextAnalyzer:
         self._dictionary = dictionary
         self._translator = translator
 
+    def translation_metadata(self) -> dict[str, object]:
+        describe = getattr(self._translator, "diagnostic_metadata", None)
+        metadata = describe() if callable(describe) else {}
+        return metadata if isinstance(metadata, dict) else {}
+
     def analyze(self, text: str) -> TextAnalysisResult:
         translation = self._translator.translate(text) if self._translator and text.strip() else None
         return self._analyze_lexical(text, translation)

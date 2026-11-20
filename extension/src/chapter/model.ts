@@ -8,7 +8,9 @@ export interface PageRecord<T, R> {
 export class SkipPage extends Error { readonly retryWhenVisible:boolean=false; }
 export class WaitForViewport extends SkipPage { override readonly retryWhenVisible:boolean=true; }
 /** A new viewport cannot fix permissions, authentication, or unsupported input. */
-export class ManualAcquisitionError extends SkipPage {}
+export class ManualAcquisitionError extends SkipPage {
+  constructor(message:string,readonly code='manual_retry') {super(message);}
+}
 
 /** Recomputed before every job: visible, next, previous, then distant pages. */
 export function viewportPriority(top: number, bottom: number, height: number): number {

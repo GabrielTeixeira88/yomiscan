@@ -39,6 +39,10 @@ class MarianTranslationEngine:
                 "First use requires internet; offline use requires a complete cache."
             ) from exc
 
+    def diagnostic_metadata(self) -> dict[str, object]:
+        return {"engine": "current", "model": DEFAULT_MODEL, "revision": MODEL_REVISION, "device": self.device,
+                "batch_size": self.batch_size, "num_beams": 4}
+
     def translate(self, text: str) -> TranslationResult:
         return self.translate_many([text])[0]
 
