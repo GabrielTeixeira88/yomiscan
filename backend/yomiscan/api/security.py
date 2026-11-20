@@ -28,6 +28,10 @@ class LocalRequestGuard:
         if origin and not allowed:
             await JSONResponse({"detail": "This browser origin is not allowed."}, 403)(scope, receive, send)
             return
+        private_read = scope.get("path") == "/api/v1/translation-profile" and scope["method"] == "GET"
+        if private_read and headers.get(CLIENT_HEADER) != CLIENT_VALUE:
+            await JSONResponse({"detail": "Missing YomiScan client header."}, 403)(scope, receive, send)
+            return
         if scope["method"] != "POST":
             await self.app(scope, receive, send)
             return
@@ -41,9 +45,10 @@ class LocalRequestGuard:
             if message["type"] == "http.disconnect":
                 return
             body.extend(message.get("body", b""))
-            limit = 1024 if scope.get("path", "").startswith("/api/v1/cache") else MAX_BODY_BYTES
+            administration = scope.get("path", "").startswith(("/api/v1/cache", "/api/v1/glossaries"))
+            limit = 1024 if scope.get("path", "").startswith("/api/v1/cache") else 2048 if administration else MAX_BODY_BYTES
             if len(body) > limit:
-                detail = "Cache settings exceed 1 KiB." if limit == 1024 else "Upload exceeds the 10 MiB image limit."
+                detail = "Local settings body exceeds its limit." if administration else "Upload exceeds the 10 MiB image limit."
                 await JSONResponse({"detail": detail}, 413)(scope, receive, send)
                 return
             if not message.get("more_body", False):

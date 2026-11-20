@@ -13,14 +13,19 @@ from pathlib import Path
 from time import perf_counter
 from typing import Annotated, cast
 
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile, Query
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile, Query, Form
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
+from pydantic import TypeAdapter, ValidationError
+from dataclasses import fields
+from threading import Event
+import sqlite3
 from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from yomiscan.service import ImageAnalysisService, open_local_service, PageRefreshError
+from yomiscan.service import ImageAnalysisService, open_local_service, PageRefreshError, TranslationConfigurationChanged
 from yomiscan.cache import Refresh, MiB
+from yomiscan.translation.options import TranslationOptions, TargetLanguage
 from yomiscan.translation.base import Device
 from yomiscan.detection import DetectionInitializationError
 from .images import decode_image, MAX_FILE_BYTES
@@ -37,6 +42,44 @@ class CacheSettings(BaseModel):
     disk_bytes: int | None = Field(default=None, ge=MiB, le=16*1024*MiB)
 
 
+class SeriesCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    label: str = Field(min_length=1, max_length=100)
+
+
+class SeriesDelete(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    scope: str = Field(min_length=1, max_length=36)
+
+
+class GlossaryTerm(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    scope: str = Field(min_length=1, max_length=36)
+    target_language: TargetLanguage
+    source: str = Field(min_length=1, max_length=120)
+    preferred: str = Field(min_length=1, max_length=200)
+    entry_id: str | None = Field(default=None, min_length=36, max_length=36)
+
+
+class GlossaryDelete(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    scope: str = Field(min_length=1, max_length=36)
+    target_language: TargetLanguage
+    entry_id: str = Field(min_length=36, max_length=36)
+
+
+def parse_options(encoded: str | None) -> TranslationOptions | None:
+    if encoded is None:
+        return None
+    try:
+        data = json.loads(encoded)
+        if not isinstance(data, dict) or set(data)-{f.name for f in fields(TranslationOptions)}:
+            raise ValueError("Unknown translation option")
+        return TypeAdapter(TranslationOptions).validate_json(encoded, strict=True)
+    except (ValueError, TypeError, ValidationError) as exc:
+        raise HTTPException(422, "Invalid bounded translation options") from exc
+
+
 def default_service() -> AbstractContextManager[ImageAnalysisService]:
     device = os.getenv("YOMISCAN_DEVICE", "auto")
     if device not in ("auto", "cpu", "cuda"):
@@ -48,7 +91,8 @@ def default_service() -> AbstractContextManager[ImageAnalysisService]:
 
 def analyze_upload(service: ImageAnalysisService, data: bytes, page: bool = False,
                    render: bool = False, diagnostics: bool = False, refresh: Refresh = "none",
-                   configuration: str | None = None) -> ImageAnalysisResponse | PageAnalysisResponse | Response:
+                   configuration: str | None = None, options: TranslationOptions | None = None,
+                   cancel: Event | None = None) -> ImageAnalysisResponse | PageAnalysisResponse | Response:
     start = perf_counter()
     try:
         image = decode_image(data)
@@ -61,13 +105,18 @@ def analyze_upload(service: ImageAnalysisService, data: bytes, page: bool = Fals
             try:
                 if render:
                     try:
-                        result = service.translate_and_render_page(image, refresh=refresh) if refresh != "none" else service.translate_and_render_page(image)
+                        keywords = {}
+                        if refresh != "none": keywords["refresh"] = refresh
+                        if options is not None: keywords["options"] = options
+                        if cancel is not None: keywords["cancel"] = cancel
+                        result = service.translate_and_render_page(image, **keywords)
                     except PageRefreshError as exc:
                         raise HTTPException(502, "Page refresh failed; previous translation retained. See server logs.") from exc
                     if diagnostics:
                         from yomiscan.diagnostics import page_snapshot, render_bundle
-                        snapshot = page_snapshot(image, result, input_sha256=sha256(data).hexdigest(),
-                                                 models=service.diagnostic_models())
+                        models = service.diagnostic_models()
+                        models.setdefault("settings", {}).update(result.diagnostics.get("translation_settings", {}))
+                        snapshot = page_snapshot(image, result, input_sha256=sha256(data).hexdigest(), models=models)
                         snapshot["timings"]["backend_before_pack_ms"] = (perf_counter() - start) * 1000
                         try:
                             bundle = render_bundle(result.rendered_image, snapshot)
@@ -83,7 +132,11 @@ def analyze_upload(service: ImageAnalysisService, data: bytes, page: bool = Fals
                         "X-YomiScan-Processing-Ms": f"{result.analysis_processing.get('pipeline_total_ms', 0):.1f}",
                         "Cache-Control": "no-store",
                     })
-                return PageAnalysisResponse.from_result(service.analyze_page(image))
+                return PageAnalysisResponse.from_result(service.analyze_page(image, options=options, cancel=cancel) if options is not None else service.analyze_page(image))
+            except TranslationConfigurationChanged as exc:
+                raise HTTPException(409, "Glossary changed. Reload translation settings and start the chapter again.") from exc
+            except ValueError as exc:
+                raise HTTPException(422, str(exc)) from exc
             except DetectionInitializationError as exc:
                 logger.exception("Page detector unavailable")
                 raise HTTPException(503, "Page detector unavailable. Check server logs and model setup.") from exc
@@ -155,16 +208,18 @@ def create_app(
         return await handle_upload(request, file, page=False)
 
     @app.post("/api/v1/analyze-page", response_model=PageAnalysisResponse)
-    async def analyze_page(request: Request, file: Annotated[UploadFile, File()]) -> PageAnalysisResponse:
-        return await handle_upload(request, file, page=True)
+    async def analyze_page(request: Request, file: Annotated[UploadFile, File()],
+                           options_json: Annotated[str | None, Form(max_length=2048)] = None) -> PageAnalysisResponse:
+        return await handle_upload(request, file, page=True, options=parse_options(options_json))
 
     @app.post("/api/v1/render-page", response_class=Response,
               responses={200: {"content": {"image/png": {}, "application/zip": {}}}})
     async def render_page(request: Request, file: Annotated[UploadFile, File()], diagnostics: bool = False,
                           refresh: Refresh = "none",
+                          options_json: Annotated[str | None, Form(max_length=2048)] = None,
                           configuration: Annotated[str | None, Query(pattern=r"^[a-f0-9]{64}$", max_length=64)] = None) -> Response:
         return await handle_upload(request, file, page=True, render=True, diagnostics=diagnostics,
-                                   refresh=refresh, configuration=configuration)
+                                   refresh=refresh, configuration=configuration, options=parse_options(options_json))
 
     async def cache_operation(request: Request, operation: Callable[[ImageAnalysisService], object]):
         state = request.app.state
@@ -184,6 +239,39 @@ def create_app(
         except OSError as exc:
             logger.exception("Cache administration failed")
             raise HTTPException(503, "Local cache storage is unavailable. Check permissions and server logs.") from exc
+        except sqlite3.Error as exc:
+            logger.exception("Local user-data operation failed")
+            raise HTTPException(503, "Local glossary data unavailable. Preserve its database and check server logs.") from exc
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @app.get("/api/v1/translation-profile")
+    async def translation_profile(request: Request, scope: Annotated[str, Query(max_length=36)] = "global",
+                                  target: TargetLanguage | None = None):
+        return await cache_operation(request, lambda service: service.translation_profile(scope, target))
+
+    @app.post("/api/v1/glossaries/series")
+    async def glossary_series(request: Request, item: SeriesCreate):
+        return await cache_operation(request, lambda service: {"id": service.glossaries.create_series(item.label)})
+
+    @app.post("/api/v1/glossaries/delete-series")
+    async def glossary_delete_series(request: Request, item: SeriesDelete):
+        def perform(service: ImageAnalysisService):
+            service.glossaries.delete_series(item.scope)
+            return {"ok": True}
+        return await cache_operation(request, perform)
+
+    @app.post("/api/v1/glossaries/term")
+    async def glossary_term(request: Request, item: GlossaryTerm):
+        return await cache_operation(request, lambda service: {"id": service.glossaries.save_entry(
+            item.scope, item.target_language, item.source, item.preferred, entry_id=item.entry_id)})
+
+    @app.post("/api/v1/glossaries/delete-term")
+    async def glossary_delete_term(request: Request, item: GlossaryDelete):
+        def perform(service: ImageAnalysisService):
+            service.glossaries.delete_entry(item.scope, item.target_language, item.entry_id)
+            return {"ok": True}
+        return await cache_operation(request, perform)
 
     @app.get("/api/v1/cache")
     async def cache_status(request: Request):
@@ -200,7 +288,7 @@ def create_app(
 
     async def handle_upload(request: Request, file: UploadFile, *, page: bool,
                             render: bool = False, diagnostics: bool = False, refresh: Refresh = "none",
-                            configuration: str | None = None) -> ImageAnalysisResponse | PageAnalysisResponse | Response:
+                            configuration: str | None = None, options: TranslationOptions | None = None) -> ImageAnalysisResponse | PageAnalysisResponse | Response:
         try:
             data = await file.read(MAX_FILE_BYTES + 1)
         finally:
@@ -215,10 +303,11 @@ def create_app(
         if state.busy:
             raise HTTPException(429, "YomiScan is processing another crop. Please try again shortly.")
         state.busy = True
+        cancel = Event() if options is not None and options.mode != "sentences" else None
         def perform_upload():
             if isinstance(state.service, ImageAnalysisService):
                 state.configuration_id = state.service.configuration_id()
-            return analyze_upload(state.service, data, page, render, diagnostics, refresh, configuration)
+            return analyze_upload(state.service, data, page, render, diagnostics, refresh, configuration, options, cancel)
         future = asyncio.get_running_loop().run_in_executor(state.executor, perform_upload)
 
         def finished(task: asyncio.Future) -> None:
@@ -230,8 +319,18 @@ def create_app(
                     logger.error("Image analysis failed", exc_info=(type(error), error, error.__traceback__))
 
         future.add_done_callback(finished)
+        async def watch_disconnect():
+            while not future.done():
+                if await request.is_disconnected():
+                    cancel.set()
+                    return
+                await asyncio.sleep(.1)
+        monitor = asyncio.create_task(watch_disconnect()) if cancel is not None else None
         try:
             return await asyncio.shield(future)
+        except asyncio.CancelledError:
+            if cancel is not None: cancel.set()
+            raise
         except HTTPException:
             raise
         except Exception as exc:
@@ -239,6 +338,9 @@ def create_app(
             if page:
                 raise HTTPException(500, "Page analysis failed. See server logs for diagnostics.") from exc
             raise HTTPException(500, "Image analysis failed. Try a smaller clear crop; see server logs.") from exc
+        finally:
+            if monitor is not None:
+                monitor.cancel()
 
     return app
 

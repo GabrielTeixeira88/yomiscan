@@ -7,6 +7,7 @@ local artifacts never trigger a download and never fall back to a model's name.
 from dataclasses import asdict
 from functools import lru_cache
 import hashlib
+import re
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
@@ -69,12 +70,17 @@ def result_metadata(metadata: dict[str, object]) -> dict[str, object]:
     from .diagnostics import model_info
     result = model_info(metadata)
     for key in ("timing_scope", "cache_prompt", "recognition_status", "termination", "uncertainty", "confidence_method",
-                "confidence", "tokens", "runtime", "prompt_version"):
+                "confidence", "tokens", "runtime", "prompt_version", "target_language", "requested_target",
+                "regional_variant_verified", "grammar_contract", "translation_mode", "block_id", "panel_id",
+                "context_policy", "glossary_terms", "glossary_application", "fallback", "input_tokens", "output_tokens", "token_budget"):
         value = metadata.get(key)
         if value is None or isinstance(value, (bool, int, float)):
             result[key] = value
         elif isinstance(value, str) and len(value) <= 100 and all(c.isalnum() or c in "_- ." for c in value):
             result[key] = value
+    ids = metadata.get("context_ids")
+    if isinstance(ids, list) and len(ids) <= 6 and all(isinstance(value, str) and value.startswith("B") and value[1:].isdigit() for value in ids):
+        result["context_ids"] = ids
     return result
 
 
@@ -96,7 +102,7 @@ def component_identity(component: Any) -> object | None:
         # diagnostic_metadata() method is NOT an effective configuration contract.
         if name == "yomiscan.rendering.renderer.ConservativePageRenderer":
             from .rendering.inpainting import OpenCVInpaintingEngine
-            from .rendering.typesetting import PillowTypesetter
+            from .rendering.typesetting import PillowTypesetter, LATIN_FONT
             from .rendering.masks import UniformBackgroundMaskGenerator
             if (type(component.typesetter) is not PillowTypesetter or type(component.inpainter) is not OpenCVInpaintingEngine
                 or type(component.masks) is not UniformBackgroundMaskGenerator):
@@ -105,6 +111,7 @@ def component_identity(component: Any) -> object | None:
             import PIL.ImageFont
             return {"font_sizes": [font.minimum_size, font.maximum_size, font.preferred_size, font.margin],
                     "bundled_font": file_identity(Path(PIL.ImageFont.__file__)),
+                    "latin_font": file_identity(LATIN_FONT),
                     "masks": asdict(component.masks.config), "inpaint": vars(component.inpainter).copy(),
                     "algorithm": algorithm(*("rendering/"+f+".py" for f in (
                         "renderer", "service", "masks", "inpainting", "typesetting", "layout_regions", "coverage", "artwork"))),
@@ -136,6 +143,13 @@ def component_identity(component: Any) -> object | None:
                     return None
                 artifacts = {label: file_identity(path) for label, path in (
                     ("gguf", runtime.model), ("runtime", runtime.executable), ("lora", runtime.lora)) if path is not None}
+                split = re.fullmatch(r"(.+)-[0-9]{5}-of-([0-9]{5})\.gguf", runtime.model.name)
+                if split:
+                    count = int(split[2])
+                    if not 1 <= count <= 32:
+                        return None
+                    artifacts["gguf_shards"] = digest({str(i): file_identity(runtime.model.with_name(
+                        f"{split[1]}-{i:05d}-of-{count:05d}.gguf")) for i in range(1, count+1)})
                 artifacts["runtime_libraries"] = digest({p.name: file_identity(p) for p in runtime.executable.parent.iterdir()
                     if p.is_file() and p.suffix.lower() in (".dll", ".so", ".dylib")})
             else:

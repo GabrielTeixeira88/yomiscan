@@ -12,11 +12,17 @@ import secrets
 import socket
 import subprocess
 import tempfile
+import logging
+from typing import TYPE_CHECKING
 from time import monotonic, perf_counter, sleep
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+from threading import Event, Thread
 
 from .base import Device, TranslationContext, TranslationError, TranslationInitializationError, TranslationResult, validate_text
+from .options import TranslationCapabilities
+if TYPE_CHECKING:
+    from .structured import PageTranslationRequest
 
 HY_MODEL = "fumetodev/Hy-MT2-1.8B-JP-Manga-Finetune-v5-GGUF"
 HY_REVISION = "e17bc6a8dd92ddf930bd7858ceb916117ee5f916"
@@ -83,6 +89,12 @@ class LlamaServer:
         self._log = None
         self.url = ""
         self._key = secrets.token_urlsafe(32)
+        self.record_debug = False  # Explicit benchmark-only opt-in; never enabled by reader requests.
+        self.debug_responses: list[dict[str, object]] = []
+
+    def _record_response(self, payload: dict[str, object]) -> None:
+        if self.record_debug and len(self.debug_responses) < 32 and len(json.dumps(payload).encode()) <= 128*1024:
+            self.debug_responses.append(payload)
 
     def load(self) -> None:
         if self.process is not None:
@@ -143,6 +155,7 @@ class LlamaServer:
         try:
             with urlopen(request, timeout=self.timeout) as response:
                 payload = json.load(response)
+            self._record_response(payload)
             choice = payload["choices"][0]
             if choice["finish_reason"] != "stop":
                 raise TranslationError(f"Local model output did not finish normally: {choice['finish_reason']}")
@@ -155,6 +168,82 @@ class LlamaServer:
             raise TranslationError(f"Local inference HTTP {exc.code}: {detail}") from exc
         except (URLError, TimeoutError, ValueError, KeyError, IndexError, TypeError) as exc:
             raise TranslationError(f"Invalid/failed local inference response: {exc}") from exc
+
+    def generate_json(self, messages: list[dict[str, str]], schema: dict[str, object], *,
+                      max_tokens: int, cancel: Event | None = None) -> tuple[str, dict[str, object]]:
+        """Pinned server JSON-schema interface, exact prompt-token preflight, bounded response.
+
+        Cancellation terminates only this transport's owned inference subprocess. It
+        may require reloading next time; it cannot leave a partial page as success.
+        """
+        from .structured import StructuredTranslationError
+        if cancel is not None and cancel.is_set():
+            raise StructuredTranslationError("cancelled", "Structured page translation cancelled")
+        done = Event()
+        def watch() -> None:
+            while not done.wait(.05):
+                if cancel is not None and cancel.is_set() and self.process is not None:
+                    process = self.process
+                    if process.poll() is None:
+                        try:
+                            process.terminate()
+                            process.wait(timeout=1)
+                        except subprocess.TimeoutExpired:
+                            process.kill()
+                        except OSError:
+                            logging.getLogger(__name__).warning("Owned runtime cancellation raced with process exit", exc_info=True)
+                    return
+        watcher = Thread(target=watch, daemon=True) if cancel is not None else None
+        if watcher is not None:
+            watcher.start()
+        def post(endpoint: str, body: dict[str, object]) -> dict:
+            request = Request(self.url+endpoint, data=json.dumps(body).encode(), headers={
+                "Content-Type": "application/json", "Authorization": "Bearer "+self._key})
+            with urlopen(request, timeout=self.timeout) as response:
+                encoded = response.read(1024*1024+1)
+            if len(encoded) > 1024*1024:
+                raise StructuredTranslationError("output_limit", "Local structured response exceeds 1 MiB")
+            result = json.loads(encoded)
+            if not isinstance(result, dict):
+                raise ValueError("Expected a JSON response object")
+            return result
+        try:
+            self.load()
+            template = post("/apply-template", {"messages": messages})["prompt"]
+            if not isinstance(template, str) or len(template.encode()) > 64*1024:
+                raise StructuredTranslationError("input_limit", "Chat template exceeds the input byte budget")
+            tokens = post("/tokenize", {"content": template, "add_special": True, "parse_special": True})["tokens"]
+            if not isinstance(tokens, list) or any(type(t) is not int for t in tokens):
+                raise ValueError("Runtime returned invalid token IDs")
+            if not 1 <= max_tokens <= 2048 or len(tokens)+max_tokens+64 > self.context_size:
+                raise StructuredTranslationError("context_limit", "Complete prompt plus output/reserve exceeds the runtime context; nothing was truncated")
+            payload = post("/v1/chat/completions", {"model": "yomiscan", "messages": messages, "temperature": 0, "seed": 0,
+                "max_tokens": max_tokens, "stream": False, "repeat_penalty": 1.0, "cache_prompt": False,
+                "response_format": {"type": "json_schema", "json_schema": {"name": "page_translations", "schema": schema}}})
+            self._record_response(payload)
+            if cancel is not None and cancel.is_set():
+                raise StructuredTranslationError("cancelled", "Structured page translation cancelled")
+            choice = payload["choices"][0]
+            if choice["finish_reason"] != "stop":
+                raise StructuredTranslationError("incomplete_termination", "Structured generation did not terminate normally")
+            output = choice["message"]["content"]
+            if not isinstance(output, str) or not output.strip():
+                raise StructuredTranslationError("invalid_format", "Structured generation returned no content")
+            usage = payload.get("usage", {})
+            return output, {"input_tokens": len(tokens), "output_tokens": usage.get("completion_tokens"),
+                            "token_budget": max_tokens, "context_tokens": self.context_size, "termination": "stop"}
+        except (HTTPError, URLError, TimeoutError, OSError, ValueError, KeyError, IndexError, TypeError) as exc:
+            if cancel is not None and cancel.is_set():
+                raise StructuredTranslationError("cancelled", "Structured translation cancelled; owned runtime stopped") from exc
+            code = "timeout" if isinstance(exc, TimeoutError) or isinstance(getattr(exc, "reason", None), TimeoutError) else "runtime_error"
+            raise StructuredTranslationError(code, "Local structured translation failed; verify the pinned runtime and server logs") from exc
+        finally:
+            done.set()
+            if watcher is not None:
+                watcher.join(timeout=2)
+            if cancel is not None and cancel.is_set():
+                self.close()
+                self.device = "unloaded"
 
     def close(self) -> None:
         if self.process is not None:
@@ -190,6 +279,37 @@ class MangaTranslationEngine:
                 "base_revision": Q25_BASE_REVISION if self.engine == "qwen25-manga" else None,
                 "expected_revision": {"hy-mt2-manga": HY_REVISION, "qwen35-vntl": VNTL_REVISION,
                                       "qwen25-manga": Q25_REVISION}[self.engine]}
+
+    def capabilities(self) -> TranslationCapabilities:
+        available = self.engine in ("hy-mt2-manga", "qwen25-manga")
+        return TranslationCapabilities(glossary_hints=True, structured=available, bounded_context=available)
+
+    def translate_page(self, request: "PageTranslationRequest", *, cancel: Event | None = None) -> list[TranslationResult]:
+        from .structured import (CONTRACT_VERSION, request_groups, structured_messages, output_schema,
+                                 parse_output, context_for, StructuredTranslationError)
+        if not self.capabilities().structured:
+            raise StructuredTranslationError("unsupported_engine", "This adapter has no validated structured runtime contract")
+        if self.runtime is None:
+            raise StructuredTranslationError("runtime_unavailable", "Configure the selected local LLM artifact first")
+        results = {}
+        # Collect all groups before returning: later panel failure invalidates the whole page.
+        for group in request_groups(request):
+            if cancel is not None and cancel.is_set():
+                raise StructuredTranslationError("cancelled", "Structured translation cancelled")
+            start = perf_counter()
+            output, usage = self.runtime.generate_json(structured_messages(request, group), output_schema(group),
+                max_tokens=min(2048, 128*len(group)+64), cancel=cancel)
+            parsed = parse_output(output, group)
+            elapsed = (perf_counter()-start)*1000
+            for segment in group:
+                results[segment.id] = TranslationResult(segment.text, parsed[segment.id], self.engine, self.model, elapsed,
+                    {"device": self.device, "runtime": "llama.cpp", "target_language": request.target_language,
+                     "prompt_version": 3, "grammar_contract": CONTRACT_VERSION, "translation_mode": request.mode,
+                     "block_id": segment.id, "panel_id": segment.panel_id, "context_policy": request.context,
+                     "context_ids": [s.id for s in context_for(request, group)], "glossary_terms": len(request.glossary),
+                     "glossary_application": "hints" if request.glossary else "none", "fallback": "none",
+                     "timing_scope": "structured_group", **usage})
+        return [results[segment.id] for segment in request.segments]
 
     def load(self) -> None:
         if self.runtime is None:

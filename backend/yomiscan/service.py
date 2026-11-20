@@ -20,6 +20,10 @@ from .page import PageAnalysisService, PageAnalysisResult
 from .cache import ProcessingCache, CacheRequest, Refresh, digest
 from .cache_identity import component_identity
 from typing import TYPE_CHECKING
+from threading import Event
+from dataclasses import asdict
+from .glossary import GlossaryStore, GlossaryEntry
+from .translation.options import TranslationOptions, capabilities, validate_options, TARGET_NAMES
 
 if TYPE_CHECKING:
     from .rendering.base import PageRenderResult
@@ -30,10 +34,14 @@ class PageRefreshError(RuntimeError):
     """A forced refresh failed; the caller must retain its previous output."""
 
 
+class TranslationConfigurationChanged(ValueError):
+    """A reader's glossary snapshot is no longer current."""
+
+
 class ImageAnalysisService:
     def __init__(self, ocr: OCREngine, analyzer: TextAnalyzer, *,
                  detector: TextDetector | None = None, device: Device = "auto",
-                 cache: ProcessingCache | None = None) -> None:
+                 cache: ProcessingCache | None = None, glossaries: GlossaryStore | None = None) -> None:
         self._ocr = ocr
         self._analyzer = analyzer
         self._detector = detector
@@ -45,6 +53,42 @@ class ImageAnalysisService:
         # This is a browser session generation, not a persistent stage key.
         # Restarts deliberately invalidate browser results; disk entries remain reusable.
         self._initial_detector = detector
+        self._glossaries = glossaries
+
+    @property
+    def glossaries(self) -> GlossaryStore:
+        if self._glossaries is None:
+            path = Path(os.getenv("YOMISCAN_GLOSSARY_DATABASE", "data/glossaries.sqlite3"))
+            if path.resolve() in {(self.cache.directory/name).resolve() for name in ("stages.sqlite3", "settings.json")} or (
+                path.resolve() == getattr(self._analyzer._dictionary, "_path", None)):
+                raise ValueError("Glossary user data must use its own database, separate from dictionaries and processing cache")
+            self._glossaries = GlossaryStore(path)
+        return self._glossaries
+
+    def translation_profile(self, scope: str = "global", target: str | None = None) -> dict[str, object]:
+        support = capabilities(self._analyzer._translator)
+        selected_target = target or support.targets[0]
+        if selected_target not in TARGET_NAMES:
+            raise ValueError("Unknown glossary target language")
+        if selected_target not in support.targets:
+            selected_target = support.targets[0]
+        entries = self.glossaries.entries(scope, selected_target)
+        return {"engine": self._analyzer.translation_metadata(), "capabilities": asdict(support),
+                "default_target": support.targets[0], "series": self.glossaries.series(),
+                "scope": scope, "target_language": selected_target, "entries": [asdict(e) for e in entries],
+                "glossary_version": self.glossaries.identity(scope, selected_target),
+                "dictionary_language": "en", "configuration_id": self.configuration_id()}
+
+    def _prepare_translation(self, options: TranslationOptions | None) -> tuple[TranslationOptions, tuple[GlossaryEntry, ...]]:
+        effective = options or TranslationOptions(target_language=capabilities(self._analyzer._translator).targets[0])
+        validate_options(self._analyzer._translator, effective)
+        entries = ()
+        if effective.glossary_enabled:
+            entries = self.glossaries.effective(effective.series_id, effective.target_language)
+            version = self.glossaries.identity(effective.series_id, effective.target_language)
+            if effective.glossary_version is not None and effective.glossary_version != version:
+                raise TranslationConfigurationChanged("Glossary changed; reload translation settings before translating this page")
+        return effective, entries
 
     def configuration_id(self) -> str:
         if self._render_service is None:
@@ -72,7 +116,7 @@ class ImageAnalysisService:
             {"engine": "manga-ocr", "revision": None} if isinstance(self._ocr, MangaOCREngine) else {"engine": None})
         if not isinstance(ocr_metadata, dict):
             ocr_metadata = {"engine": None}
-        settings: dict[str, object] = {"analysis_device": self._device, "target_language": "en"}
+        settings: dict[str, object] = {"analysis_device": self._device, "target_language": capabilities(self._analyzer._translator).targets[0]}
         if self._page_service is not None:
             settings.update(padding=self._page_service.config.padding, minimum_side=self._page_service.config.minimum_side)
         if self._render_service is not None:
@@ -97,20 +141,26 @@ class ImageAnalysisService:
         if callable(close):
             close()
         self.cache.close()
+        if self._glossaries is not None:
+            self._glossaries.close()
 
-    def analyze_page(self, image: Image.Image) -> PageAnalysisResult:
-        return self._analyze_page(image, CacheRequest(self.cache))
+    def analyze_page(self, image: Image.Image, *, options: TranslationOptions | None = None,
+                     cancel: Event | None = None) -> PageAnalysisResult:
+        return self._analyze_page(image, CacheRequest(self.cache), options=options, cancel=cancel)
 
-    def _analyze_page(self, image: Image.Image, request: CacheRequest) -> PageAnalysisResult:
+    def _analyze_page(self, image: Image.Image, request: CacheRequest, *, options: TranslationOptions | None = None,
+                      cancel: Event | None = None) -> PageAnalysisResult:
+        effective, entries = self._prepare_translation(options)
         # Lazy initialization on the same owning worker: Study Mode never needs this model.
         if self._page_service is None:
             from .detection.factory import create_detector
             detector = self._detector if self._detector is not None else create_detector(device=self._device)
             self._page_service = PageAnalysisService(detector, self._ocr, self._analyzer)
-        return self._page_service.analyze_page(image, cache=request)
+        return self._page_service.analyze_page(image, cache=request, options=effective, entries=entries, cancel=cancel)
 
     def translate_and_render_page(self, image: Image.Image, analysis: PageAnalysisResult | None = None,
-                                  *, debug: bool = False, refresh: Refresh = "none") -> "PageRenderResult":
+                                  *, debug: bool = False, refresh: Refresh = "none",
+                                  options: TranslationOptions | None = None, cancel: Event | None = None) -> "PageRenderResult":
         start = perf_counter()
         if self._render_service is None:
             from .rendering.renderer import ConservativePageRenderer
@@ -118,7 +168,9 @@ class ImageAnalysisService:
             self._render_service = PageTranslationRenderService(self, ConservativePageRenderer())
         request = CacheRequest(self.cache, refresh)
         if analysis is None:
-            analysis = self._analyze_page(image, request)
+            analysis = self._analyze_page(image, request, options=options, cancel=cancel)
+        if options is not None and options.mode != "sentences" and any(b.status == "error" for b in analysis.text_blocks):
+            raise PageRefreshError("Structured page failed; original or previous translation retained")
         if refresh in ("translation", "all") and any(b.status == "error" for b in analysis.text_blocks):
             raise PageRefreshError("Page refresh failed; previous translation retained.")
         result = self._render_service.translate_and_render_page(image, analysis, debug=debug, cache=request)

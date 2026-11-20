@@ -38,6 +38,8 @@ class ImageAnalysisResponse(BaseModel):
     translation: str | None
     processing: ProcessingTimes
     tokens: list[TokenResponse]
+    target_language: str = "en"
+    dictionary_language: str = "en"
 
     @classmethod
     def from_result(cls, result: ImageAnalysisResult, total_ms: float) -> "ImageAnalysisResponse":
@@ -45,6 +47,8 @@ class ImageAnalysisResponse(BaseModel):
         return cls(
             original_text=analysis.original_text,
             translation=analysis.translation.translated_text if analysis.translation else None,
+            target_language=str(analysis.translation.metadata.get("requested_target", analysis.translation.metadata.get("target_language", "en")))
+                if analysis.translation else "en",
             processing=ProcessingTimes(
                 ocr_ms=result.ocr.processing_time_ms,
                 translation_ms=analysis.translation.processing_time_ms if analysis.translation else 0,

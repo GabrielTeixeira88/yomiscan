@@ -10,14 +10,26 @@ import sys
 from huggingface_hub import hf_hub_download, snapshot_download
 from yomiscan.translation.manga import HY_MODEL, HY_REVISION, Q25_MODEL, Q25_REVISION, Q25_BASE, Q25_BASE_REVISION
 from yomiscan.translation.nmt import NMT_MODELS
+from yomiscan.translation.marian import OPUS_EXPERIMENTS
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--engine", required=True, choices=("hy-mt2-manga", "qwen25-manga", *NMT_MODELS))
+    parser.add_argument("--engine", required=True, choices=("hy-mt2-manga", "qwen25-manga", *NMT_MODELS, "opus-ja-pt", "opus-ja-es"))
     parser.add_argument("--llama-source", type=Path, help="For Qwen: official llama.cpp b11380 checkout (converter plus gguf-py)")
     parser.add_argument("--output-dir", type=Path, default=Path("models/manga"))
     args = parser.parse_args()
+    if args.engine in ("opus-ja-pt", "opus-ja-es"):
+        spec = OPUS_EXPERIMENTS["pt-BR" if args.engine == "opus-ja-pt" else "es"]
+        print("Explicitly preparing one experimental Apache-2.0 OPUS checkpoint; Portuguese regional quality is unverified.")
+        folder = Path(snapshot_download(spec["model"], revision=spec["revision"],
+            allow_patterns=["*.json", "*.spm", "pytorch_model.bin", "README.md"]))
+        with (folder/"pytorch_model.bin").open("rb") as stream:
+            checksum = hashlib.file_digest(stream, "sha256").hexdigest()
+        if checksum != spec["weight_sha256"]:
+            raise RuntimeError("Experimental OPUS weight checksum mismatch")
+        print(f"Prepared pinned {args.engine}; select it explicitly through YOMISCAN_TRANSLATION_ENGINE.")
+        return
     if args.engine in NMT_MODELS:
         spec = NMT_MODELS[args.engine]
         print(f"Preparing {spec.model} ({spec.license}); model license is separate from YomiScan MIT.")
