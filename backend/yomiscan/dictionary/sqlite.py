@@ -60,12 +60,12 @@ class SQLiteDictionary:
         from ..cache_identity import file_identity, algorithm
         try:
             self._ensure_current()
-        except DictionaryError:
+            wal = Path(str(self._path)+"-wal")
+            return {"database": file_identity(self._path), "wal": file_identity(wal) if wal.exists() else None,
+                    "schema": self._connection.execute("PRAGMA user_version").fetchone()[0],
+                    "algorithm": algorithm("dictionary/sqlite.py", "dictionary/models.py", "japanese.py")}
+        except (DictionaryError, sqlite3.Error, OSError):
             return None  # Ordinary lexical lookup still reports its actionable failure.
-        wal = Path(str(self._path)+"-wal")
-        return {"database": file_identity(self._path), "wal": file_identity(wal) if wal.exists() else None,
-                "schema": self._connection.execute("PRAGMA user_version").fetchone()[0],
-                "algorithm": algorithm("dictionary/sqlite.py", "dictionary/models.py", "japanese.py")}
 
     def lookup(self, text: str) -> tuple[DictionaryEntry, ...]:
         self._ensure_current()

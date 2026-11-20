@@ -112,3 +112,34 @@ def test_dictionary_identity_and_lookup_reopen_atomically_replaced_database(tmp_
             pytest.skip("Windows locks open SQLite files; stop the backend before reimporting JMdict")
         assert dictionary.cache_identity() != first
         assert dictionary.lookup("猫")[0].senses[0].glosses == ("updated cat",)
+
+
+def test_llama_identity_uses_effective_device_and_never_guesses_auto(tmp_path):
+    from yomiscan.translation.manga import MangaTranslationEngine, LlamaServer
+    model, executable = tmp_path/"model.gguf", tmp_path/"runtime.exe"
+    model.write_bytes(b"not loaded in this test")
+    executable.write_bytes(b"never executed")
+    runtime = LlamaServer(model, executable=executable, device="auto")
+    engine = MangaTranslationEngine("hy-mt2-manga", runtime)
+    assert component_identity(engine) is None
+    runtime.device = "cpu"
+    first = component_identity(engine)
+    assert first is not None
+    runtime.device = "cuda"
+    assert digest(first) != digest(component_identity(engine))
+    runtime.requested_device, runtime.device = "cpu", "unloaded"
+    before_load = component_identity(engine)
+    runtime.device = "cpu"
+    assert before_load == component_identity(engine)
+
+
+def test_nmt_auto_identity_tracks_resolved_device_without_loading_weights(monkeypatch):
+    from yomiscan.translation.nmt import NMTTranslationEngine
+    import torch
+    engine = NMTTranslationEngine("fugumt", device="auto")
+    engine._cache_artifacts = {"fake-weights": "verified-test-hash"}
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    cpu = component_identity(engine)
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    cuda = component_identity(engine)
+    assert cpu is not None and cuda is not None and digest(cpu) != digest(cuda)

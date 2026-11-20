@@ -119,6 +119,10 @@ def component_identity(component: Any) -> object | None:
             return None
         metadata = component.diagnostic_metadata() if hasattr(component, "diagnostic_metadata") else {"engine": "manga-ocr"}
         metadata = dict(metadata)
+        if name.endswith("MangaTranslationEngine"):
+            runtime = component.runtime
+            if runtime is None or (runtime.requested_device == "auto" and runtime.device == "unloaded"):
+                return None  # No guessed CPU/CUDA identity; explicit CPU can reuse before model load.
         artifacts = getattr(component, "_cache_artifacts", "unset")
         if artifacts == "unset":
             if name.endswith("MangaOCREngine") and ".manga_ocr." in name:
@@ -149,12 +153,14 @@ def component_identity(component: Any) -> object | None:
             metadata["preprocessing"] = "manga-ocr-grayscale-rgb-max-length-300"
             processor = component._model.processor
         if name.endswith("MangaTranslationEngine"):
-            metadata.pop("device", None)
+            metadata["device"] = component.runtime.device if component.runtime.device != "unloaded" else component.runtime.requested_device
             metadata["requested_device"] = component.runtime.requested_device
             metadata["context_size"] = component.runtime.context_size
         if name.endswith("NMTTranslationEngine"):
-            # Before and after lazy load describe the same requested configuration.
-            metadata["device"] = component.requested_device
+            # Include the effective device before/after lazy load, including auto.
+            import torch
+            from .translation.base import select_device
+            metadata["device"] = select_device(component.requested_device, cuda_available=torch.cuda.is_available())
             # Pinned on-disk generation config is already included in artifacts.
             generation = None
         return {"class": name, "artifacts": artifacts, "settings": metadata,

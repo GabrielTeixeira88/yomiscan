@@ -9,7 +9,7 @@ import path from "node:path";
 const mocked=process.argv.includes('--mock-backend'),backend=`http://127.0.0.1:${mocked?8774:8765}`;
 const {packZip,unpackZip}=await import('../.test/browser-support.mjs');
 const reportDir=path.resolve('.cache/stage1-reports-'+Date.now());
-let mockServer,mockRenders=0,mockRefreshes=0,persistentCache=false,extensionPath=path.resolve('extension/dist');
+let mockServer,mockRenders=0,mockRefreshes=0,persistentCache=false,mockConfiguration='f'.repeat(64),extensionPath=path.resolve('extension/dist');
 if(mocked) {
   extensionPath=path.resolve('.cache/stage1-browser-extension');
   await mkdir(extensionPath,{recursive:true});
@@ -23,8 +23,10 @@ if(mocked) {
       if(req.url.startsWith('/api/v1/cache')){
         if(req.url.endsWith('/settings')){let body='';for await(const chunk of req)body+=chunk;persistentCache=JSON.parse(body).enabled;}
         res.setHeader('Content-Type','application/json');res.end(JSON.stringify({persistent_enabled:persistentCache,
-          memory_bytes:0,memory_limit:64*1024*1024,disk_bytes:0,disk_limit:512*1024*1024,evictions:0,configuration_id:'f'.repeat(64)}));return;
+          memory_bytes:0,memory_limit:64*1024*1024,disk_bytes:0,disk_limit:512*1024*1024,evictions:0,configuration_id:mockConfiguration}));return;
       }
+      const configuration=new URL(backend+req.url).searchParams.get('configuration');
+      if(configuration && configuration!==mockConfiguration){req.resume();res.writeHead(409);res.end();return;}
       const request=new Request(backend+req.url,{method:'POST',headers:req.headers,body:req,duplex:'half'});
       const form=await request.formData(),file=form.get('file'),bytes=new Uint8Array(await file.arrayBuffer());
       if(req.url.startsWith('/api/v1/render-page'))mockRenders++;
@@ -135,6 +137,19 @@ try {
   await wait(300);assert.equal(await evaluate(offscreen,"testCalls.length"),count);report.checks.push("Original/English toggles reuse cached results");
   await click("Retry Failed / Skipped");await until(async()=>(await panel()).includes("5 / 5 pages translated"),60000);
   report.checks.push("Explicit retry recovers failed page");
+  if(mocked){
+    const cacheSummary=await find(n=>n.nodeName==='SUMMARY'&&n.children?.some(c=>c.nodeValue==='Local processing cache'));
+    await invoke(cacheSummary,'function(){this.click()}');
+    await until(async()=>(await panel()).includes('Disk 0.0 / 512.0 MiB'));
+    const consent=async()=>nodes((await call('DOM.getDocument',{depth:-1,pierce:true},session)).root)
+      .filter(n=>n.nodeName==='INPUT'&&n.attributes?.includes('checkbox')).at(-1);
+    assert.equal(await invoke(await consent(),'function(){return this.checked}'),false);
+    await invoke(await consent(),'function(){this.click()}');await until(()=>persistentCache);
+    await click('Clear Persistent Cache');await wait(200);assert.equal(persistentCache,true);
+    await invoke(await consent(),'function(){this.click()}');await until(()=>!persistentCache);
+    await invoke(await find(n=>n.nodeName==='SUMMARY'&&n.children?.some(c=>c.nodeValue==='Local processing cache')),'function(){this.click()}');
+    report.checks.push('Persistence is off by default; explicit checkbox, usage and separate persistent clear work without clearing browser overlays');
+  }
   const pageSelector=await find(n=>n.nodeName==='SELECT');
   await invoke(pageSelector,"function(){this.value='1'}");
   await evaluate(session,"document.querySelector('#page-1').scrollIntoView()");await wait(150);
@@ -324,6 +339,18 @@ try {
   if(mocked)assert.ok(mockRefreshes>0,'Retranslate must force backend translation/render refresh');
   await click("Clear Session");
   report.checks.push("24-page synthetic queue and cleanup (mocked render responses; not a model-quality benchmark)");
+  if(mocked){
+    await evaluate(offscreen,'globalThis.fetch=nativeFetch');
+    await evaluate(session,"document.querySelector('main').replaceChildren();document.querySelector('#append').click()");
+    await until(()=>evaluate(session,"document.querySelector('main img')?.complete"));
+    await click('Translate Chapter');await until(async()=>(await panel()).includes('1 / 1 pages translated'));
+    mockConfiguration='e'.repeat(64);
+    await click('Retranslate Page');await until(async()=>(await panel()).includes('Backend settings changed'));
+    assert.ok(!await find(n=>n.attributes?.includes('overlays')));
+    await click('Translate Chapter');await until(async()=>(await panel()).includes('1 / 1 pages translated'));
+    await click('Clear Session');
+    report.checks.push('Backend configuration change rejects old generation, clears obsolete overlays and allows a fresh session');
+  }
   report.status=await panel();report.requestOrder=await evaluate(offscreen,"testCalls");
   await mkdir(".cache",{recursive:true});await writeFile(mocked?".cache/stage1-browser.json":".cache/phase-7-browser.json",JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
 }catch(error){console.error(error);console.error("Completed checks:",report.checks);if(session)console.error("Controls:",await panel());process.exitCode=1;}

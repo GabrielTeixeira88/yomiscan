@@ -385,3 +385,20 @@ def test_ordered_translation_contract_and_sensitive_metadata_are_preserved_safel
     assert [b.analysis.translation.translated_text for b in second.text_blocks] == ["Cat 0", "Cat 1"]
     assert counts["translation"] == 1 and counts["individual"] == 0
     service.close()
+
+
+def test_performance_runner_rejects_overwriting_input_before_loading_models(tmp_path, monkeypatch):
+    import runpy
+    import sys
+    source = tmp_path/"source.png"
+    buffer = BytesIO()
+    page().save(buffer, "PNG")
+    original = buffer.getvalue()
+    source.write_bytes(original)
+    monkeypatch.setattr(sys, "argv", ["benchmark_page_cache.py", str(source), "--cache-directory", str(tmp_path/"cache"),
+                                     "--output", str(source)])
+    with pytest.raises(SystemExit) as exc:
+        runpy.run_path(str(Path(__file__).resolve().parents[2]/"scripts"/"benchmark_page_cache.py"), run_name="__main__")
+    assert exc.value.code == 2
+    assert source.read_bytes() == original
+    assert not (tmp_path/"cache").exists()

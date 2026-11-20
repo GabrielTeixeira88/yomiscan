@@ -26,7 +26,9 @@ test('ZIP round trip checks CRC, bounds and fixed safe paths',async()=>{
 });
 
 test('metadata-only report excludes text, raw errors, paths, URLs and unknown fields',async()=>{
-  const source={...snapshot(),credentials:'never-share',local_path:'C:/private',url:'https://secret/?token=secret'};
+  const source={...snapshot(),credentials:'never-share',local_path:'C:/private',url:'https://secret/?token=secret',
+    cache:{schema:1,persistent_enabled:true,disk_bytes:2048,local_path:'C:/private',raw:'Secret cat',
+      stages:[{stage:'ocr',key:'b'.repeat(64),source:'disk',restored:true,lookup_ms:1.5,local_path:'C:/private'}]}};
   const zip=await createPageReport(context,parseSnapshot(source),{text:false,original:false,rendered:false});
   const entries=await unpackZip(zip);
   assert.deepEqual([...entries.keys()],['manifest.json','regions.json','timings.json']);
@@ -36,6 +38,9 @@ test('metadata-only report excludes text, raw errors, paths, URLs and unknown fi
   assert.equal(regions.blocks[0].render.reason_code,'overflow');
   assert.equal(regions.blocks[0].ocr.confidence,null);
   assert.equal(regions.blocks[0].ocr.confidence_method,null);
+  const manifest=JSON.parse(new TextDecoder().decode(entries.get('manifest.json')));
+  assert.equal(manifest.cache.persistent_enabled,true);assert.equal(manifest.cache.stages[0].restored,true);
+  assert.equal(manifest.cache.stages[0].source,'disk');assert.equal(manifest.cache.stages[0].key,'b'.repeat(64));
 });
 
 test('text requires explicit inclusion, is redacted, and cannot attach to a different page',async()=>{
