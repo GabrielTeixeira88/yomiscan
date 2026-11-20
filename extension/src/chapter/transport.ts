@@ -2,10 +2,11 @@ import {CHUNK, MAX_INPUT, MAX_OUTPUT, encodeChunk, decodeChunk} from "./wire";
 import {parseCoverage,type PageCoverage} from './coverage';
 import {parseSnapshot} from './reports';
 import type {RenderedPage} from './render-response';
+import type {ReaderTranslationOptions} from './translation-options';
 export type {RenderedPage} from './render-response';
 export class ConfigurationChanged extends Error {}
 export async function renderPage(blob: Blob, signal: AbortSignal,
-  options:{refresh?:boolean;configuration?:string}={}): Promise<RenderedPage> {
+  options:{refresh?:boolean;configuration?:string;translation?:ReaderTranslationOptions}={}): Promise<RenderedPage> {
   if (blob.size > MAX_INPUT) throw new Error("Page exceeds the backend's 10 MiB limit");
   const ready = await chrome.runtime.sendMessage({type: "chapter-prepare"});
   if (!ready?.ok) throw new Error(ready?.error || "Could not start local page transport");

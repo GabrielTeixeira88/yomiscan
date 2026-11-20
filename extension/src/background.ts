@@ -2,6 +2,7 @@ import { analyzeCrop } from "./api";
 import {installSourceFetch} from './chapter/source-fetch';
 import {CaptureThrottle} from './chapter/capture-throttle';
 import {cacheRequest} from './chapter/cache-client';
+import {translationRequest,type TranslationOperation} from './chapter/translation-client';
 const captures=new CaptureThrottle();
 installSourceFetch();
 import { screenshotRect, validSelection, type Rect, type Viewport } from "./geometry";
@@ -101,6 +102,22 @@ async function capture(request: CaptureRequest, tab: chrome.tabs.Tab): Promise<u
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (sender.id !== chrome.runtime.id || sender.frameId !== 0 || sender.tab?.id === undefined) return;
+  if(message?.type==='chapter-translation-settings'){
+    if(!['profile','create-series','delete-series','save-term','delete-term'].includes(message.operation)||
+      !message.payload||typeof message.payload!=='object'||Array.isArray(message.payload)||JSON.stringify(message.payload).length>1800){
+      sendResponse({ok:false,error:'Invalid translation settings operation'});return;
+    }
+    void translationRequest(message.operation as TranslationOperation,message.payload).then(async data=>{
+      sendResponse({ok:true,data});
+      if(['delete-series','save-term','delete-term'].includes(message.operation)){
+        const tabs=await chrome.tabs.query({});
+        await Promise.allSettled(tabs.filter(tab=>tab.id!==undefined&&tab.id!==sender.tab!.id).map(tab=>chrome.tabs.sendMessage(tab.id!,{
+          type:'chapter-glossary-changed',scope:message.payload.scope,target:message.payload.target_language,
+          deleted:message.operation==='delete-series'}, {frameId:0})));
+      }
+    },error=>sendResponse({ok:false,error:error instanceof Error?error.message:'Local translation settings failed'}));
+    return true;
+  }
   if(message?.type==='chapter-cache'){
     if(!['read','settings','clear'].includes(message.operation) || (message.operation==='settings' && typeof message.enabled!=='boolean')){
       sendResponse({ok:false,error:'Invalid cache operation'});return;

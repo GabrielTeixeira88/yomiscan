@@ -7,6 +7,7 @@ export interface PageSnapshot {
   schema_version:number;build:RecordData;image:{width:number;height:number;input_sha256:string;pixel_sha256?:string;canonical_pixels?:unknown};
   models:RecordData;regions:RecordData[];blocks:RecordData[];timings:RecordData;counts:RecordData;coverage?:unknown;unavailable?:string;
   cache?:unknown;
+  translation_settings?:unknown;layout?:unknown;
 }
 export interface PageReportContext {
   page_id:number;width:number;height:number;state:string;input_sha256?:string;extension_version?:string;
@@ -52,6 +53,8 @@ function models(value:unknown):RecordData {
     output[key]=pick(input[key],['engine','model','revision','model_revision','expected_revision','base_model','base_revision',
       'device','analysis_device','target_language','threshold','bubble_threshold','free_threshold','artifact','source_revision',
       'preprocessing','decoding','threads','max_tokens','kv_cache']);
+  Object.assign(object(output.translation),pick(input.translation,['target_language','requested_target','grammar_contract','translation_mode',
+    'context_policy','glossary_application','glossary_terms','input_tokens','output_tokens','token_budget','fallback']));
   for(const key of ['translation','settings'])Object.assign(object(output[key]),
     pick(input[key],['batch_size','num_beams','context_tokens','temperature','seed','prompt_version','padding','minimum_side',
       'minimum_font_size','maximum_font_size','preferred_font_size','font_margin']));
@@ -93,6 +96,8 @@ export async function createPageReport(context:PageReportContext,snapshot:PageSn
       input_sha256:hash(context.input_sha256)?context.input_sha256:null,
       pixel_sha256:hash(snapshot?.image.pixel_sha256)?snapshot.image.pixel_sha256:null},
     models:models(snapshot?.models),counts:pick(snapshot?.counts,['rendered','preserved','undetected']),
+    translation_settings:pick(snapshot?.translation_settings,['target_language','translation_mode','context_policy','ordering','glossary_enabled','glossary_application']),
+    layout:{...pick(snapshot?.layout,['strategy','fallback_reason']),block_ids:ids(object(snapshot?.layout).block_ids)},
     canonical_pixels:pick(snapshot?.image.canonical_pixels,['sha256','normalization','width','height','mode','canonical_mode']),
     cache:{...pick(snapshot?.cache,['schema','persistent_enabled','memory_bytes','memory_limit','disk_bytes','disk_limit',
       'hits','misses','evictions','corruptions','refresh','error_code']),
@@ -110,7 +115,9 @@ export async function createPageReport(context:PageReportContext,snapshot:PageSn
       ...pick(b,['id','reading_order','orientation','detection_confidence']),region_ids:ids(b.region_ids),bbox:bbox(b.bbox),
       ocr:pick(b.ocr,['status','engine','model','revision','confidence','confidence_method','processing_ms',
         'recognition_status','termination','tokens','uncertainty','preprocessing','decoding','kv_cache']),
-      translation:pick(b.translation,['status','failure_stage','rejected','complete','engine','model','revision','expected_revision','device']),
+      translation:pick(b.translation,['status','failure_stage','rejected','complete','engine','model','revision','expected_revision','device',
+        'target_language','requested_target','grammar_contract','translation_mode','context_policy','glossary_application','glossary_terms',
+        'input_tokens','output_tokens','token_budget','fallback','error_code','regional_variant_verified']),
       render:{...pick(b.render,['status','reason_code','reason','mask','mask_method','inpainting','layout','typesetting','font_size','category']),
         layout_bbox:bbox(object(b.render).layout_bbox)},
     }))};

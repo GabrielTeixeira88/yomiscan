@@ -11,6 +11,7 @@ export interface Analysis {
   original_text: string; translation: string | null;
   processing: {ocr_ms: number; translation_ms: number; analysis_ms: number; total_ms: number};
   tokens: Token[];
+  target_language?:string;dictionary_language?:string;
 }
 
 const record = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -20,6 +21,8 @@ const strings = (v: unknown) => Array.isArray(v) && v.every(x => typeof x === "s
 export function parseAnalysis(value: unknown): Analysis {
   if (!record(value) || typeof value.original_text !== "string" || !nullableString(value.translation)
       || !record(value.processing) || !Array.isArray(value.tokens)) throw new Error("Invalid analysis response from local server.");
+  if(value.target_language!==undefined&&(!['en','eng_Latn','pt-BR','por_Latn','es','spa_Latn'].includes(String(value.target_language))))
+    throw new Error('Invalid sentence translation language');
   if (!["ocr_ms", "translation_ms", "analysis_ms", "total_ms"].every(key =>
     typeof value.processing === "object" && value.processing !== null
     && typeof (value.processing as Record<string, unknown>)[key] === "number"

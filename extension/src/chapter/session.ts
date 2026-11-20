@@ -8,6 +8,7 @@ import {stitchPage} from './stitching';
 import {validSelection,type Rect} from '../geometry';
 import {renderPage,ConfigurationChanged} from "./transport";
 import {createPageReport,type PageReportContext,type ReportOptions} from './reports';
+import {defaultTranslationOptions,validateProfile,type ReaderTranslationOptions} from './translation-options';
 export interface ChapterSummary { active:boolean; total:number; translated:number; failed:number; skipped:number; processing:number|null; message:string; view:ViewMode }
 const SESSION_BUDGET=128*1024*1024,FAILURE_REPORT_BUDGET=256*1024;
 
@@ -38,7 +39,8 @@ export class ChapterTranslationSession {
   private exporting=false;
   private downloads=new Set<string>();
   constructor(private changed:(status:ChapterSummary)=>void,private hideControls:(hidden:boolean)=>void,
-              private discovery:PageDiscoveryStrategy=new GenericPageDiscovery()) {
+              private discovery:PageDiscoveryStrategy=new GenericPageDiscovery(),
+              private translation:ReaderTranslationOptions=defaultTranslationOptions()) {
     this.queue=new ChapterQueue({process:(page,signal)=>this.process(page,signal),
       priority:page=>{const r=page.source.image.getBoundingClientRect();return viewportPriority(r.top,r.bottom,innerHeight);},
       cache:{budget:SESSION_BUDGET-FAILURE_REPORT_BUDGET,size:r=>r.bytes,protected:p=>{
@@ -49,6 +51,7 @@ export class ChapterTranslationSession {
     window.addEventListener("pagehide",()=>this.dispose(),{once:true,signal:this.lifetime.signal});
   }
   get isDisposed():boolean{return this.disposed;}
+  get targetLanguage(){return this.translation.target_language;}
   memoryStats():{bytes:number;budget:number;evictions:number} {
     const cache=this.queue.cacheStats();
     return {...cache,bytes:cache.bytes+[...this.failureReports.values()].reduce((n,r)=>n+r.bytes,0),budget:SESSION_BUDGET};
@@ -88,8 +91,22 @@ export class ChapterTranslationSession {
       const reply=await chrome.runtime.sendMessage({type:"chapter-health"});
       if(!reply?.ok) throw new Error(reply?.error||"YomiScan local backend is not running.");
       if(this.disposed || version!==this.startVersion) return;
+      const profileReply=await chrome.runtime.sendMessage({type:'chapter-translation-settings',operation:'profile',
+        payload:{scope:this.translation.series_id??'global',target:this.translation.target_language}});
+      if(profileReply?.ok){
+        const profile=validateProfile(profileReply.data);
+        if(!profile.capabilities.targets.includes(this.translation.target_language)){
+          if(this.translation.series_id===null&&this.translation.target_language==='en')this.translation={...this.translation,target_language:profile.default_target};
+          else throw new Error('Selected engine does not support this target. Reload Translation Settings.');
+        }
+        this.translation={...this.translation,glossary_version:profile.glossary_version};
+      }else if(this.translation.glossary_enabled||this.translation.mode!=='sentences'||this.translation.target_language!=='en')
+        throw new Error(profileReply?.error??'Experimental translation settings unavailable');
+      if(this.disposed || version!==this.startVersion)return;
       const configuration=typeof reply.configuration_id==='string'&&/^[a-f0-9]{64}$/.test(reply.configuration_id)?reply.configuration_id:undefined;
-      const generation=configuration??crypto.randomUUID();
+      const effective={...this.translation,series_id:this.translation.glossary_enabled?this.translation.series_id:null,
+        glossary_version:this.translation.glossary_enabled?this.translation.glossary_version:null};
+      const generation=(configuration??crypto.randomUUID())+'|'+JSON.stringify(effective);
       if(this.generation!==generation)this.queue.stop();
       this.configuration=configuration;this.generation=generation;
       this.notice="Watching for pages";this.observe();this.scan();
@@ -254,7 +271,7 @@ export class ChapterTranslationSession {
       throw new SkipPage('Image source changed during acquisition');
     if(Math.abs(pixels.width/pixels.height-candidate.width/candidate.height)>.02)throw new SkipPage('Source pixels do not match displayed image proportions');
     const renderStart=performance.now();
-    const result=await renderPage(pixels.blob,signal,{refresh,configuration:this.configuration}).finally(()=>{
+    const result=await renderPage(pixels.blob,signal,{refresh,configuration:this.configuration,translation:this.translation}).finally(()=>{
       context.timings.backend_roundtrip_ms=performance.now()-renderStart;
     });signal.throwIfAborted();
     context.input_sha256=result.input_sha256;

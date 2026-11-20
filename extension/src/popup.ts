@@ -178,16 +178,18 @@ export class StudyPopup {
 
   show(data: Analysis): void {
     this.body.replaceChildren();
+    const target=data.target_language??'en',targetName=['pt-BR','por_Latn'].includes(target)?'Portuguese':
+      ['es','spa_Latn'].includes(target)?'Spanish':'English';
     // Dedicated original section is the future OCR-edit hook; read-only in Phase 4.
     for (const [title, text, className] of [
       ["Original", data.original_text || "No text was recognized. Try a clearer crop.", "original"],
-      ["Translation", data.translation ?? "No sentence translation available.", "translation"],
+      [targetName==='English'?"Translation":targetName+" translation (experimental)", data.translation ?? "No sentence translation available.", "translation"],
     ]) {
       const section = element("section");
       section.append(element("h2", title), element("p", text, className));
       const value=className==="original"?data.original_text:data.translation;
-      const copy=element('button',className==="original"?'Copy Japanese':'Copy English','copy');
-      copy.setAttribute('aria-label',className==="original"?'Copy original Japanese':'Copy English sentence translation');
+      const copy=element('button',className==="original"?'Copy Japanese':'Copy '+targetName,'copy');
+      copy.setAttribute('aria-label',className==="original"?'Copy original Japanese':'Copy '+targetName+' sentence translation');
       copy.lang='en';
       copy.disabled=!value;
       const feedback=element('p','','copy-feedback');feedback.setAttribute('role','status');
@@ -202,6 +204,7 @@ export class StudyPopup {
       this.body.append(section);
     }
     const breakdown = element("section");
+    if(targetName!=='English')breakdown.append(element('p','Dictionary definitions remain English.'));
     breakdown.append(element("h2", "Word breakdown"));
     const words = element("div", undefined, "words");
     breakdown.append(words);
