@@ -4,8 +4,10 @@ export interface PageRecord<T, R> {
   id: number; key: object; identity: string; source: T; state: PageState;
   result?: R; error?: string; attempts: number; cancelled?: boolean; deferred?: boolean;
 }
-export class SkipPage extends Error {}
-export class WaitForViewport extends SkipPage {}
+export class SkipPage extends Error { readonly retryWhenVisible:boolean=false; }
+export class WaitForViewport extends SkipPage { override readonly retryWhenVisible:boolean=true; }
+/** A new viewport cannot fix permissions, authentication, or unsupported input. */
+export class ManualAcquisitionError extends SkipPage {}
 
 /** Recomputed before every job: visible, next, previous, then distant pages. */
 export function viewportPriority(top: number, bottom: number, height: number): number {
@@ -107,7 +109,7 @@ export class ChapterQueue<T, R> {
           const cancelled=!this.active && error instanceof DOMException && error.name==='AbortError';
           page.state = cancelled || error instanceof SkipPage ? "skipped" : "failed";
           page.cancelled=cancelled;
-          page.deferred = error instanceof WaitForViewport;
+          page.deferred = error instanceof SkipPage && error.retryWhenVisible;
           page.error = error instanceof Error ? error.message : "Page rendering failed";
         }
       } finally { this.controller = null; this.hooks.changed(); }

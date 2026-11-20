@@ -5,11 +5,60 @@ import {fetchSourceImage,imageHost} from '../src/chapter/source-fetch';
 import {captureSegments,pixelSlice,withRestoredScroll} from '../src/chapter/stitching';
 import {CaptureThrottle} from '../src/chapter/capture-throttle';
 import type {MangaPageCandidate} from '../src/chapter/discovery';
+import {ChapterQueue,SkipPage,WaitForViewport,ManualAcquisitionError} from '../src/chapter/model';
 
 const pixels={blob:new Blob(['pixels'],{type:'image/png'}),width:800,height:1100};
 const candidate=(source='https://cdn.example/page.png')=>({source,width:800,height:1100,image:{}} as MangaPageCandidate);
 const ok=async()=>pixels,fail=async()=>{throw new Error('restricted');};
 const signal=()=>new AbortController().signal;
+
+test('acquisition fallback preserves deferred viewport retries through the chapter queue',async()=>{
+  let visible=false,calls=0;
+  const viewportFailure=new WaitForViewport('Image is below the viewport');
+  const acquirer=new PageImageAcquirer({direct:fail,canvas:fail,stitch:async()=>{throw new SkipPage('Scroll capture disabled');},
+    viewport:async()=>{calls++;if(!visible)throw viewportFailure;return pixels;}});
+  const key={},page=candidate();
+  const queue=new ChapterQueue<MangaPageCandidate,string>({priority:()=>0,release:()=>{},changed:()=>{},
+    process:async(p,s)=>(await acquirer.acquire(p.source,s)).method});
+  queue.register(key,'revision-1',page);queue.start();await queue.idle();
+  assert.equal(queue.pages.get(key)?.state,'skipped');
+  visible=true;queue.visible(key);await new Promise(resolve=>setImmediate(resolve));await queue.idle();
+  assert.equal(calls,2,'a viewport change must retry the wrapped acquisition failure');
+  assert.equal(queue.pages.get(key)?.result,'viewport-capture');queue.dispose();
+});
+
+test('wrapped viewport retries retain causes, stop at three, and reset on source revision',async()=>{
+  const viewportFailure=new WaitForViewport('not visible'),disabled=new SkipPage('stitch disabled');
+  const acquirer=new PageImageAcquirer({direct:fail,canvas:fail,viewport:async()=>{throw viewportFailure;},
+    stitch:async()=>{throw disabled;}});
+  await assert.rejects(()=>acquirer.acquire(candidate(),signal()),error=>{
+    assert.ok(error instanceof AcquisitionError);assert.equal(error.retryWhenVisible,true);
+    assert.ok(error.cause instanceof AggregateError);
+    assert.ok(error.cause.errors.includes(viewportFailure));assert.ok(error.cause.errors.includes(disabled));return true;
+  });
+  let calls=0;const key={};
+  const queue=new ChapterQueue<MangaPageCandidate,string>({priority:()=>0,release:()=>{},changed:()=>{},
+    process:async(p,s)=>{calls++;await acquirer.acquire(p.source,s);return 'unused';}});
+  queue.register(key,'old',candidate());queue.start();await queue.idle();
+  for(let i=0;i<6;i++){queue.visible(key);await new Promise(resolve=>setImmediate(resolve));await queue.idle();}
+  assert.equal(calls,3);queue.stop();queue.visible(key);assert.equal(calls,3);
+  queue.register(key,'new',candidate('https://cdn.example/new.png'));queue.start();await queue.idle();
+  assert.equal(queue.pages.get(key)?.attempts,1);assert.equal(calls,4);queue.dispose();
+});
+
+test('permission, authentication and unsupported-source failures never auto-retry on visibility',async()=>{
+  for(const failure of [new ManualAcquisitionError('permission denied'),new ManualAcquisitionError('HTTP 403'),
+    new ManualAcquisitionError('unsupported image')]) {
+    let calls=0;const key={};
+    const acquirer=new PageImageAcquirer({direct:async()=>{calls++;throw failure;},canvas:fail,
+      viewport:async()=>{throw new WaitForViewport('offscreen');},stitch:fail});
+    const queue=new ChapterQueue<MangaPageCandidate,string>({priority:()=>0,release:()=>{},changed:()=>{},
+      process:async(p,s)=>{await acquirer.acquire(p.source,s);return 'unused';}});
+    queue.register(key,'a',candidate());queue.start();await queue.idle();
+    queue.visible(key);await new Promise(resolve=>setImmediate(resolve));await queue.idle();
+    assert.equal(calls,1);assert.equal(queue.pages.get(key)?.deferred,false);queue.dispose();
+  }
+});
 
 test('direct source acquisition succeeds without a canvas or screenshot',async()=>{
   const result=await new PageImageAcquirer({direct:ok,canvas:fail,viewport:fail,stitch:fail}).acquire(candidate(),signal());
