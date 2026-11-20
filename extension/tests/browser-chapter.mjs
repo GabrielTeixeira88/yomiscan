@@ -19,7 +19,7 @@ if(mocked) {
   }
   mockServer=http.createServer(async(req,res)=>{
     try {
-      if(req.url==='/health'){res.setHeader('Content-Type','application/json');res.end('{"status":"ok"}');return;}
+      if(req.url==='/health'){res.setHeader('Content-Type','application/json');res.setHeader('X-YomiScan-Configuration',mockConfiguration);res.end('{"status":"ok"}');return;}
       if(req.url.startsWith('/api/v1/cache')){
         if(req.url.endsWith('/settings')){let body='';for await(const chunk of req)body+=chunk;persistentCache=JSON.parse(body).enabled;}
         res.setHeader('Content-Type','application/json');res.end(JSON.stringify({persistent_enabled:persistentCache,

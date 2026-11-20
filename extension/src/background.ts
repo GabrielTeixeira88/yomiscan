@@ -126,6 +126,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const work=message.type==="chapter-prepare" ? prepareTransport() : message.type==="chapter-capture" ? pageCapture(message,sender.tab) :
       fetch("http://127.0.0.1:8765/health",{signal:AbortSignal.timeout(5000),credentials:"omit",redirect:"error",cache:"no-store"}).then(async response=>{
         if(!response.ok || (await response.json()).status!=="ok")throw new Error("YomiScan backend resources are unavailable. Check the server terminal.");
+        const configuration=response.headers.get('X-YomiScan-Configuration');
+        if(configuration && /^[a-f0-9]{64}$/.test(configuration))return {configuration_id:configuration};
         try {return {configuration_id:(await cacheRequest('read')).configuration_id};}
         catch {return {};}// Legacy backends remain usable; their session generation is never reused across Start.
       });

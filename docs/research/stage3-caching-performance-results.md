@@ -52,7 +52,7 @@ deferred release, source revisions, cancellation and disposal. These are call-co
 simulations, not model inference or browser heap measurements.
 
 Chrome also transferred **over 192 MiB of actual synthetic PNG responses** through
-the production chunk transport: 24 pages processed in **25.327 seconds** with bounded
+the production chunk transport: 24 pages processed in **24.056 seconds** with bounded
 retention, offscreen eviction and restoration when an evicted page became visible.
 The figure includes synthetic transport/render fixtures, not neural inference. It
 does not measure JavaScript heap, process RSS or GPU memory. Additional checks cover

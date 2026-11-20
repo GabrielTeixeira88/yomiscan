@@ -187,6 +187,8 @@ def test_explicit_origin_allowlist():
 def test_health_responsive_and_busy_request_rejected(api):
     client, ocr, *_ = api
     started, release = Event(), Event()
+    configuration = client.get("/health").headers["X-YomiScan-Configuration"]
+    assert len(configuration) == 64
 
     def recognize(image):
         started.set()
@@ -198,7 +200,10 @@ def test_health_responsive_and_busy_request_rejected(api):
         future = pool.submit(client.post, "/api/v1/analyze-image", files={"file": ("crop.png", image_bytes())})
         try:
             assert started.wait(5)
-            assert client.get("/health").status_code == 200
+            health = client.get("/health")
+            assert health.status_code == 200
+            assert health.headers["X-YomiScan-Configuration"] == configuration
+            assert client.get("/api/v1/cache").status_code == 429
             assert client.post("/api/v1/analyze-image", files={"file": ("crop.png", image_bytes())}).status_code == 429
         finally:
             release.set()

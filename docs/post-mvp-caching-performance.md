@@ -153,6 +153,9 @@ the next render when settings/backend change. A mismatch rejects the job and dis
 obsolete overlays. An idle page does not continuously poll for backend changes. A legacy
 backend gets a fresh browser generation on every Start. Persistent stage keys remain
 usable across backend session generations.
+The modern health response publishes its generation in an additive header without
+waiting for inference or cache administration, so Start/Retry during a busy job does
+not mistake a 429 from cache controls for changed output settings.
 
 ## Diagnostics and validation
 

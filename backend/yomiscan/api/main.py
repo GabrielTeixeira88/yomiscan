@@ -105,12 +105,16 @@ def create_app(
         app.state.executor = executor
         app.state.service = None
         app.state.busy = False
+        app.state.configuration_id = None
         context = None
 
         def initialize():
             nonlocal context
             context = service_factory()
-            return context.__enter__()
+            service = context.__enter__()
+            if isinstance(service, ImageAnalysisService):
+                app.state.configuration_id = service.configuration_id()
+            return service
 
         try:
             try:
@@ -132,14 +136,18 @@ def create_app(
         CORSMiddleware, allow_origins=origins,
         allow_origin_regex=None if origins else EXTENSION_ORIGIN,
         allow_methods=["GET", "POST"], allow_headers=["Content-Type", "X-YomiScan-Client"],
-        expose_headers=["X-YomiScan-Blocks-Rendered", "X-YomiScan-Blocks-Skipped", "X-YomiScan-Processing-Ms", "X-YomiScan-Coverage"],
+        expose_headers=["X-YomiScan-Blocks-Rendered", "X-YomiScan-Blocks-Skipped", "X-YomiScan-Processing-Ms", "X-YomiScan-Coverage", "X-YomiScan-Configuration"],
     )
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "[::1]"])
 
     @app.get("/health")
-    async def health(request: Request) -> dict[str, str]:
+    async def health(request: Request, response: Response) -> dict[str, str]:
         if request.app.state.service is None:
             raise HTTPException(503, "Analysis resources unavailable. Check server logs and restart after setup.")
+        # Immutable string published by the worker: responsive even during inference.
+        if request.app.state.configuration_id is not None:
+            response.headers["X-YomiScan-Configuration"] = request.app.state.configuration_id
+        response.headers["Cache-Control"] = "no-store"
         return {"status": "ok"}
 
     @app.post("/api/v1/analyze-image", response_model=ImageAnalysisResponse)
@@ -207,9 +215,11 @@ def create_app(
         if state.busy:
             raise HTTPException(429, "YomiScan is processing another crop. Please try again shortly.")
         state.busy = True
-        future = asyncio.get_running_loop().run_in_executor(
-            state.executor, analyze_upload, state.service, data, page, render, diagnostics, refresh, configuration,
-        )
+        def perform_upload():
+            if isinstance(state.service, ImageAnalysisService):
+                state.configuration_id = state.service.configuration_id()
+            return analyze_upload(state.service, data, page, render, diagnostics, refresh, configuration)
+        future = asyncio.get_running_loop().run_in_executor(state.executor, perform_upload)
 
         def finished(task: asyncio.Future) -> None:
             state.busy = False
