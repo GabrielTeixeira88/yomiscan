@@ -422,6 +422,13 @@ try {
     await until(()=>mockTerms.length===1);await until(async()=>(await panel()).includes('Stop translation, wait for it to finish'));
     assert.ok(!await find(n=>n.attributes?.includes('overlays')));
     report.checks.push('Successful glossary mutation retires old overlays even if its subsequent profile fetch is busy');
+    // The session refreshes its own hash on Start; the failed editor remains null.
+    // A second invalidation must still retire output when null equals null.
+    await click('Translate Chapter');await until(async()=>(await panel()).includes('1 / 1 pages translated'));
+    failProfileOnce=true;await edit('Exact Japanese term','犬');await edit('Preferred target-language term','dog');await click('Save Entry');
+    await until(()=>mockTerms.length===2);await until(async()=>(await panel()).includes('Stop translation, wait for it to finish'));
+    assert.ok(!await find(n=>n.attributes?.includes('overlays')));
+    report.checks.push('Repeated glossary invalidation retires a newly started session even while the editor version remains unknown');
   }
   report.status=await panel();report.requestOrder=await evaluate(offscreen,"testCalls");
   await mkdir(".cache",{recursive:true});await writeFile(mocked?".cache/stage1-browser.json":".cache/phase-7-browser.json",JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));

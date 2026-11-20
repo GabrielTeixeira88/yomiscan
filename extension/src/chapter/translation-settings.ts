@@ -20,7 +20,7 @@ export class TranslationSettings {
   private profile:TranslationProfile|null=null;
   private options=defaultTranslationOptions();
   private loadVersion=0;
-  constructor(private apply:(options:ReaderTranslationOptions)=>void) {
+  constructor(private apply:(options:ReaderTranslationOptions,invalidate?:boolean)=>void) {
     const summary=document.createElement('summary');summary.textContent='Translation & terminology';this.element.append(summary,this.fields,this.status);
     this.fields.style.cssText='border:0;margin:0;padding:0;min-width:0';
     const row=(label:string,control:HTMLElement)=>{const line=document.createElement('label');line.style.display='block';line.append(document.createTextNode(label+' '),control);this.fields.append(line);};
@@ -110,11 +110,14 @@ export class TranslationSettings {
   }
   invalidate(scope:string,target?:string,deleted=false,reload=true):void {
     if(deleted&&scope===this.options.series_id){
-      this.options={...this.options,series_id:'global',glossary_version:null};this.apply(this.current);
+      this.options={...this.options,series_id:'global',glossary_version:null};this.apply(this.current,true);
       if(reload&&this.element.open)void this.load('global',this.target.value);return;
     }
     if(this.options.glossary_enabled&&(scope==='global'||scope===this.options.series_id)&&(!target||target===this.options.target_language)){
-      this.options={...this.options,glossary_version:null};this.apply(this.current);
+      // A session may have refreshed its version internally while this editor
+      // remained stale/null. Mutation events must retire output independently
+      // of option equality, including successive edits after a failed reload.
+      this.options={...this.options,glossary_version:null};this.apply(this.current,true);
     }
     if(reload&&this.element.open)void this.load(this.scope.value,this.target.value);
   }

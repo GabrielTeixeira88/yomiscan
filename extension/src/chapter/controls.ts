@@ -86,10 +86,10 @@ export class ChapterControls {
     cacheDetails.addEventListener('toggle',()=>{if(cacheDetails.open)void cacheAction('read');});
     cacheDetails.append(cacheTitle,cacheLabel,cacheHelp,cacheInfo,button('Refresh Cache Usage',()=>{void cacheAction('read');}),
       button('Clear Persistent Cache',()=>{void cacheAction('clear');}));panel.append(cacheDetails);
-    this.translationSettings=new TranslationSettings(options=>{
+    this.translationSettings=new TranslationSettings((options,invalidate=false)=>{
       const identity=(value:ReaderTranslationOptions)=>JSON.stringify({...value,series_id:value.glossary_enabled?value.series_id:null,
         glossary_version:value.glossary_enabled?value.glossary_version:null});
-      if(identity(options)!==identity(this.translationOptions)){this.session?.dispose();this.session=null;}
+      if(invalidate||identity(options)!==identity(this.translationOptions)){this.session?.dispose();this.session=null;}
       this.translationOptions=options;this.english.textContent=targetLabel(options.target_language);
     });panel.append(this.translationSettings.element);
     const help=document.createElement("small");help.textContent="Selected pages stay on this machine. CPU processing may take time.";panel.append(help);
