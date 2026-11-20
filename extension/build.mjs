@@ -4,6 +4,8 @@ import { copyFile, mkdir } from "node:fs/promises";
 if (process.argv.includes("--test")) {
   await build({entryPoints: ["tests/tests.ts"], outfile: ".test/tests.mjs", bundle: true,
     platform: "node", format: "esm", target: "node22"});
+  await build({entryPoints: ["tests/browser-support.ts"], outfile: ".test/browser-support.mjs", bundle: true,
+    platform: "node", format: "esm", target: "node22"});
 } else {
   await mkdir("dist", {recursive: true});
   await copyFile("manifest.json", "dist/manifest.json");

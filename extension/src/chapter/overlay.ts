@@ -1,7 +1,8 @@
 import type {MangaPageCandidate} from "./discovery";
 import type {PageRecord, ViewMode} from "./model";
 import type {PageCoverage} from './coverage';
-export interface PageImageResult { url: string; bytes: number; rendered: number; skipped: number; coverage?:PageCoverage }
+import type {PageSnapshot,PageReportContext} from './reports';
+export interface PageImageResult { url: string; bytes: number; rendered: number; skipped: number; coverage?:PageCoverage; snapshot?:PageSnapshot;reportContext?:PageReportContext }
 
 /** Fixed, pointer-transparent siblings: never rewrite the site's img/srcset/layout. */
 export class ChapterOverlays {

@@ -1,6 +1,8 @@
 import {CHUNK, MAX_INPUT, MAX_OUTPUT, encodeChunk, decodeChunk} from "./wire";
 import {parseCoverage,type PageCoverage} from './coverage';
-export interface RenderedPage { blob: Blob; rendered: number; skipped: number;coverage?:PageCoverage }
+import {parseSnapshot} from './reports';
+import type {RenderedPage} from './render-response';
+export type {RenderedPage} from './render-response';
 export async function renderPage(blob: Blob, signal: AbortSignal): Promise<RenderedPage> {
   if (blob.size > MAX_INPUT) throw new Error("Page exceeds the backend's 10 MiB limit");
   const ready = await chrome.runtime.sendMessage({type: "chapter-prepare"});
@@ -36,7 +38,9 @@ export async function renderPage(blob: Blob, signal: AbortSignal): Promise<Rende
         } else if(message.type === "result") {
           if (!size || !Number.isInteger(message.rendered) || message.rendered<0 || !Number.isInteger(message.skipped) || message.skipped<0)
             throw new Error("Invalid rendered page response");
-          finish(undefined, {blob:new Blob(parts,{type:"image/png"}), rendered:message.rendered, skipped:message.skipped,coverage:parseCoverage(message.coverage)});
+          finish(undefined, {blob:new Blob(parts,{type:"image/png"}), rendered:message.rendered, skipped:message.skipped,
+            coverage:parseCoverage(message.coverage),snapshot:message.snapshot===undefined?undefined:parseSnapshot(message.snapshot),
+            input_sha256:message.input_sha256});
         } else if(message.type === "error") finish(new Error(message.error));
       } catch(error) { finish(error instanceof Error ? error : new Error("Invalid image transfer")); }
     });

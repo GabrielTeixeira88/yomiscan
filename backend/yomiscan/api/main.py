@@ -7,6 +7,7 @@ from contextlib import AbstractContextManager, asynccontextmanager
 import logging
 import json
 import os
+from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
 from time import perf_counter
@@ -38,7 +39,7 @@ def default_service() -> AbstractContextManager[ImageAnalysisService]:
 
 
 def analyze_upload(service: ImageAnalysisService, data: bytes, page: bool = False,
-                   render: bool = False) -> ImageAnalysisResponse | PageAnalysisResponse | Response:
+                   render: bool = False, diagnostics: bool = False) -> ImageAnalysisResponse | PageAnalysisResponse | Response:
     start = perf_counter()
     try:
         image = decode_image(data)
@@ -49,6 +50,16 @@ def analyze_upload(service: ImageAnalysisService, data: bytes, page: bool = Fals
             try:
                 if render:
                     result = service.translate_and_render_page(image)
+                    if diagnostics:
+                        from yomiscan.diagnostics import page_snapshot, render_bundle
+                        snapshot = page_snapshot(image, result, input_sha256=sha256(data).hexdigest(),
+                                                 models=service.diagnostic_models())
+                        snapshot["timings"]["backend_before_pack_ms"] = (perf_counter() - start) * 1000
+                        try:
+                            bundle = render_bundle(result.rendered_image, snapshot)
+                        except ValueError as exc:
+                            raise HTTPException(413, str(exc)) from exc
+                        return Response(bundle, media_type="application/zip", headers={"Cache-Control": "no-store"})
                     buffer = BytesIO()
                     result.rendered_image.save(buffer, format="PNG")
                     return Response(buffer.getvalue(), media_type="image/png", headers={
@@ -126,12 +137,12 @@ def create_app(
         return await handle_upload(request, file, page=True)
 
     @app.post("/api/v1/render-page", response_class=Response,
-              responses={200: {"content": {"image/png": {}}}})
-    async def render_page(request: Request, file: Annotated[UploadFile, File()]) -> Response:
-        return await handle_upload(request, file, page=True, render=True)
+              responses={200: {"content": {"image/png": {}, "application/zip": {}}}})
+    async def render_page(request: Request, file: Annotated[UploadFile, File()], diagnostics: bool = False) -> Response:
+        return await handle_upload(request, file, page=True, render=True, diagnostics=diagnostics)
 
     async def handle_upload(request: Request, file: UploadFile, *, page: bool,
-                            render: bool = False) -> ImageAnalysisResponse | PageAnalysisResponse | Response:
+                            render: bool = False, diagnostics: bool = False) -> ImageAnalysisResponse | PageAnalysisResponse | Response:
         try:
             data = await file.read(MAX_FILE_BYTES + 1)
         finally:
@@ -147,7 +158,7 @@ def create_app(
             raise HTTPException(429, "YomiScan is processing another crop. Please try again shortly.")
         state.busy = True
         future = asyncio.get_running_loop().run_in_executor(
-            state.executor, analyze_upload, state.service, data, page, render,
+            state.executor, analyze_upload, state.service, data, page, render, diagnostics,
         )
 
         def finished(task: asyncio.Future) -> None:

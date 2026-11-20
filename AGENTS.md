@@ -1,12 +1,17 @@
 # YomiScan development instructions
 
 - YomiScan is offline-first. Prefer local, open-source components; avoid paid APIs and cloud OCR.
-- Implement only the explicitly requested phase. OCR, morphological analysis, and local
+- Implement only the explicitly requested scope. Phases 1–7 record the completed MVP:
+  OCR, morphological analysis, and local
   JMdict lookup, local sentence translation, localhost FastAPI, and Chrome study-mode
   selection/popup, single-page text detection/analysis, and conservative single-page
   masking/inpainting/typesetting, and browser chapter orchestration with reversible
   translated overlays are implemented. Broader reader adapters, OCR correction,
   context-aware translation, and JLPT grading remain future work.
+- Post-MVP work uses descriptive feature branches. Keep historical phase names and
+  results intact; document current behavior in README.md and docs/architecture.md.
+- For diagnostic/export changes, read docs/decisions/diagnostic-report-privacy.md
+  for consent, retention, identity and redaction boundaries.
 - Keep components modular with small typed interfaces; avoid premature abstractions.
 - Use Python type hints and useful tests. Ordinary tests must not download or load OCR, translation, or detection weights.
 - Do not hide failures with broad exception handling. At third-party boundaries, wrap failures

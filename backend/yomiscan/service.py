@@ -31,6 +31,27 @@ class ImageAnalysisService:
         self._page_service: PageAnalysisService | None = None
         self._render_service: PageTranslationRenderService | None = None
 
+    def diagnostic_models(self) -> dict[str, object]:
+        from .diagnostics import model_info
+        from .detection.rtdetr import MODEL_ID, MODEL_REVISION
+        detector = self._page_service.detector if self._page_service is not None else self._detector
+        settings: dict[str, object] = {"analysis_device": self._device, "target_language": "en"}
+        if self._page_service is not None:
+            settings.update(padding=self._page_service.config.padding, minimum_side=self._page_service.config.minimum_side)
+        if self._render_service is not None:
+            from .rendering.renderer import ConservativePageRenderer
+            from .rendering.typesetting import PillowTypesetter
+            renderer = self._render_service.renderer
+            if isinstance(renderer, ConservativePageRenderer) and isinstance(renderer.typesetter, PillowTypesetter):
+                font = renderer.typesetter
+                settings.update(minimum_font_size=font.minimum_size, maximum_font_size=font.maximum_size,
+                                preferred_font_size=font.preferred_size, font_margin=font.margin)
+        return {"translation": model_info(self._analyzer.translation_metadata()),
+                "detection": {"model": MODEL_ID, "revision": MODEL_REVISION, "threshold": detector.threshold}
+                    if isinstance(detector, ComicTextDetector) else {"model": None},
+                "ocr": {"engine": "manga-ocr", "revision": None} if isinstance(self._ocr, MangaOCREngine) else {"engine": None},
+                "settings": settings}
+
     def analyze_image(self, image: Image.Image) -> ImageAnalysisResult:
         return analyze_image(image, self._ocr, self._analyzer)
 

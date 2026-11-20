@@ -18,6 +18,9 @@ Desktop.ini
 .DS_Store
 .env
 .cache/
+reports/
+*page-report*.zip
+yomiscan-page-*-report*.zip
 models/
 *.pt
 *.pth

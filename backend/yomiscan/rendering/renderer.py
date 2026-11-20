@@ -52,6 +52,14 @@ class ConservativePageRenderer:
                 "typesetting": "not_attempted", "inpainting": "not_attempted",
                 "layout": "not_attempted", "bbox": asdict(block.bbox),
                 "original_text": block.original_text,
+                "reading_order": block.reading_order, "orientation": block.orientation,
+                "detection_confidence": block.confidence, "ocr_engine": block.ocr_engine,
+                "ocr_confidence": block.ocr_metadata.get("confidence"), "ocr_ms": block.ocr_ms,
+                "failure_stage": block.failure_stage,
+                "translation_input": translation.source_text if translation else
+                    block.original_text if block.failure_stage == "translation" else None,
+                "translation_metadata": ({"engine": translation.engine, "model": translation.model, **translation.metadata}
+                                         if translation else {}),
                 "translated_text": translation.translated_text if translation else None,
                 "category": category, "category_reason": category_reason,
                 "ocr_review": "Extreme crop aspect ratio; inspect OCR against source" if block.bbox.height > 8*max(1, block.bbox.width) else None}

@@ -17,6 +17,54 @@ test("viewport ordering is visible, below, above, distant",()=>{
   assert.ok(priority(-400,-10)<priority(5000,6000));
 });
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
+
+test("refresh keeps the previous page until valid replacement and releases each URL once",async()=>{
+  let complete!:(value:string)=>void,calls=0;
+  const freed:string[]=[];
+  const queue=new ChapterQueue<number,string>({priority:()=>0,changed:()=>{},release:r=>freed.push(r),
+    process:async()=>++calls===1?'old':new Promise<string>(resolve=>complete=resolve)});
+  const key={};queue.register(key,'same-source',1);queue.start();await queue.idle();queue.setView('original');
+  assert.equal(queue.refresh(key),true);assert.equal(queue.refresh(key),false);await tick();
+  assert.equal(queue.pages.get(key)?.result,'old');assert.deepEqual(freed,[]);
+  complete('new');await queue.idle();assert.equal(queue.pages.get(key)?.result,'new');
+  assert.equal(queue.view,'original');assert.deepEqual(freed,['old']);queue.setView('english');
+  queue.dispose();assert.deepEqual(freed,['old','new']);
+});
+
+test("refresh serializes behind another page and failure retains the successful result",async()=>{
+  let unblock!:()=>void;const calls:number[]=[],freed:string[]=[];
+  const key={},other={};
+  const queue=new ChapterQueue<number,string>({priority:p=>p.id,changed:()=>{},release:r=>freed.push(r),
+    process:async p=>{calls.push(p.source);if(p.source===2)await new Promise<void>(resolve=>unblock=resolve);
+      if(p.attempts>1)throw new Error('render failed');return 'url'+p.source;}});
+  queue.register(key,'one',1);queue.start();await queue.idle();
+  queue.register(other,'two',2);await tick();assert.equal(queue.refresh(key),true);await tick();
+  assert.deepEqual(calls,[1,2]);assert.equal(queue.pages.get(key)?.result,'url1');
+  unblock();await queue.idle();assert.deepEqual(calls,[1,2,1]);
+  assert.equal(queue.pages.get(key)?.state,'translated');assert.equal(queue.pages.get(key)?.result,'url1');
+  assert.match(queue.pages.get(key)!.error!,/Refresh failed/);assert.deepEqual(freed,[]);queue.dispose();
+});
+
+test("cancelled refresh cannot replace old output even when the boundary returns late",async()=>{
+  let finish!:(value:string)=>void,signal!:AbortSignal,calls=0;const freed:string[]=[];
+  const queue=new ChapterQueue<number,string>({priority:()=>0,changed:()=>{},release:r=>freed.push(r),
+    process:async(_,s)=>{signal=s;return ++calls===1?'old':new Promise<string>(resolve=>finish=resolve);}});
+  const key={};queue.register(key,'one',1);queue.start();await queue.idle();
+  queue.refresh(key);await tick();queue.stop();assert.ok(signal.aborted);
+  finish('late');await queue.idle();assert.equal(queue.pages.get(key)?.result,'old');
+  assert.deepEqual(freed,['late']);assert.match(queue.pages.get(key)!.error!,/cancelled/);queue.dispose();
+});
+
+test("source replacement and navigation dispose old refreshes without leaking or attaching late images",async()=>{
+  let finish!:(value:string)=>void;const freed:string[]=[];
+  const queue=new ChapterQueue<number,string>({priority:()=>0,changed:()=>{},release:r=>freed.push(r),
+    process:async p=>p.refreshing?new Promise<string>(resolve=>finish=resolve):p.identity});
+  const key={};queue.register(key,'old',1);queue.start();await queue.idle();
+  queue.refresh(key);await tick();queue.register(key,'new',2);finish('late-old');await queue.idle();
+  assert.equal(queue.pages.get(key)?.result,'new');assert.deepEqual(freed,['old','late-old']);
+  queue.refresh(key);await tick();queue.dispose();finish('late-navigation');await queue.idle();
+  assert.equal(queue.pages.size,0);assert.deepEqual(freed,['old','late-old','new','late-navigation']);
+});
 test("chapter queue prioritizes visible pages, serializes, deduplicates and caches toggles",async()=>{
   const seen:number[]=[],released:string[]=[];
   let active=0,max=0;

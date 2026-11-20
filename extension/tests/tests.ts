@@ -3,11 +3,21 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { analyzeCrop, httpError, parseAnalysis } from "../src/api";
 import { constrainPopup, resizePopup, popupPosition, sameViewport, screenshotRect, selectionRect, validSelection } from "../src/geometry";
+import {copyStudyText} from '../src/popup';
 import "./chapter-tests";
 import "./acquisition-tests";
 import "./coverage-tests";
+import "./report-tests";
 
 const viewport = {width: 800, height: 600};
+test("study copy writes exact Japanese/English and reports clipboard failures safely",async()=>{
+  const copied:string[]=[];
+  assert.equal(await copyStudyText('猫。',async text=>{copied.push(text);}), 'Copied.');
+  assert.equal(await copyStudyText('Cat.',async text=>{copied.push(text);}), 'Copied.');
+  assert.deepEqual(copied,['猫。','Cat.']);
+  const failure=await copyStudyText('secret',async()=>{throw new Error('credential private-path');});
+  assert.match(failure,/Select the text/);assert.ok(!failure.includes('private-path'));
+});
 test("manual popup movement preserves size and clamps all edges", () => {
   const rect = {x: 100, y: 80, width: 420, height: 300};
   assert.deepEqual(constrainPopup(rect, viewport), rect);

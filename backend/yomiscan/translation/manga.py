@@ -183,6 +183,14 @@ class MangaTranslationEngine:
     def device(self) -> str:
         return self.runtime.device if self.runtime else "unavailable"
 
+    def diagnostic_metadata(self) -> dict[str, object]:
+        return {"engine": self.engine, "model": self.model, "device": self.device,
+                "context_tokens": self.runtime.context_size if self.runtime else None, "temperature": 0, "seed": 0,
+                "base_model": Q25_BASE if self.engine == "qwen25-manga" else None,
+                "base_revision": Q25_BASE_REVISION if self.engine == "qwen25-manga" else None,
+                "expected_revision": {"hy-mt2-manga": HY_REVISION, "qwen35-vntl": VNTL_REVISION,
+                                      "qwen25-manga": Q25_REVISION}[self.engine]}
+
     def load(self) -> None:
         if self.runtime is None:
             raise TranslationInitializationError(

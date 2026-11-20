@@ -1,16 +1,20 @@
 import {sameViewport, type Viewport} from "../geometry";
-import {SkipPage} from "./model";
+import {SkipPage,WaitForViewport,ManualAcquisitionError} from "./model";
 import {MAX_INPUT} from './wire';
 import type {MangaPageCandidate} from "./discovery";
 export const currentViewport=():Viewport=>({width:innerWidth,height:innerHeight,scrollX,scrollY,scale:visualViewport?.scale??1});
 export interface PagePixels {blob:Blob;width:number;height:number;capture?:{scaleX:number;scaleY:number;x:number;y:number;width:number;height:number}}
 export type AcquisitionMethod='direct-extension-fetch'|'canvas'|'viewport-capture'|'stitched-capture';
-export interface AcquisitionAttempt {method:AcquisitionMethod;success:boolean;reason?:string}
+export interface AcquisitionAttempt {method:AcquisitionMethod;success:boolean;reason?:string;code?:string}
 export interface AcquiredPage extends PagePixels {method:AcquisitionMethod;attempts:AcquisitionAttempt[]}
 export class AcquisitionError extends SkipPage {
-  constructor(readonly attempts:AcquisitionAttempt[]) {
+  override readonly retryWhenVisible:boolean;
+  constructor(readonly attempts:AcquisitionAttempt[],causes:unknown[]=[]) {
     super(`Image acquisition failed: ${attempts.at(-1)?.reason??'No method succeeded'}.`+
-      (attempts.some(a=>a.reason?.includes('permission not granted'))?' Grant image-host access using Retry.':' See acquisition diagnostics for earlier failures.'));
+      (attempts.some(a=>a.reason?.includes('permission not granted'))?' Grant image-host access using Retry.':' See acquisition diagnostics for earlier failures.'),
+      {cause:new AggregateError(causes,'Image acquisition strategies failed')});
+    this.retryWhenVisible=causes.some(error=>error instanceof WaitForViewport) &&
+      !causes.some(error=>error instanceof ManualAcquisitionError);
   }
 }
 export interface AcquisitionStrategies {
@@ -23,6 +27,7 @@ export class PageImageAcquirer {
   constructor(private readonly strategies:AcquisitionStrategies) {}
   async acquire(candidate:MangaPageCandidate,signal:AbortSignal):Promise<AcquiredPage> {
     const attempts:AcquisitionAttempt[]=[];
+    const causes:unknown[]=[];
     const methods:[AcquisitionMethod,AcquisitionStrategies[keyof AcquisitionStrategies]][]=[];
     if(/^https?:/.test(candidate.source))methods.push(['direct-extension-fetch',this.strategies.direct]);
     methods.push(['canvas',this.strategies.canvas],['viewport-capture',this.strategies.viewport],['stitched-capture',this.strategies.stitch]);
@@ -34,10 +39,12 @@ export class PageImageAcquirer {
         attempts.push({method,success:true});return {...pixels,method,attempts};
       } catch(error) {
         signal.throwIfAborted();
-        attempts.push({method,success:false,reason:error instanceof Error?error.message:'Acquisition failed'});
+        causes.push(error);
+        attempts.push({method,success:false,reason:error instanceof Error?error.message:'Acquisition failed',
+          code:error instanceof ManualAcquisitionError?error.code:error instanceof WaitForViewport?'wait_for_viewport':'strategy_failed'});
       }
     }
-    throw new AcquisitionError(attempts);
+    throw new AcquisitionError(attempts,causes);
   }
 }
 export interface CaptureTicket { id:string; source:MangaPageCandidate; viewport:Viewport; rect:{x:number;y:number;width:number;height:number}; imageRect?:{x:number;y:number;width:number;height:number} }
