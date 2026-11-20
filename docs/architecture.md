@@ -3,6 +3,55 @@
 Phases 1–7 below describe the existing MVP boundaries and retain their historical names.
 Post-MVP increments use descriptive feature branches, not a new numbered phase.
 
+## Post-MVP terminology and experimental translation
+
+`glossary.py` owns persistent user-created series/target terms in a separate SQLite
+database. It uses explicit labels/UUIDs, normalized uniqueness, global fallbacks and
+per-series overrides. Cache clearing never owns this data. The same single executor
+owns its creation/use/closure; corruption fails visibly without deletion.
+
+`translation/options.py` contains immutable per-request options and explicit engine
+capabilities. `TextAnalyzer.analyze_many()` retrieves reusable lexical results before
+matching normalized complete-token terminology. Only applicable hints reach compatible
+adapters; no OCR/output replacement occurs. Native OPUS English batching/retry remains
+the default. `NMTTranslationEngine.translate_many_to()` sets verified NLLB target IDs;
+separate pinned Marian adapters handle JA→PT/ES without an English pivot.
+
+`translation/structured.py` owns stable segments, complete source/context/hint limits,
+minimal exact-ID JSON schema, strict whole-result parsing and bounded context selection.
+`MangaTranslationEngine.translate_page()` collects every requested group before
+publishing any results. The existing `LlamaServer` uses its owned loopback process,
+actual template/token preflight, schema-constrained decoding and explicit termination
+checks. Cancellation stops that owned runtime; no partial-page cache or model fallback
+is published. This is an optional English-only contract for Hy/Qwen manga fine-tunes,
+not a quality claim or support for every model prompt.
+
+`panel_order.py` optionally applies bounded white-gutter XY cuts after extraction.
+Stable IDs, crop identities and OCR remain unchanged. Its independently cached ordering
+feeds translation/context; ambiguous partitions retain bands without dropping IDs.
+No geometry identifies speakers. Cross-page memory is absent.
+
+The extension's `translation-settings.ts` presents only supported targets/contracts
+and edits explicit user scopes. Expected glossary hashes accompany page jobs. Changed
+options/term broadcasts retire affected sessions and overlays; a successful local edit
+invalidates before profile reload, including failure/busy reloads. Backend stale-hash
+checks reject old jobs. The transport carries typed `options_json`; legacy uploads and
+Study remain supported. Backend engine selection remains the existing environment
+setting rather than a new model manager.
+
+Translation cache identity includes effective matched hints, target, model/runtime,
+stable source IDs/order, context, prompt and grammar implementations. Rendering inherits
+that lineage and font identity. Unchanged extraction/lexical entries stay reusable;
+unused glossary edits or unsupported hints do not force neural recomputation. The
+bundled OFL Noto fallback handles accents missing from Aileron; ordinary English
+continues its existing font, and unsupported scripts are rejected before masking.
+
+Stage 1 diagnostics add only allowlisted target/contract/context IDs/token metadata
+and ordering/fallback provenance. Raw replies are a separate opt-in local benchmark
+facility, not a default reader export. See [Stage 4 controls](post-mvp-translation-improvements.md),
+[primary sources](research/stage4-primary-sources.md) and
+[measured decisions](research/stage4-translation-results.md).
+
 ## Post-MVP stage caches and chapter memory ownership
 
 `cache.py` owns a worker-local bounded byte LRU and opt-in SQLite BLOB storage.

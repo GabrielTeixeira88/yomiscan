@@ -1,5 +1,12 @@
 # Manga translation benchmark and selection
 
+**Stage 4 addition:** optional exact-ID line/page/panel contracts, bounded context and
+target-aware PT/ES experiments have a separate
+[runner and usage guide](post-mvp-translation-improvements.md) and
+[results report](research/stage4-translation-results.md). The historical experiments
+below retain their original prompts, evidence and limitations. English OPUS remains
+the default; the new structure/context trials did not establish a semantic winner.
+
 **2026-10-03 decision: keep `current` (OPUS-MT) as the application default.**
 Hy-MT2 Q4_K_M is the strongest experimental candidate: compact, fast, and better on
 several slang/name examples. It still makes important meaning errors. Qwen2.5 adds
