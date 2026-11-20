@@ -131,3 +131,4 @@ test("manifest limits access to active tab and loopback; no content scripts run 
   assert.deepEqual(manifest.optional_host_permissions, ["http://*/*", "https://*/*"]);
   assert.equal(manifest.content_scripts, undefined);
 });
+import './cache-tests';

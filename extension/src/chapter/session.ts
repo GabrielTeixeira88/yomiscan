@@ -6,7 +6,7 @@ import {fetchFromExtension} from './source-client';
 import {imageHost} from './source-fetch';
 import {stitchPage} from './stitching';
 import {validSelection,type Rect} from '../geometry';
-import {renderPage} from "./transport";
+import {renderPage,ConfigurationChanged} from "./transport";
 import {createPageReport,type PageReportContext,type ReportOptions} from './reports';
 export interface ChapterSummary { active:boolean; total:number; translated:number; failed:number; skipped:number; processing:number|null; message:string; view:ViewMode }
 
@@ -23,10 +23,11 @@ export class ChapterTranslationSession {
   private navigationTimer=0;
   private url=location.href;
   private lifetime=new AbortController();
-  private bytes=0;
   private disposed=false;
   private startVersion=0;
   private notice="Ready";
+  private generation='initial';
+  private configuration:string|undefined;
   capture:CaptureTicket|null=null;
   debug=false;
   allowStitch=false;
@@ -34,21 +35,23 @@ export class ChapterTranslationSession {
   private sourceTicket:{id:string;candidate:MangaPageCandidate}|null=null;
   private acquisitionDiagnostics=new WeakMap<HTMLImageElement,AcquisitionAttempt[]>();
   private pageDiagnostics=new WeakMap<object,PageReportContext>();
-  // At most three recently acquired images, 24 MiB total. Never written to disk.
-  private reportOriginals=new Map<PageReportContext,Blob>();
+  private exporting=false;
   private downloads=new Set<string>();
   constructor(private changed:(status:ChapterSummary)=>void,private hideControls:(hidden:boolean)=>void,
               private discovery:PageDiscoveryStrategy=new GenericPageDiscovery()) {
     this.queue=new ChapterQueue({process:(page,signal)=>this.process(page,signal),
       priority:page=>{const r=page.source.image.getBoundingClientRect();return viewportPriority(r.top,r.bottom,innerHeight);},
-      release:result=>{URL.revokeObjectURL(result.url);this.bytes-=result.bytes;},changed:()=>this.update()});
+      cache:{budget:128*1024*1024,size:r=>r.bytes,protected:p=>{
+        const r=p.source.image.getBoundingClientRect();return r.bottom>0&&r.top<innerHeight&&r.right>0&&r.left<innerWidth;
+      }},
+      release:result=>{this.overlays.release(result.url);URL.revokeObjectURL(result.url);},changed:()=>this.update()});
     this.navigationTimer=window.setInterval(()=>{if(location.href!==this.url)this.dispose();},1000);
     window.addEventListener("pagehide",()=>this.dispose(),{once:true,signal:this.lifetime.signal});
   }
   get isDisposed():boolean{return this.disposed;}
   summary():ChapterSummary {
     const pages=[...this.queue.pages.values()];
-    return {active:this.queue.active,total:pages.length,translated:pages.filter(p=>p.state==="translated").length,
+    return {active:this.queue.active,total:pages.length,translated:pages.filter(p=>p.state==="translated"||p.state==="evicted").length,
       failed:pages.filter(p=>p.state==="failed").length,skipped:pages.filter(p=>p.state==="skipped").length,
       processing:pages.find(p=>p.state==="processing")?.id??null,message:this.notice,view:this.queue.view};
   }
@@ -72,6 +75,10 @@ export class ChapterTranslationSession {
       const reply=await chrome.runtime.sendMessage({type:"chapter-health"});
       if(!reply?.ok) throw new Error(reply?.error||"YomiScan local backend is not running.");
       if(this.disposed || version!==this.startVersion) return;
+      const configuration=typeof reply.configuration_id==='string'&&/^[a-f0-9]{64}$/.test(reply.configuration_id)?reply.configuration_id:undefined;
+      const generation=configuration??crypto.randomUUID();
+      if(this.generation!==generation)this.queue.stop();
+      this.configuration=configuration;this.generation=generation;
       this.notice="Watching for pages";this.observe();this.scan();
       if(retry)this.queue.retry();else this.queue.start();
     } catch(error) {if(!this.disposed && version===this.startVersion){this.notice=error instanceof Error?error.message:"Backend unavailable";this.update();}}
@@ -100,6 +107,7 @@ export class ChapterTranslationSession {
     this.update();
   }
   async exportPageReport(id:number|undefined,options:ReportOptions):Promise<void> {
+    if(this.exporting || this.downloads.size){this.notice='Finish the current report download before preparing another.';this.update();return;}
     const page=this.selectedPage(id);
     if(!page){this.notice='No chapter page is available to report.';this.update();return;}
     const result=page.result;
@@ -107,20 +115,22 @@ export class ChapterTranslationSession {
       page.result===result&&
       page.source.image.isConnected&&(page.source.image.currentSrc||page.source.image.src)===page.source.source;
     if(!current())return;
+    const unpin=this.queue.pin(page.key);this.exporting=true;
     const context=result?.reportContext??this.pageDiagnostics.get(page)??{
       page_id:page.id,width:page.source.width,height:page.source.height,state:page.state,timings:{}};
     this.notice=`Preparing page ${page.id} report…`;this.update();
     try {
       const rendered=options.rendered&&result?await(await fetch(result.url)).blob():undefined;
-      const report=await createPageReport(context,result?.snapshot,options,
-        {original:this.reportOriginals.get(context),rendered});
+      const report=await createPageReport({...context,session_cache:this.queue.cacheStats()},result?.snapshot,options,
+        {original:result?.original,rendered});
       if(!current())throw new Error('Page changed during report preparation; export cancelled.');
       const url=URL.createObjectURL(report);this.downloads.add(url);
       const link=document.createElement('a');link.dataset.yomiscan='report-download';
       link.href=url;link.download=`yomiscan-page-${page.id}-report-${Date.now()}.zip`;link.click();
-      window.setTimeout(()=>{URL.revokeObjectURL(url);this.downloads.delete(url);},60_000);
+      window.setTimeout(()=>{if(this.downloads.delete(url))URL.revokeObjectURL(url);},1000);
       this.notice=`Page ${page.id} report prepared; browser download requested.`;
     } catch(error) {this.notice=error instanceof Error?error.message:'Page report export failed.';}
+    finally {unpin();this.exporting=false;}
     this.update();
   }
   async study():Promise<void> {this.stop();this.setView("original");this.notice="Finishing any current page before Select Text…";this.update();await this.queue.idle();}
@@ -142,7 +152,7 @@ export class ChapterTranslationSession {
     // Debounced attribute filter; scan only while the user explicitly enabled chapter mode.
     this.observer.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:["src","srcset","sizes","data-src","data-srcset","class","style","hidden"]});
     this.intersection=new IntersectionObserver(entries=>{
-      for(const entry of entries)if(entry.isIntersecting && entry.intersectionRatio>=.999)this.queue.visible(entry.target);
+      for(const entry of entries)if(entry.isIntersecting)this.queue.visible(entry.target,entry.intersectionRatio>=.999);
       this.overlays.schedule();
     },{threshold:[0,1]});
     document.addEventListener("load",event=>{
@@ -155,6 +165,11 @@ export class ChapterTranslationSession {
       }
     },{capture:true,signal:this.events.signal});
     window.addEventListener("resize",()=>this.scheduleScan(),{signal:this.events.signal});
+    window.addEventListener('scroll',()=>{
+      for(const p of this.queue.pages.values()){
+        const r=p.source.image.getBoundingClientRect();if(r.bottom>0&&r.top<innerHeight)this.queue.visible(p.key,r.top>=0&&r.bottom<=innerHeight);
+      }
+    },{passive:true,signal:this.events.signal});
     document.addEventListener("visibilitychange",()=>{if(!document.hidden)this.scheduleScan();},{signal:this.events.signal});
     // SPA pushState has no native event. This lightweight URL check also clears cached URLs.
   }
@@ -168,7 +183,7 @@ export class ChapterTranslationSession {
     for(const candidate of candidates) {
       const signature=`${candidate.source}|${candidate.width}x${candidate.height}`;
       if(!this.loadedSources.has(candidate.image))this.loadedSources.set(candidate.image,signature);
-      const identity=`${signature}|${this.versions.get(candidate.image)??0}`;
+      const identity=`${this.generation}|${signature}|${this.versions.get(candidate.image)??0}`;
       this.queue.register(candidate.image,identity,candidate);this.intersection?.observe(candidate.image);
     }
     this.update();
@@ -178,12 +193,14 @@ export class ChapterTranslationSession {
     const context:PageReportContext={page_id:page.id,job_id:`${page.id}-${page.attempts}`,width:candidate.width,height:candidate.height,
       state:'processing',extension_version:chrome.runtime.getManifest().version,timings:{}};
     this.pageDiagnostics.set(page,context);
-    try {return await this.processImage(candidate,signal,context);}
-    catch(error){context.state=signal.aborted||error instanceof SkipPage?'skipped':'failed';context.error_code=signal.aborted?'cancelled':
+    try {return await this.processImage(candidate,signal,context,page.refreshing===true);}
+    catch(error){
+      if(error instanceof ConfigurationChanged){this.dispose();this.changed({...this.summary(),message:error.message});}
+      context.state=signal.aborted||error instanceof SkipPage?'skipped':'failed';context.error_code=signal.aborted?'cancelled':
       error instanceof AcquisitionError?'acquisition_failed':'page_processing_failed';throw error;}
     finally {context.timings.total_ms=performance.now()-start;}
   }
-  private async processImage(candidate:MangaPageCandidate,signal:AbortSignal,context:PageReportContext):Promise<PageImageResult> {
+  private async processImage(candidate:MangaPageCandidate,signal:AbortSignal,context:PageReportContext,refresh:boolean):Promise<PageImageResult> {
     const acquisitionStart=performance.now();
     const style=getComputedStyle(candidate.image);
     if(style.transform!=='none' || [style.paddingLeft,style.paddingRight,style.paddingTop,style.paddingBottom,
@@ -209,9 +226,6 @@ export class ChapterTranslationSession {
       this.acquisitionDiagnostics.set(candidate.image,acquired.attempts);
       context.acquisition={method:acquired.method,attempts:acquired.attempts};
       context.width=pixels.width;context.height=pixels.height;
-      this.reportOriginals.set(context,pixels.blob);
-      while(this.reportOriginals.size>3 || [...this.reportOriginals.values()].reduce((n,b)=>n+b.size,0)>24*1024*1024)
-        this.reportOriginals.delete(this.reportOriginals.keys().next().value!);
     } catch(error) {
       if(error instanceof AcquisitionError){this.acquisitionDiagnostics.set(candidate.image,error.attempts);
         context.acquisition={attempts:error.attempts};}
@@ -222,15 +236,16 @@ export class ChapterTranslationSession {
       throw new SkipPage('Image source changed during acquisition');
     if(Math.abs(pixels.width/pixels.height-candidate.width/candidate.height)>.02)throw new SkipPage('Source pixels do not match displayed image proportions');
     const renderStart=performance.now();
-    const result=await renderPage(pixels.blob,signal).finally(()=>{
+    const result=await renderPage(pixels.blob,signal,{refresh,configuration:this.configuration}).finally(()=>{
       context.timings.backend_roundtrip_ms=performance.now()-renderStart;
     });signal.throwIfAborted();
     context.input_sha256=result.input_sha256;
     if(result.snapshot && (result.snapshot.image.input_sha256!==context.input_sha256 ||
       result.snapshot.image.width!==pixels.width||result.snapshot.image.height!==pixels.height))
       throw new Error('Diagnostic page identity mismatch; result rejected.');
-    const retainedBytes=result.blob.size+new TextEncoder().encode(JSON.stringify(result.snapshot??null)).length;
-    if(this.bytes+retainedBytes>128*1024*1024)throw new SkipPage("Session image cache reached 128 MiB. Clear the session before translating more pages.");
+    // Original pixels, PNG and snapshot have one result owner and one budget entry.
+    const retainedBytes=result.blob.size+pixels.blob.size+new TextEncoder().encode(JSON.stringify(result.snapshot??null)).length+
+      new TextEncoder().encode(JSON.stringify(context)).length+1024;
     const url=URL.createObjectURL(result.blob),probe=new Image();probe.src=url;
     try {
       await probe.decode();signal.throwIfAborted();
@@ -239,9 +254,9 @@ export class ChapterTranslationSession {
       URL.revokeObjectURL(url);
       throw new SkipPage("Rendered image could not be displayed. Reader content policy or invalid response; original preserved.",{cause:error});
     } finally {probe.removeAttribute("src");}
-    this.bytes+=retainedBytes;context.state='translated';
+    context.state='translated';
     return {url,bytes:retainedBytes,rendered:result.rendered,skipped:result.skipped,coverage:result.coverage,
-      snapshot:result.snapshot,reportContext:context};
+      snapshot:result.snapshot,reportContext:context,original:pixels.blob};
   }
   private async captureWithUI(work:()=>Promise<PagePixels>):Promise<PagePixels> {
     this.overlays.suspended=true;this.overlays.schedule();this.hideControls(true);
@@ -279,7 +294,7 @@ export class ChapterTranslationSession {
   private disconnect():void {this.observer?.disconnect();this.intersection?.disconnect();this.events?.abort();clearTimeout(this.discoveryTimer);}
   dispose():void {
     if(this.disposed)return;this.disposed=true;this.startVersion++;this.disconnect();clearInterval(this.navigationTimer);this.lifetime.abort();this.queue.dispose();this.overlays.dispose();
-    this.reportOriginals.clear();this.pageDiagnostics=new WeakMap();
+    this.pageDiagnostics=new WeakMap();
     for(const url of this.downloads)URL.revokeObjectURL(url);this.downloads.clear();
     this.changed({active:false,total:0,translated:0,failed:0,skipped:0,processing:null,view:"original",message:"Session cleared. Activate Translate Chapter for this reader."});
   }

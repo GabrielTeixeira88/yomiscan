@@ -10,6 +10,7 @@ chrome.runtime.onConnect.addListener(port => {
   if (ports >= 8) { port.postMessage({type:"error",error:"Too many active chapter tabs"}); return; }
   ports++;
   let parts: Uint8Array<ArrayBuffer>[] = [], size = 0, expected = 0, submitted = false, connected = true, mime='image/png';
+  let refresh=false,configuration:string|undefined;
   const controller = new AbortController();
   const timer = setTimeout(()=>controller.abort(),300_000);
   const send = (message: unknown) => { if(connected) port.postMessage(message); };
@@ -23,6 +24,9 @@ chrome.runtime.onConnect.addListener(port => {
         expected=message.bytes;
         if(!['image/png','image/jpeg','image/webp'].includes(message.mime))throw new Error('Unsupported upload image type');
         mime=message.mime;
+        if(message.refresh!==undefined && typeof message.refresh!=='boolean')throw new Error('Invalid refresh option');
+        if(message.configuration!==undefined && (typeof message.configuration!=='string'||!/^[a-f0-9]{64}$/.test(message.configuration)))throw new Error('Invalid configuration identity');
+        refresh=message.refresh===true;configuration=message.configuration;
       } else if(message.type === "chunk") {
         if(!expected) throw new Error("Missing image header");
         const data=decodeChunk(message.data); size+=data.length;
@@ -38,8 +42,12 @@ chrome.runtime.onConnect.addListener(port => {
             controller.signal.throwIfAborted();
             const form=new FormData(); form.append("file",blob,mime==='image/jpeg'?'page.jpg':mime==='image/webp'?'page.webp':'page.png');
             const inputHash=await imageHash(blob);
-            const response=await fetch("http://127.0.0.1:8765/api/v1/render-page?diagnostics=true",{method:"POST",body:form,
+            const query=new URLSearchParams({diagnostics:'true'});
+            if(refresh)query.set('refresh','translation');
+            if(configuration)query.set('configuration',configuration);
+            const response=await fetch("http://127.0.0.1:8765/api/v1/render-page?"+query,{method:"POST",body:form,
               headers:{"X-YomiScan-Client":"study-extension-v1"},signal:controller.signal,credentials:"omit",redirect:"error",cache:"no-store"});
+            if(response.status===409){send({type:'error',code:'configuration_changed',error:'Backend settings changed. Start Translate Chapter again.'});return;}
             const page=await readRenderResponse(response,inputHash),result=page.blob;
             for(let offset=0; connected && offset<result.size; offset+=CHUNK) send({type:"chunk",data:await encodeChunk(result.slice(offset,offset+CHUNK))});
             send({type:"result", rendered:page.rendered, skipped:page.skipped,coverage:page.coverage,
