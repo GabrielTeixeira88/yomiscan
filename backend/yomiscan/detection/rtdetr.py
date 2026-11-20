@@ -54,6 +54,8 @@ class ComicTextDetector:
             self._model = RTDetrV2ForObjectDetection.from_pretrained(
                 MODEL_ID, revision=MODEL_REVISION, use_safetensors=True,
             ).to(self.device).eval()
+            from ..cache_identity import loaded_hf_identity
+            self._cache_artifacts = loaded_hf_identity(self._model, MODEL_ID, MODEL_REVISION)
         except Exception as exc:
             raise DetectionInitializationError(
                 f"Cannot load {MODEL_ID}. Run uv sync; check Hugging Face cache/download, memory and device: {exc}"

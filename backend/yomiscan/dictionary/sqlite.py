@@ -25,6 +25,7 @@ def decode_entry(payload: str) -> DictionaryEntry:
 
 class SQLiteDictionary:
     def __init__(self, path: Path) -> None:
+        self._path = path.resolve()
         self._connection: sqlite3.Connection | None = None
         try:
             self._connection = sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)

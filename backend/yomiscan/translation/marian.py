@@ -29,6 +29,8 @@ class MarianTranslationEngine:
             self._model = MarianMTModel.from_pretrained(DEFAULT_MODEL, revision=MODEL_REVISION)
             self._model.to(self.device)
             self._model.eval()
+            from ..cache_identity import loaded_hf_identity
+            self._cache_artifacts = loaded_hf_identity(self._model, DEFAULT_MODEL, MODEL_REVISION)
         except TranslationInitializationError:
             raise
         except Exception as exc:
