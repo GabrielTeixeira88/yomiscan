@@ -4,13 +4,15 @@ import type {AcquisitionAttempt,AcquisitionMethod} from './acquisition';
 export const MAX_SNAPSHOT=2*1024*1024;
 type RecordData=Record<string,unknown>;
 export interface PageSnapshot {
-  schema_version:number;build:RecordData;image:{width:number;height:number;input_sha256:string;pixel_sha256?:string};
+  schema_version:number;build:RecordData;image:{width:number;height:number;input_sha256:string;pixel_sha256?:string;canonical_pixels?:unknown};
   models:RecordData;regions:RecordData[];blocks:RecordData[];timings:RecordData;counts:RecordData;coverage?:unknown;unavailable?:string;
+  cache?:unknown;
 }
 export interface PageReportContext {
   page_id:number;width:number;height:number;state:string;input_sha256?:string;extension_version?:string;
   job_id?:string;
   acquisition?:{method?:AcquisitionMethod;attempts:AcquisitionAttempt[]};timings:Record<string,number>;error_code?:string;
+  session_cache?:{bytes:number;budget:number;evictions:number};
 }
 export interface ReportOptions {text:boolean;original:boolean;rendered:boolean}
 export interface ReportImages {original?:Blob;rendered?:Blob}
@@ -91,6 +93,12 @@ export async function createPageReport(context:PageReportContext,snapshot:PageSn
       input_sha256:hash(context.input_sha256)?context.input_sha256:null,
       pixel_sha256:hash(snapshot?.image.pixel_sha256)?snapshot.image.pixel_sha256:null},
     models:models(snapshot?.models),counts:pick(snapshot?.counts,['rendered','preserved','undetected']),
+    canonical_pixels:pick(snapshot?.image.canonical_pixels,['sha256','normalization','width','height','mode','canonical_mode']),
+    cache:{...pick(snapshot?.cache,['schema','persistent_enabled','memory_bytes','memory_limit','disk_bytes','disk_limit',
+      'hits','misses','evictions','corruptions','refresh','error_code']),
+      stages:(Array.isArray(object(snapshot?.cache).stages)?object(snapshot?.cache).stages as unknown[]:[]).map(
+        stage=>pick(stage,['stage','key','source','restored','lookup_ms','compute_ms'])),
+      session:pick(context.session_cache,['bytes','budget','evictions'])},
     acquisition:{method:label(acquisition?.method),resolution:'acquired_pixels',
       attempts:(acquisition?.attempts??[]).map(a=>({method:label(a.method),success:a.success,
         outcome:a.success?'success':'failed',code:label(a.code)}))},

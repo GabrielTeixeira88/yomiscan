@@ -68,6 +68,8 @@ class NMTTranslationEngine:
             model.eval()
             self._torch, self._tokenizer, self._model = torch, tokenizer, model
             self._target_id = target_id
+            from ..cache_identity import loaded_hf_identity
+            self._cache_artifacts = loaded_hf_identity(self._model, self.spec.model, self.spec.revision)
         except TranslationInitializationError:
             raise
         except Exception as exc:

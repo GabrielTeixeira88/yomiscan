@@ -20,6 +20,7 @@ class TransformersOCREngine:
         if device not in ("cpu", "cuda", "auto"):
             raise ValueError("OCR device must be cpu, cuda or auto")
         self.variant, self.grayscale, self.decoding, self.max_tokens = variant, grayscale, decoding, max_tokens
+        self._cache_artifacts = None
         try:
             import torch
             self._torch = torch
@@ -38,6 +39,7 @@ class TransformersOCREngine:
                 tokenizer = AutoTokenizer.from_pretrained(folder, tokenizer_type="bert-japanese", local_files_only=True)
                 model = GeneratingOCRModel.from_pretrained(folder, local_files_only=True,
                             use_safetensors=variant != "ocr-original").to(self.device).eval()
+                self._cache_artifacts = dict(MODELS[variant].hashes)
             self.model, self.processor, self.tokenizer = model, processor, tokenizer
             if any(not isinstance(v, int) or v < 0 for v in (tokenizer.cls_token_id, tokenizer.sep_token_id, tokenizer.pad_token_id)):
                 raise ValueError("OCR tokenizer must expose CLS, SEP and PAD IDs")

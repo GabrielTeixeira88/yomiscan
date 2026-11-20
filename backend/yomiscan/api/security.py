@@ -41,8 +41,10 @@ class LocalRequestGuard:
             if message["type"] == "http.disconnect":
                 return
             body.extend(message.get("body", b""))
-            if len(body) > MAX_BODY_BYTES:
-                await JSONResponse({"detail": "Upload exceeds the 10 MiB image limit."}, 413)(scope, receive, send)
+            limit = 1024 if scope.get("path", "").startswith("/api/v1/cache") else MAX_BODY_BYTES
+            if len(body) > limit:
+                detail = "Cache settings exceed 1 KiB." if limit == 1024 else "Upload exceeds the 10 MiB image limit."
+                await JSONResponse({"detail": detail}, 413)(scope, receive, send)
                 return
             if not message.get("more_body", False):
                 break

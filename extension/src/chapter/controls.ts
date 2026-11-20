@@ -59,6 +59,27 @@ export class ChapterControls {
       void this.current().exportPageReport(this.selectedPageId(),{...inclusions}).finally(()=>{this.exportButton.disabled=false;});
     });
     panel.append(this.exportButton,reportOptions);
+    const cacheDetails=document.createElement('details'),cacheTitle=document.createElement('summary');cacheTitle.textContent='Local processing cache';
+    const cacheInfo=document.createElement('p'),cacheLabel=document.createElement('label'),persistent=document.createElement('input');
+    persistent.type='checkbox';persistent.disabled=true;
+    cacheLabel.append(persistent,document.createTextNode('Save page processing on disk (pixels and text)'));
+    const cacheHelp=document.createElement('small');cacheHelp.textContent='Off by default. Saved only on this computer, without page URLs. Disabling retains stored entries until cleared. Clear Session only removes browser results.';
+    const cacheAction=async(operation:'read'|'settings'|'clear')=>{
+      persistent.disabled=true;
+      try {
+        const reply=await chrome.runtime.sendMessage({type:'chapter-cache',operation,enabled:persistent.checked});
+        if(!reply?.ok)throw new Error(reply?.error??'Cache controls unavailable');
+        const data=reply.data;persistent.checked=data.persistent_enabled;
+        const mib=(bytes:number)=>(bytes/1024/1024).toFixed(1);
+        cacheInfo.textContent=`Disk ${mib(data.disk_bytes)} / ${mib(data.disk_limit)} MiB · backend RAM ${mib(data.memory_bytes)} MiB`+
+          (data.error_code?' · Storage error; inspect backend logs.':'');
+        persistent.disabled=false;
+      }catch(error){cacheInfo.textContent=error instanceof Error?error.message:'Cache controls unavailable';}
+    };
+    persistent.addEventListener('change',()=>{void cacheAction('settings');});
+    cacheDetails.addEventListener('toggle',()=>{if(cacheDetails.open)void cacheAction('read');});
+    cacheDetails.append(cacheTitle,cacheLabel,cacheHelp,cacheInfo,button('Refresh Cache Usage',()=>{void cacheAction('read');}),
+      button('Clear Persistent Cache',()=>{void cacheAction('clear');}));panel.append(cacheDetails);
     const help=document.createElement("small");help.textContent="Selected pages stay on this machine. CPU processing may take time.";panel.append(help);
     const details=document.createElement("details"),summary=document.createElement("summary");summary.textContent="Developer diagnostics";
     details.append(summary,button("Log discovery / states",()=>this.current().diagnostics()));panel.append(details);
@@ -85,6 +106,8 @@ export class ChapterControls {
     this.status.textContent=`${status.translated} / ${status.total} pages translated · ${status.failed} failed · ${status.skipped} skipped\n`+
       (status.processing?`Page ${status.processing} processing…`:status.active&&!pending?"Known pages finished; watching for lazy-loaded pages.":"")+
       '\n'+status.message;
+    if(this.session){const cache=this.session.memoryStats(),evicted=[...this.session.queue.pages.values()].filter(p=>p.state==='evicted').length;
+      this.status.textContent+=`\nSession ${(cache.bytes/1024/1024).toFixed(1)} / ${(cache.budget/1024/1024).toFixed(0)} MiB · ${evicted} evicted (reload on view)`;}
     const errors=this.session?[...this.session.queue.pages.values()].filter(p=>p.error&&!p.cancelled).slice(0,3).map(p=>`Page ${p.id}: ${p.error}`):[];
     const results=this.session?[...this.session.queue.pages.values()].flatMap(p=>p.result?[p.result]:[]):[];
     this.warning.textContent=errors.join("\n")+'\n'+coverageSummary(results);

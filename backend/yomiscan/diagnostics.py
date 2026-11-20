@@ -126,6 +126,17 @@ def page_snapshot(image: Image.Image, result: PageRenderResult, *, input_sha256:
         "coverage": result.diagnostics.get("coverage", {}),
         "limitations": ["OCR confidence and raw rejected model responses are unavailable unless recorded by the engine."],
     }
+    from .cache import pixel_identity
+    # These coexist: uploaded-byte identity, historical diagnostic pixel identity,
+    # and the versioned canonical pixels used by stage caching.
+    snapshot["image"]["canonical_pixels"] = pixel_identity(image)
+    cache = result.diagnostics.get("cache")
+    if isinstance(cache, dict):
+        snapshot["cache"] = {k: cache[k] for k in ("schema", "persistent_enabled", "memory_bytes", "memory_limit",
+            "disk_bytes", "disk_limit", "hits", "misses", "evictions", "corruptions", "refresh", "error_code") if k in cache}
+        snapshot["cache"]["stages"] = [
+            {k: s[k] for k in ("stage", "key", "source", "restored", "lookup_ms", "compute_ms") if k in s}
+            for s in cache.get("stages", []) if isinstance(s, dict)]
     if len(json.dumps(snapshot, ensure_ascii=False, allow_nan=False).encode("utf-8")) > MAX_SNAPSHOT_BYTES:
         # Rendering must remain usable even when a page is too large to diagnose in memory.
         return {key: snapshot[key] for key in ("schema_version", "build", "image", "models", "counts", "coverage")} | {

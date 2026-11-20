@@ -1,6 +1,7 @@
 import { analyzeCrop } from "./api";
 import {installSourceFetch} from './chapter/source-fetch';
 import {CaptureThrottle} from './chapter/capture-throttle';
+import {cacheRequest} from './chapter/cache-client';
 const captures=new CaptureThrottle();
 installSourceFetch();
 import { screenshotRect, validSelection, type Rect, type Viewport } from "./geometry";
@@ -100,6 +101,14 @@ async function capture(request: CaptureRequest, tab: chrome.tabs.Tab): Promise<u
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (sender.id !== chrome.runtime.id || sender.frameId !== 0 || sender.tab?.id === undefined) return;
+  if(message?.type==='chapter-cache'){
+    if(!['read','settings','clear'].includes(message.operation) || (message.operation==='settings' && typeof message.enabled!=='boolean')){
+      sendResponse({ok:false,error:'Invalid cache operation'});return;
+    }
+    cacheRequest(message.operation,message.enabled).then(data=>sendResponse({ok:true,data}),
+      error=>sendResponse({ok:false,error:error instanceof Error?error.message:'Local cache operation failed'}));
+    return true;
+  }
   if(message?.type==='chapter-permissions') {
     const origins=message.origins;
     if(!Array.isArray(origins) || origins.length>50 || !origins.every((x:unknown)=>typeof x==='string' && /^https?:\/\/[^/*?#]+\/\*$/.test(x))) {
@@ -117,6 +126,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const work=message.type==="chapter-prepare" ? prepareTransport() : message.type==="chapter-capture" ? pageCapture(message,sender.tab) :
       fetch("http://127.0.0.1:8765/health",{signal:AbortSignal.timeout(5000),credentials:"omit",redirect:"error",cache:"no-store"}).then(async response=>{
         if(!response.ok || (await response.json()).status!=="ok")throw new Error("YomiScan backend resources are unavailable. Check the server terminal.");
+        const configuration=response.headers.get('X-YomiScan-Configuration');
+        if(configuration && /^[a-f0-9]{64}$/.test(configuration))return {configuration_id:configuration};
+        try {return {configuration_id:(await cacheRequest('read')).configuration_id};}
+        catch {return {};}// Legacy backends remain usable; their session generation is never reused across Start.
       });
     work.then(data=>sendResponse({ok:true,...(data as object??{})}),error=>sendResponse({ok:false,error:message.type==="chapter-health" &&
       (error instanceof TypeError || error?.name==="TimeoutError") ?

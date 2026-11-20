@@ -1,6 +1,6 @@
 """Compose existing engines without tying tokenization to OCR."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from collections.abc import Sequence
 import logging
 from time import perf_counter
@@ -16,6 +16,9 @@ from yomiscan.translation import TranslationEngine, TranslationResult
 from yomiscan.translation import TranslationError
 from yomiscan.nlp import TokenizerError
 from yomiscan.dictionary import DictionaryError
+from .cache import CacheRequest
+from .cache_identity import component_identity, algorithm, result_metadata
+from pydantic import TypeAdapter, ValidationError
 
 
 class DictionaryLookup(Protocol):
@@ -72,11 +75,28 @@ class TextAnalyzer:
         translation = self._translator.translate(text) if self._translator and text.strip() else None
         return self._analyze_lexical(text, translation)
 
-    def analyze_many(self, texts: Sequence[str]) -> list[TextAnalysisResult | Exception]:
+    def analyze_many(self, texts: Sequence[str], *, cache: CacheRequest | None = None,
+                     lineage: object = None) -> list[TextAnalysisResult | Exception]:
         """Batch sentence translation; isolate known per-block failures in page mode."""
         translations: list[TranslationResult | None | Exception] = [None] * len(texts)
         nonblank = [i for i, text in enumerate(texts) if text.strip()]
-        if self._translator and nonblank:
+        identity = component_identity(self._translator) if cache else None
+        key = cache.key("translation", list(texts), lineage, identity, "en", "ordered-native-batch-v1",
+                        algorithm("analysis.py")) if cache and identity is not None else None
+        encoded = cache.get("translation", key) if cache else None
+        restored = False
+        if encoded is not None:
+            try:
+                previous = TypeAdapter(list[TranslationResult | None]).validate_json(encoded)
+                if len(previous) != len(texts):
+                    raise ValueError("Cached translation batch count mismatch")
+                translations = [replace(t, processing_time_ms=0.0) if t is not None else None for t in previous]
+                restored = True
+            except (ValidationError, ValueError):
+                cache.invalid("translation", key)
+        batch_failed = False
+        translation_start = perf_counter()
+        if self._translator and nonblank and not restored:
             try:
                 batch = self._translator.translate_many([texts[i] for i in nonblank])
                 if len(batch) != len(nonblank):
@@ -84,6 +104,7 @@ class TextAnalyzer:
                 for i, result in zip(nonblank, batch, strict=True):
                     translations[i] = result
             except TranslationError:
+                batch_failed = True
                 logging.getLogger(__name__).exception("Page translation batch failed; retrying individual blocks")
                 for i in nonblank:
                     try:
@@ -91,13 +112,32 @@ class TextAnalyzer:
                     except TranslationError as exc:
                         logging.getLogger(__name__).exception("Page block translation failed")
                         translations[i] = exc
+        if cache and not restored:
+            cache.stages[-1]["compute_ms"] = (perf_counter()-translation_start)*1000
+        if cache and not restored and not batch_failed and not any(isinstance(t, Exception) for t in translations):
+            safe = [replace(t, metadata=result_metadata(t.metadata)) if isinstance(t, TranslationResult) else t for t in translations]
+            cache.put("translation", key, TypeAdapter(list[TranslationResult | None]).dump_json(safe))
+        lexical_identity = [component_identity(self._tokenizer), component_identity(self._dictionary)] if cache else []
         results: list[TextAnalysisResult | Exception] = []
         for text, translation in zip(texts, translations, strict=True):
             if isinstance(translation, Exception):
                 results.append(translation)
                 continue
             try:
-                results.append(self._analyze_lexical(text, translation))
+                lexical_key = cache.key("lexical", text, lexical_identity, algorithm("analysis.py")) if cache and all(
+                    item is not None for item in lexical_identity) else None
+                payload = cache.get("lexical", lexical_key) if cache else None
+                lexical = None
+                if payload is not None:
+                    try:
+                        lexical = replace(TypeAdapter(TextAnalysisResult).validate_json(payload), processing_time_ms=0.0)
+                    except ValidationError:
+                        cache.invalid("lexical", lexical_key)
+                if lexical is None:
+                    lexical = self._analyze_lexical(text, None)
+                    if cache and lexical_identity == [component_identity(self._tokenizer), component_identity(self._dictionary)]:
+                        cache.put("lexical", lexical_key, TypeAdapter(TextAnalysisResult).dump_json(lexical))
+                results.append(replace(lexical, translation=translation))
             except (TokenizerError, DictionaryError) as exc:
                 logging.getLogger(__name__).exception("Page lexical analysis failed")
                 results.append(exc)

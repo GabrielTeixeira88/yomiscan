@@ -3,7 +3,9 @@ import {parseCoverage,type PageCoverage} from './coverage';
 import {parseSnapshot} from './reports';
 import type {RenderedPage} from './render-response';
 export type {RenderedPage} from './render-response';
-export async function renderPage(blob: Blob, signal: AbortSignal): Promise<RenderedPage> {
+export class ConfigurationChanged extends Error {}
+export async function renderPage(blob: Blob, signal: AbortSignal,
+  options:{refresh?:boolean;configuration?:string}={}): Promise<RenderedPage> {
   if (blob.size > MAX_INPUT) throw new Error("Page exceeds the backend's 10 MiB limit");
   const ready = await chrome.runtime.sendMessage({type: "chapter-prepare"});
   if (!ready?.ok) throw new Error(ready?.error || "Could not start local page transport");
@@ -24,7 +26,7 @@ export async function renderPage(blob: Blob, signal: AbortSignal): Promise<Rende
       if (done) return;
       try {
         if (message.type === "ready") void (async () => {
-          port.postMessage({type:"begin", bytes:blob.size, mime:blob.type});
+          port.postMessage({type:"begin", bytes:blob.size, mime:blob.type,...options});
           for(let offset=0; offset<blob.size; offset+=CHUNK) {
             const data = await encodeChunk(blob.slice(offset,offset+CHUNK));
             if(done) return; port.postMessage({type:"chunk", data});
@@ -41,7 +43,7 @@ export async function renderPage(blob: Blob, signal: AbortSignal): Promise<Rende
           finish(undefined, {blob:new Blob(parts,{type:"image/png"}), rendered:message.rendered, skipped:message.skipped,
             coverage:parseCoverage(message.coverage),snapshot:message.snapshot===undefined?undefined:parseSnapshot(message.snapshot),
             input_sha256:message.input_sha256});
-        } else if(message.type === "error") finish(new Error(message.error));
+        } else if(message.type === "error") finish(message.code==='configuration_changed'?new ConfigurationChanged(message.error):new Error(message.error));
       } catch(error) { finish(error instanceof Error ? error : new Error("Invalid image transfer")); }
     });
   });

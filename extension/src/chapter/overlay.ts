@@ -2,7 +2,7 @@ import type {MangaPageCandidate} from "./discovery";
 import type {PageRecord, ViewMode} from "./model";
 import type {PageCoverage} from './coverage';
 import type {PageSnapshot,PageReportContext} from './reports';
-export interface PageImageResult { url: string; bytes: number; rendered: number; skipped: number; coverage?:PageCoverage; snapshot?:PageSnapshot;reportContext?:PageReportContext }
+export interface PageImageResult { url: string; bytes: number; rendered: number; skipped: number; coverage?:PageCoverage; snapshot?:PageSnapshot;reportContext?:PageReportContext;original?:Blob }
 
 /** Fixed, pointer-transparent siblings: never rewrite the site's img/srcset/layout. */
 export class ChapterOverlays {
@@ -33,6 +33,13 @@ export class ChapterOverlays {
     this.schedule();
   }
   schedule():void { if(!this.frame) this.frame=requestAnimationFrame(()=>{this.frame=0;this.paint();}); }
+  /** Switch/remove references synchronously before the queue revokes an obsolete URL. */
+  release(url:string):void {
+    for(const [id,image] of this.images)if(image.getAttribute('src')===url){
+      const replacement=this.pages.find(p=>p.id===id)?.result?.url;
+      if(replacement && replacement!==url)image.src=replacement;else image.removeAttribute('src');
+    }
+  }
   private paint():void {
     this.host.style.setProperty("visibility",this.suspended || this.view==="original" ? "hidden" : "visible","important");
     for(const page of this.pages) {

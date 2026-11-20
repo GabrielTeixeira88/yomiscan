@@ -25,6 +25,7 @@ class ONNXComicTextDetector:
                for v in (threshold, self.bubble_threshold, self.free_threshold)):
             raise ValueError("Detection thresholds must be in (0, 1]")
         self.threshold, self.device, self.threads = threshold, "cpu", threads
+        self._cache_artifacts = None
         try:
             if session is None:
                 from ..vision_models import MODELS, model_directory, file_hash
@@ -33,6 +34,7 @@ class ONNXComicTextDetector:
                 if file_hash(model_path) != MODELS["detector"].hashes["detector-v4-s_int8.onnx"]:
                     raise ValueError("Detector artifact differs from the supported pinned v4-s export")
                 session = cpu_session(model_path, threads=threads)
+                self._cache_artifacts = dict(MODELS["detector"].hashes)
             inputs = {i.name: i for i in session.get_inputs()}
             if (set(inputs) != {"images", "orig_target_sizes"} or inputs["images"].type != "tensor(float)"
                 or inputs["orig_target_sizes"].type != "tensor(int64)"

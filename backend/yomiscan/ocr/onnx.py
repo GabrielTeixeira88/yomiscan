@@ -20,6 +20,7 @@ class ONNXMangaOCREngine:
         if not 1 <= max_tokens <= 512:
             raise ValueError("OCR token limit must be between 1 and 512")
         self.max_tokens, self.grayscale, self.use_kv_cache, self.threads = max_tokens, grayscale, use_kv_cache, threads
+        self._cache_artifacts = None
         try:
             folder = model_dir if model_dir is not None else model_directory("ocr-onnx")
             self.vocabulary = (folder / "vocab.txt").read_text(encoding="utf-8").splitlines()
@@ -30,6 +31,7 @@ class ONNXMangaOCREngine:
                     if file_hash(folder / filename) != expected:
                         raise ValueError(f"OCR artifact hash mismatch: {filename}")
                 config = json.loads((folder / "config.json").read_text(encoding="utf-8"))
+                self._cache_artifacts = dict(MODELS["ocr-onnx"].hashes)
                 generation = json.loads((folder / "generation_config.json").read_text(encoding="utf-8"))
                 preprocessing = json.loads((folder / "preprocessor_config.json").read_text(encoding="utf-8"))
                 if (config["decoder_start_token_id"] != self.start_id or generation["eos_token_id"] != self.end_id

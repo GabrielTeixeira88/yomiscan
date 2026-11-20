@@ -9,7 +9,7 @@ import path from "node:path";
 const mocked=process.argv.includes('--mock-backend'),backend=`http://127.0.0.1:${mocked?8774:8765}`;
 const {packZip,unpackZip}=await import('../.test/browser-support.mjs');
 const reportDir=path.resolve('.cache/stage1-reports-'+Date.now());
-let mockServer,mockRenders=0,extensionPath=path.resolve('extension/dist');
+let mockServer,mockRenders=0,mockRefreshes=0,persistentCache=false,mockConfiguration='f'.repeat(64),extensionPath=path.resolve('extension/dist');
 if(mocked) {
   extensionPath=path.resolve('.cache/stage1-browser-extension');
   await mkdir(extensionPath,{recursive:true});
@@ -19,10 +19,18 @@ if(mocked) {
   }
   mockServer=http.createServer(async(req,res)=>{
     try {
-      if(req.url==='/health'){res.setHeader('Content-Type','application/json');res.end('{"status":"ok"}');return;}
+      if(req.url==='/health'){res.setHeader('Content-Type','application/json');res.setHeader('X-YomiScan-Configuration',mockConfiguration);res.end('{"status":"ok"}');return;}
+      if(req.url.startsWith('/api/v1/cache')){
+        if(req.url.endsWith('/settings')){let body='';for await(const chunk of req)body+=chunk;persistentCache=JSON.parse(body).enabled;}
+        res.setHeader('Content-Type','application/json');res.end(JSON.stringify({persistent_enabled:persistentCache,
+          memory_bytes:0,memory_limit:64*1024*1024,disk_bytes:0,disk_limit:512*1024*1024,evictions:0,configuration_id:mockConfiguration}));return;
+      }
+      const configuration=new URL(backend+req.url).searchParams.get('configuration');
+      if(configuration && configuration!==mockConfiguration){req.resume();res.writeHead(409);res.end();return;}
       const request=new Request(backend+req.url,{method:'POST',headers:req.headers,body:req,duplex:'half'});
       const form=await request.formData(),file=form.get('file'),bytes=new Uint8Array(await file.arrayBuffer());
       if(req.url.startsWith('/api/v1/render-page'))mockRenders++;
+      if(req.url.includes('refresh=translation'))mockRefreshes++;
       await new Promise(resolve=>setTimeout(resolve,250));
       if(req.url.startsWith('/api/v1/analyze-image')) {
         res.setHeader('Content-Type','application/json');res.end(JSON.stringify({
@@ -129,6 +137,19 @@ try {
   await wait(300);assert.equal(await evaluate(offscreen,"testCalls.length"),count);report.checks.push("Original/English toggles reuse cached results");
   await click("Retry Failed / Skipped");await until(async()=>(await panel()).includes("5 / 5 pages translated"),60000);
   report.checks.push("Explicit retry recovers failed page");
+  if(mocked){
+    const cacheSummary=await find(n=>n.nodeName==='SUMMARY'&&n.children?.some(c=>c.nodeValue==='Local processing cache'));
+    await invoke(cacheSummary,'function(){this.click()}');
+    await until(async()=>(await panel()).includes('Disk 0.0 / 512.0 MiB'));
+    const consent=async()=>nodes((await call('DOM.getDocument',{depth:-1,pierce:true},session)).root)
+      .filter(n=>n.nodeName==='INPUT'&&n.attributes?.includes('checkbox')).at(-1);
+    assert.equal(await invoke(await consent(),'function(){return this.checked}'),false);
+    await invoke(await consent(),'function(){this.click()}');await until(()=>persistentCache);
+    await click('Clear Persistent Cache');await wait(200);assert.equal(persistentCache,true);
+    await invoke(await consent(),'function(){this.click()}');await until(()=>!persistentCache);
+    await invoke(await find(n=>n.nodeName==='SUMMARY'&&n.children?.some(c=>c.nodeValue==='Local processing cache')),'function(){this.click()}');
+    report.checks.push('Persistence is off by default; explicit checkbox, usage and separate persistent clear work without clearing browser overlays');
+  }
   const pageSelector=await find(n=>n.nodeName==='SELECT');
   await invoke(pageSelector,"function(){this.value='1'}");
   await evaluate(session,"document.querySelector('#page-1').scrollIntoView()");await wait(150);
@@ -153,9 +174,10 @@ try {
   assert.equal(manifest.page.id,1);assert.equal(manifest.inclusions.text,false);
   assert.ok(!JSON.stringify(manifest).includes('127.0.0.1'));
   if(mocked) {
+    await wait(1100); // Allow Chrome's one bounded download URL lease to expire.
     const options=nodes((await call('DOM.getDocument',{depth:-1,pierce:true},session)).root)
       .filter(n=>n.nodeName==='INPUT'&&n.attributes?.includes('checkbox'));
-    for(const option of options.slice(-3))await invoke(option,"function(){this.checked=true;this.dispatchEvent(new Event('change'))}");
+    for(const option of options.slice(1,4))await invoke(option,"function(){this.checked=true;this.dispatchEvent(new Event('change'))}");
     const prior=new Set(await readdir(reportDir));await click('Export Page Report');
     const fullFile=await until(async()=>(await readdir(reportDir)).find(name=>name.endsWith('.zip')&&!prior.has(name)));
     const full=await unpackZip(new Blob([await readFile(path.join(reportDir,fullFile))]));
@@ -165,6 +187,7 @@ try {
   assert.equal(await evaluate(offscreen,'testCalls.length'),callsBeforeExport);
   report.checks.push('Explicit local diagnostic download has metadata-only default; optional image/text inclusions tested in mock mode; export performs no inference');
   if(mocked) {
+    await wait(1100);
     await call('Runtime.enable',{},session);
     const contentContext=contexts.find(c=>c.session===session&&c.origin===`chrome-extension://${extensionId}`);
     assert.ok(contentContext,'extension content execution context');
@@ -291,14 +314,43 @@ try {
   report.checks.push('Missing host permission opens a narrowly scoped access window; choosing capture fallbacks resumes the reader');
   await click("Clear Session");
   // Exercise a longer queue without claiming 24 additional neural-render evaluations.
-  await evaluate(offscreen,`globalThis.fetch=async(url,options)=>{await new Promise(r=>setTimeout(r,20));return new Response(options.body.get('file'),{status:200,headers:{'Content-Type':'image/png','X-YomiScan-Blocks-Rendered':'0','X-YomiScan-Blocks-Skipped':'0'}});};`);
+  await evaluate(offscreen,`globalThis.longCalls=0;globalThis.fetch=async(url,options)=>{
+    longCalls++;const png=new Uint8Array(await options.body.get('file').arrayBuffer());
+    const length=8*1024*1024,chunk=new Uint8Array(length+12),view=new DataView(chunk.buffer);
+    view.setUint32(0,length);chunk.set([116,69,88,116],4);chunk.set(new TextEncoder().encode('fixture'),8);
+    let crc=0xffffffff;for(let i=4;i<chunk.length-4;i++){crc^=chunk[i];for(let b=0;b<8;b++)crc=(crc>>>1)^((crc&1)?0xedb88320:0);}
+    view.setUint32(chunk.length-4,(crc^0xffffffff)>>>0);
+    return new Response(new Blob([png.slice(0,-12),chunk,png.slice(-12)]),{status:200,headers:{'Content-Type':'image/png','X-YomiScan-Blocks-Rendered':'0','X-YomiScan-Blocks-Skipped':'0'}});};`);
   await evaluate(session,"document.querySelector('main').replaceChildren();for(let i=0;i<24;i++)document.querySelector('#append').click()");
   await until(()=>evaluate(session,"[...document.querySelectorAll('main img')].every(i=>i.complete)"));
   const longStarted=performance.now();
   await click("Translate Chapter");await until(async()=>(await panel()).includes("24 / 24 pages translated"),120000);
   report.mockedLongQueueMs=Math.round(performance.now()-longStarted);
+  assert.match(await panel(),/Session [0-9.]+ \/ 128 MiB · [1-9][0-9]* evicted/);
+  assert.equal(await evaluate(offscreen,'longCalls'),24);
+  await evaluate(session,"document.querySelector('main img:last-child').scrollIntoView()");
+  await wait(100);
+  const callsBeforeRestore=await evaluate(offscreen,'longCalls');
+  await evaluate(session,"document.querySelector('main img:nth-child(2)').scrollIntoView()");
+  await until(async()=>await evaluate(offscreen,'longCalls')>callsBeforeRestore);
+  await until(async()=>!(await panel()).includes('processing…'));
+  assert.ok(!Number.isNaN(report.mockedLongQueueMs));
+  report.checks.push('Over 192 MiB of actual PNG responses evict offscreen results within 128 MiB; scrolling restores an evicted page without a chapter-wide stop');
+  if(mocked)assert.ok(mockRefreshes>0,'Retranslate must force backend translation/render refresh');
   await click("Clear Session");
   report.checks.push("24-page synthetic queue and cleanup (mocked render responses; not a model-quality benchmark)");
+  if(mocked){
+    await evaluate(offscreen,'globalThis.fetch=nativeFetch');
+    await evaluate(session,"document.querySelector('main').replaceChildren();document.querySelector('#append').click()");
+    await until(()=>evaluate(session,"document.querySelector('main img')?.complete"));
+    await click('Translate Chapter');await until(async()=>(await panel()).includes('1 / 1 pages translated'));
+    mockConfiguration='e'.repeat(64);
+    await click('Retranslate Page');await until(async()=>(await panel()).includes('Backend settings changed'));
+    assert.ok(!await find(n=>n.attributes?.includes('overlays')));
+    await click('Translate Chapter');await until(async()=>(await panel()).includes('1 / 1 pages translated'));
+    await click('Clear Session');
+    report.checks.push('Backend configuration change rejects old generation, clears obsolete overlays and allows a fresh session');
+  }
   report.status=await panel();report.requestOrder=await evaluate(offscreen,"testCalls");
   await mkdir(".cache",{recursive:true});await writeFile(mocked?".cache/stage1-browser.json":".cache/phase-7-browser.json",JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
 }catch(error){console.error(error);console.error("Completed checks:",report.checks);if(session)console.error("Controls:",await panel());process.exitCode=1;}

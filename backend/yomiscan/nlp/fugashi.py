@@ -15,8 +15,18 @@ class FugashiTokenizer:
 
             # Explicitly select the bundled dictionary, even if full UniDic is installed.
             self._tagger = Tagger(f'-d "{unidic_lite.DICDIR}"')
+            from pathlib import Path
+            from ..cache_identity import folder_identity
+            self._dictionary_identity = folder_identity(Path(unidic_lite.DICDIR))
         except (ImportError, RuntimeError) as exc:
             raise TokenizerError(f"Cannot initialize fugashi/UniDic-lite; run uv sync: {exc}") from exc
+
+    def cache_identity(self) -> dict[str, object] | None:
+        from ..cache_identity import versions, algorithm
+        if self._dictionary_identity is None:
+            return None
+        return {"unidic": self._dictionary_identity, **versions("fugashi", "unidic-lite"),
+                "algorithm": algorithm("nlp/fugashi.py", "japanese.py")}
 
     def tokenize(self, text: str) -> list[JapaneseToken]:
         if not text.strip():

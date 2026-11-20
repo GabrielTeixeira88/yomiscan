@@ -25,24 +25,50 @@ def decode_entry(payload: str) -> DictionaryEntry:
 
 class SQLiteDictionary:
     def __init__(self, path: Path) -> None:
+        self._path = path.resolve()
         self._connection: sqlite3.Connection | None = None
+        self._open()
+
+    def _open(self) -> None:
         try:
-            self._connection = sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)
+            self._opened_inode = self._path.stat().st_ino
+            self._connection = sqlite3.connect(self._path.as_uri() + "?mode=ro", uri=True)
             version = self._connection.execute("PRAGMA user_version").fetchone()[0]
             if version != SCHEMA_VERSION:
                 raise DictionaryError("Unsupported dictionary schema; reimport JMdict.")
             self._connection.execute("SELECT entry_id, payload FROM entries LIMIT 0")
             self._connection.execute("SELECT form, entry_id FROM forms LIMIT 0")
-        except (sqlite3.Error, DictionaryError) as exc:
+        except (sqlite3.Error, DictionaryError, OSError) as exc:
             self.close()
             raise DictionaryError(
-                f"Cannot open dictionary '{path}': {exc}. "
+                f"Cannot open dictionary '{self._path}': {exc}. "
                 "Run scripts/import_jmdict.py first (see README)."
             ) from exc
 
-    def lookup(self, text: str) -> tuple[DictionaryEntry, ...]:
+    def _ensure_current(self) -> None:
         if self._connection is None:
             raise DictionaryError("Dictionary is closed.")
+        try:
+            replaced = self._path.stat().st_ino != self._opened_inode
+        except OSError as exc:
+            raise DictionaryError("Dictionary file unavailable; check setup and restart the backend.") from exc
+        if replaced:
+            self.close()
+            self._open()
+
+    def cache_identity(self) -> dict[str, object] | None:
+        from ..cache_identity import file_identity, algorithm
+        try:
+            self._ensure_current()
+            wal = Path(str(self._path)+"-wal")
+            return {"database": file_identity(self._path), "wal": file_identity(wal) if wal.exists() else None,
+                    "schema": self._connection.execute("PRAGMA user_version").fetchone()[0],
+                    "algorithm": algorithm("dictionary/sqlite.py", "dictionary/models.py", "japanese.py")}
+        except (DictionaryError, sqlite3.Error, OSError):
+            return None  # Ordinary lexical lookup still reports its actionable failure.
+
+    def lookup(self, text: str) -> tuple[DictionaryEntry, ...]:
+        self._ensure_current()
         if not text:
             return ()
         try:

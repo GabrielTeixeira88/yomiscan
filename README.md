@@ -26,6 +26,13 @@ diagnostic OCR confidence are available. Production defaults remain the original
 PyTorch detector at 0.50/0.50, original manga-ocr and OPUS. See [setup and benchmark
 commands](docs/post-mvp-detection-ocr.md) and [measurements/decisions](docs/research/stage2-detection-ocr-results.md).
 
+**Post-MVP: Caching & Performance (P07/P08).** A byte-budgeted chapter LRU evicts
+offscreen results and reloads evicted pages when viewed. The backend reuses independent
+detection, OCR, lexical, translation and rendering stages. Disk caching is **off by
+default**; enable **Local processing cache → Save page processing on disk** only if
+you want page pixels and text retained locally. See [controls, privacy, limits and
+validation](docs/post-mvp-caching-performance.md).
+
 | Current capability | Status |
 | --- | --- |
 | Study selection, draggable/resizable popup, readings/morphology/JMdict | Implemented; Copy Japanese / Copy English available |
@@ -36,7 +43,8 @@ commands](docs/post-mvp-detection-ocr.md) and [measurements/decisions](docs/rese
 | Hy/Qwen/Fugu/NLLB alternatives; VNTL adapter | Experimental; VNTL has no validated artifact at its documented pin |
 | Backend/extension automated checks | Model-free CI on Windows/Linux and Node 22 |
 | Detection thresholds, ONNX detector, 2025 OCR and confidence | Optional Stage 2 experiments; no confidence rejection gate or default model change |
-| Persistent cache, detector/OCR experiments, new models, narrative context, vocabulary/JLPT | Outside Stage 1 |
+| Session LRU and persistent processing cache | Implemented; 128 MiB browser budget, 64 MiB backend RAM, opt-in bounded local disk |
+| Narrative context, new production models, vocabulary/JLPT, model/setup manager | Future work |
 
 The purpose is to help Japanese learners study manga without paid APIs or per-request
 costs. Sentence translation is separate from ordered tokens with readings, dictionary
@@ -115,9 +123,17 @@ Stop still lets the current initial page finish.
 Metadata is the default. Expand **Report inclusions** to explicitly include OCR/translation
 text, original pixels or the translated image. Review these before sharing. No upload
 occurs; source URLs, raw exceptions, credentials and local paths are excluded. Original
-pixels are kept only for three recent acquisitions within a 24 MiB memory budget.
-Other available diagnostics remain until the session is cleared. See [report contents,
+pixels and successful snapshots share the result's 128 MiB session budget and are
+released on eviction. Up to three failed-job contexts share a reserved 256 KiB within
+that budget. See [current cache behavior](docs/post-mvp-caching-performance.md) and [report contents,
 limits and missing-data behavior](docs/post-mvp-reliability-qol.md#page-diagnostic-reports).
+
+The session evicts old offscreen results instead of stopping when the budget fills.
+Visible pages, active refreshes and report exports are protected. Scroll back to reload
+an evicted page through the normal queue. **Retranslate Page** bypasses cached
+translation/rendering while reusing valid detection, OCR and dictionary work.
+**Clear Persistent Cache** deletes backend cached results; it does not clear browser
+overlays. Disabling persistence retains stored entries until explicitly cleared.
 
 **Select Text** (or Ctrl+Shift+Y) remains Study Mode. It stops chapter scheduling,
 waits for the current page, and switches to Original before screenshot selection.
@@ -476,7 +492,7 @@ transcription before describing recognition as reliable.
 6. **Future:** OCR correction, translation engine improvements/benchmarking,
    manga-context-aware translation, vocabulary saving/export,
    improved artwork reconstruction, broader site adapters/acquisition support,
-   persistent caching, and packaging/automatic local backend startup.
+   and packaging/automatic local backend startup.
 
 See [architecture](docs/architecture.md). JLPT grading, accounts, vocabulary export,
 model fine-tuning, and cloud deployment are not implemented.

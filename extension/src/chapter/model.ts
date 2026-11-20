@@ -1,9 +1,9 @@
-export type PageState = "queued" | "processing" | "translated" | "failed" | "skipped";
+export type PageState = "queued" | "processing" | "translated" | "failed" | "skipped" | "evicted";
 export type ViewMode = "original" | "english";
 export interface PageRecord<T, R> {
   id: number; key: object; identity: string; source: T; state: PageState;
   result?: R; error?: string; attempts: number; cancelled?: boolean; deferred?: boolean;
-  refreshing?:boolean;
+  refreshing?:boolean; lastBytes?:number;
 }
 export class SkipPage extends Error { readonly retryWhenVisible:boolean=false; }
 export class WaitForViewport extends SkipPage { override readonly retryWhenVisible:boolean=true; }
@@ -25,6 +25,7 @@ export interface QueueHooks<T, R> {
   priority(page: PageRecord<T, R>): number;
   release(result: R): void;
   changed(): void;
+  cache?: {budget:number; size(result:R):number; protected(page:PageRecord<T,R>):boolean};
 }
 
 /** One job at a time matches the backend's single owning inference thread. */
@@ -37,22 +38,63 @@ export class ChapterQueue<T, R> {
   private running: Promise<void> | null = null;
   private disposed = false;
   private current:PageRecord<T,R>|null=null;
+  private resources=new Map<R,{page:PageRecord<T,R>;bytes:number;pins:number;used:number;retired:boolean}>();
+  private clock=0;
+  private bytes=0;
+  private evictions=0;
   constructor(private readonly hooks: QueueHooks<T, R>) {}
+
+  cacheStats():{bytes:number;budget:number;evictions:number} {
+    return {bytes:this.bytes,budget:this.hooks.cache?.budget??0,evictions:this.evictions};
+  }
+  /** Pin the exact result, even if its page is replaced during an asynchronous export. */
+  pin(key:object):()=>void {
+    const result=this.pages.get(key)?.result,entry=result===undefined?undefined:this.resources.get(result);
+    if(!entry)return ()=>{};
+    entry.pins++;entry.used=++this.clock;
+    let released=false;
+    return ()=>{if(released)return;released=true;entry.pins--;
+      if(entry.retired && entry.pins===0 && result!==undefined && this.resources.has(result))this.release(result);};
+  }
+  private release(result:R):void {
+    const entry=this.resources.get(result);
+    if(entry){
+      entry.retired=true;
+      if(entry.pins>0 && !this.disposed)return;
+      this.resources.delete(result);this.bytes-=entry.bytes;
+    }
+    this.hooks.release(result);
+  }
+  private makeRoom(size:number,owner:PageRecord<T,R>,evict:boolean):boolean {
+    const config=this.hooks.cache;if(!config)return true;
+    const old=owner.result===undefined?undefined:this.resources.get(owner.result);
+    let required=this.bytes+size-(old && !old.pins?old.bytes:0)-config.budget;
+    if(required<=0)return true;
+    const candidates=[...this.resources.entries()].filter(([,e])=>!e.retired && !e.pins && e.page!==owner &&
+      e.page.state!=="processing" && !e.page.refreshing && !config.protected(e.page)).sort((a,b)=>a[1].used-b[1].used);
+    if(candidates.reduce((n,[,e])=>n+e.bytes,0)<required)return false;
+    if(evict)for(const [result,e] of candidates){
+      e.page.result=undefined;e.page.state="evicted";this.evictions++;
+      this.hooks.changed();this.release(result);required-=e.bytes;if(required<=0)break;
+    }
+    return true;
+  }
 
   register(key: object, identity: string, source: T): PageRecord<T, R> {
     const previous = this.pages.get(key);
     if (previous?.identity === identity) { previous.source = source; return previous; }
-    if (previous?.result) this.hooks.release(previous.result);
     const page: PageRecord<T, R> = {id: previous?.id ?? this.nextId++, key, identity, source,
       state: "queued", attempts: 0};
     this.pages.set(key, page);
+    this.hooks.changed();
+    if(previous?.result!==undefined)this.release(previous.result);
     this.hooks.changed(); this.schedule();
     return page;
   }
   remove(key: object): void {
     const page = this.pages.get(key);
-    if (page?.result) this.hooks.release(page.result);
     this.pages.delete(key); this.hooks.changed();
+    if(page?.result!==undefined)this.release(page.result);
   }
   start(): void {
     if (this.disposed) return;
@@ -85,9 +127,14 @@ export class ChapterQueue<T, R> {
     page.refreshing=true;page.state="queued";page.error=undefined;page.cancelled=false;page.deferred=false;
     this.active=true;this.hooks.changed();this.schedule();return true;
   }
-  visible(key:object):void {
+  visible(key:object,fullyVisible=true):void {
     const page=this.pages.get(key);
-    if(this.active && page?.state==="skipped" && page.deferred && page.attempts<3) {
+    const entry=page?.result===undefined?undefined:this.resources.get(page.result);
+    if(entry)entry.used=++this.clock;
+    if(this.active && page?.state==="evicted" && this.makeRoom(page.lastBytes??0,page,false)){
+      page.state="queued";page.error=undefined;this.hooks.changed();this.schedule();
+    }
+    if(this.active && fullyVisible && page?.state==="skipped" && page.deferred && page.attempts<3) {
       page.deferred=false;page.state="queued";page.error=undefined;this.hooks.changed();this.schedule();
     }
   }
@@ -95,8 +142,10 @@ export class ChapterQueue<T, R> {
   async idle(): Promise<void> { await this.running; }
   dispose(): void {
     this.disposed = true; this.active = false; this.controller?.abort();
-    for (const page of this.pages.values()) if (page.result) this.hooks.release(page.result);
+    const results=new Set<R>([...this.pages.values()].flatMap(p=>p.result===undefined?[]:[p.result]));
+    for(const r of this.resources.keys())results.add(r);
     this.pages.clear(); this.hooks.changed();
+    for(const r of results)this.release(r);
   }
   private schedule(): void {
     if (!this.active || this.running || this.disposed) return;
@@ -122,8 +171,21 @@ export class ChapterQueue<T, R> {
             page.state="translated";page.error="Refresh cancelled; previous translation retained.";
           }
         } else {
-          if(page.result)this.hooks.release(page.result);
+          const size=this.hooks.cache?.size(result)??0;
+          if(!Number.isSafeInteger(size)||size<0 || (this.hooks.cache && size>this.hooks.cache.budget)){
+            this.hooks.release(result);throw new SkipPage("This page exceeds the session memory budget; original preserved.");
+          }
+          page.lastBytes=size;
+          if(!this.makeRoom(size,page,true)){
+            this.hooks.release(result);
+            if(page.result!==undefined)throw new SkipPage("Visible/exported results fill the budget; previous translation retained.");
+            page.state="evicted";page.error="Waiting for space held by visible or exported pages.";continue;
+          }
+          const previous=page.result;
           page.result = result; page.state = "translated"; page.error = undefined;
+          if(this.hooks.cache){this.resources.set(result,{page,bytes:size,pins:0,used:++this.clock,retired:false});this.bytes+=size;}
+          if(previous!==undefined)this.release(previous);
+          this.hooks.changed();
         }
       } catch (error) {
         if (!this.disposed && this.pages.get(page.key) === page) {

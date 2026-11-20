@@ -5,6 +5,9 @@ from time import perf_counter
 from PIL import Image
 from yomiscan.page import PageAnalysisResult
 from .base import PageRenderer, PageRenderResult
+from ..cache import CacheRequest
+from .cache import cached_render
+from dataclasses import asdict
 
 
 class PageAnalyzer(Protocol):
@@ -16,11 +19,12 @@ class PageTranslationRenderService:
         self.analyzer, self.renderer = analyzer, renderer
 
     def translate_and_render_page(self, image: Image.Image, analysis: PageAnalysisResult | None = None,
-                                  *, debug: bool = False) -> PageRenderResult:
+                                  *, debug: bool = False, cache: CacheRequest | None = None) -> PageRenderResult:
         start = perf_counter()
         if analysis is None:
             analysis = self.analyzer.analyze_page(image)
-        result = self.renderer.render(image, analysis, debug=debug)
+        result = cached_render(self.renderer, image, analysis, cache, debug=debug)
+        result.analysis_processing = asdict(analysis.processing)
         result.analysis_processing["pipeline_total_ms"] = (perf_counter()-start)*1000
         # Keep provenance even without debug images: a filtered/dropped region never
         # reaching rendering must not be confused with a renderer safety decision.
@@ -30,6 +34,14 @@ class PageTranslationRenderService:
              "filter_reason": analysis.filtered_regions.get(region.id),
              "block_ids": [b.id for b in analysis.text_blocks if region.id in b.region_ids]}
             for region in analysis.regions]
+        if cache:
+            # OCR timing belongs to this job, including when the layout came from disk.
+            details = result.diagnostics.get("blocks", {})
+            for block in analysis.text_blocks:
+                detail = details.get(block.id, details.get(str(block.id))) if isinstance(details, dict) else None
+                if isinstance(detail, dict):
+                    detail["ocr_ms"] = block.ocr_ms
+            result.diagnostics["cache"] = cache.metadata()
         if debug:
             # Debug drawing is opt-in; normal HTTP rendering saves nothing to disk.
             from PIL import ImageDraw
