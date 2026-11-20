@@ -1,5 +1,25 @@
 # Third-party resources
 
+## Optional Stage 2 vision experiments
+
+ONNX Runtime is **MIT**; the optional `vision` extra currently locks its CPU Python
+wheel to 1.32.0. See the [runtime license](https://github.com/microsoft/onnxruntime/blob/v1.32.0/LICENSE)
+and retain wheel/bundled-library notices if redistributing it. The `benchmark` extra's
+psutil dependency remains BSD-3-Clause. No optional runtime or model is loaded by default.
+
+The tested `detector-v4-s_int8.onnx` artifact declares Apache-2.0 under its exact
+publisher revision; equivalence to the repository's PyTorch checkpoint is unverified.
+The 2025 OCR source and precisely mapped ONNX export separately declare **Apache-2.0**.
+Exact revisions, SHA-256 values, source/license links and remaining provenance limits
+are recorded in [the Stage 2 artifact note](research/stage2-model-provenance.md).
+
+These declarations support local experimentation; they do not establish rights in
+training images or relicense weights as MIT. No weights, vocabulary files, manga images
+or AGPL-covered Yomu implementation are bundled. Architecture and tensor contracts were
+studied; the Python adapters were independently implemented. Preserve attribution,
+applicable LICENSE/NOTICE material and modification notices before redistributing
+model artifacts or modified weights. This task changes no project license.
+
 ## Optional manga translation benchmark
 
 The additional `staka/fugumt-ja-en` checkpoint declares **CC-BY-SA-4.0** (attribution

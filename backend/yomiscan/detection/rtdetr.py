@@ -11,11 +11,14 @@ MODEL_REVISION = "16e8a622f91fabc6b5b65c96d32d1183f8843546"
 
 
 def decode_regions(boxes: Sequence[Sequence[float]], scores: Sequence[float],
-                   labels: Sequence[int], size: tuple[int, int]) -> list[TextRegion]:
+                   labels: Sequence[int], size: tuple[int, int], *,
+                   bubble_threshold: float = 0, free_threshold: float = 0) -> list[TextRegion]:
     """Drop bubble outlines; retain text blocks in stable spatial order."""
     candidates = []
     for box, score, label in zip(boxes, scores, labels, strict=True):
         if int(label) not in (1, 2) or not all(math.isfinite(v) for v in [*box, score]):
+            continue
+        if score <= (bubble_threshold if int(label) == 1 else free_threshold):
             continue
         bbox = BoundingBox(math.floor(box[0]), math.floor(box[1]),
                            math.ceil(box[2]), math.ceil(box[3])).clipped(*size)
@@ -29,10 +32,17 @@ def decode_regions(boxes: Sequence[Sequence[float]], scores: Sequence[float],
 
 
 class ComicTextDetector:
-    def __init__(self, *, device: Device = "auto", threshold: float = 0.5) -> None:
-        if device not in ("auto", "cpu", "cuda") or not 0 < threshold <= 1:
+    def __init__(self, *, device: Device = "auto", threshold: float = 0.5,
+                 bubble_threshold: float | None = None, free_threshold: float | None = None) -> None:
+        bubble = threshold if bubble_threshold is None else bubble_threshold
+        free = threshold if free_threshold is None else free_threshold
+        if device not in ("auto", "cpu", "cuda") or any(
+            isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or not 0 < v <= 1
+            for v in (threshold, bubble, free)
+        ):
             raise ValueError("Use device auto/cpu/cuda and threshold in (0, 1].")
         self.threshold = threshold
+        self.bubble_threshold, self.free_threshold = bubble, free
         try:
             import torch
             from transformers import RTDetrV2ForObjectDetection, RTDetrImageProcessorPil
@@ -49,6 +59,14 @@ class ComicTextDetector:
                 f"Cannot load {MODEL_ID}. Run uv sync; check Hugging Face cache/download, memory and device: {exc}"
             ) from exc
 
+    def diagnostic_metadata(self) -> dict[str, object]:
+        return {"engine": "current", "model": MODEL_ID, "revision": MODEL_REVISION,
+                "artifact": "model.safetensors", "device": self.device, "threshold": self.threshold,
+                "bubble_threshold": self.bubble_threshold, "free_threshold": self.free_threshold}
+
+    def close(self) -> None:
+        self._model = self._processor = None
+
     def detect(self, image: Image.Image) -> list[TextRegion]:
         if not isinstance(image, Image.Image) or min(image.size) < 1:
             raise ValueError("Detector expects a nonempty Pillow image")
@@ -57,9 +75,10 @@ class ComicTextDetector:
             with self._torch.inference_mode():
                 outputs = self._model(**inputs)
             result = self._processor.post_process_object_detection(
-                outputs, threshold=self.threshold, target_sizes=[(image.height, image.width)],
+                outputs, threshold=min(self.bubble_threshold, self.free_threshold), target_sizes=[(image.height, image.width)],
             )[0]
             return decode_regions(result["boxes"].cpu().tolist(), result["scores"].cpu().tolist(),
-                                  result["labels"].cpu().tolist(), image.size)
+                                  result["labels"].cpu().tolist(), image.size,
+                                  bubble_threshold=self.bubble_threshold, free_threshold=self.free_threshold)
         except Exception as exc:
             raise DetectionError(f"Comic text detection failed on {self.device}: {exc}") from exc

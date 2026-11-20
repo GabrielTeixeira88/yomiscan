@@ -51,12 +51,16 @@ def number(value: object) -> float | None:
 
 def model_info(metadata: dict[str, Any]) -> dict[str, object]:
     result: dict[str, object] = {}
-    for key in ("engine", "model", "revision", "model_revision", "expected_revision", "base_model", "base_revision", "device"):
+    for key in ("engine", "model", "revision", "model_revision", "expected_revision", "base_model", "base_revision", "device",
+                "artifact", "source_revision", "preprocessing", "decoding"):
         if key in metadata:
             result[key] = identifier(metadata[key])
-    for key in ("batch_size", "num_beams", "context_tokens", "temperature", "seed", "prompt_version"):
+    for key in ("batch_size", "num_beams", "context_tokens", "temperature", "seed", "prompt_version",
+                "threshold", "bubble_threshold", "free_threshold", "threads", "max_tokens"):
         if key in metadata:
             result[key] = number(metadata[key])
+    if isinstance(metadata.get("kv_cache"), bool):
+        result["kv_cache"] = metadata["kv_cache"]
     return result
 
 
@@ -74,6 +78,7 @@ def page_snapshot(image: Image.Image, result: PageRenderResult, *, input_sha256:
         if reason_code not in REASONS:
             reason_code = "invalid_geometry_or_unsupported"
         confidence = number(detail.get("ocr_confidence"))
+        ocr_metadata = detail.get("ocr_metadata", {})
         blocks.append({
             "id": int(block_id), "region_ids": list(detail.get("region_ids", [])),
             "bbox": detail.get("bbox"), "reading_order": detail.get("reading_order"),
@@ -82,7 +87,12 @@ def page_snapshot(image: Image.Image, result: PageRenderResult, *, input_sha256:
             "ocr": {"status": "filtered" if detail.get("analysis_status") == "filtered" else detail.get("ocr"),
                     "engine": identifier(detail.get("ocr_engine")),
                     "confidence": confidence if confidence is not None and 0 <= confidence <= 1 else None,
-                    "processing_ms": number(detail.get("ocr_ms"))},
+                    "processing_ms": number(detail.get("ocr_ms")),
+                    "confidence_method": identifier(ocr_metadata.get("confidence_method")),
+                    "recognition_status": identifier(ocr_metadata.get("recognition_status")),
+                    "termination": identifier(ocr_metadata.get("termination")),
+                    "tokens": number(ocr_metadata.get("tokens")), "uncertainty": identifier(ocr_metadata.get("uncertainty")),
+                    **model_info(ocr_metadata)},
             "translation": {"status": "failed" if detail.get("failure_stage") == "translation" else detail.get("translation"),
                             "failure_stage": detail.get("failure_stage"),
                             # TranslationError also covers transport/inference failures. Neither

@@ -20,6 +20,12 @@ deferred acquisition retry correction, Study copy controls and individual page r
 extend the existing MVP. Post-MVP work uses descriptive feature branches; the original
 Phases 1–7 remain historical development records. See [Stage 1 usage and validation](docs/post-mvp-reliability-qol.md).
 
+**Post-MVP: Detection & OCR experiments (P14–P17).** Class-specific threshold controls,
+optional pinned ONNX detector and 2025 OCR adapters, reproducible local benchmarks and
+diagnostic OCR confidence are available. Production defaults remain the original
+PyTorch detector at 0.50/0.50, original manga-ocr and OPUS. See [setup and benchmark
+commands](docs/post-mvp-detection-ocr.md) and [measurements/decisions](docs/research/stage2-detection-ocr-results.md).
+
 | Current capability | Status |
 | --- | --- |
 | Study selection, draggable/resizable popup, readings/morphology/JMdict | Implemented; Copy Japanese / Copy English available |
@@ -29,6 +35,7 @@ Phases 1–7 remain historical development records. See [Stage 1 usage and valid
 | Default sentence translation | OPUS-MT; quality limitations remain |
 | Hy/Qwen/Fugu/NLLB alternatives; VNTL adapter | Experimental; VNTL has no validated artifact at its documented pin |
 | Backend/extension automated checks | Model-free CI on Windows/Linux and Node 22 |
+| Detection thresholds, ONNX detector, 2025 OCR and confidence | Optional Stage 2 experiments; no confidence rejection gate or default model change |
 | Persistent cache, detector/OCR experiments, new models, narrative context, vocabulary/JLPT | Outside Stage 1 |
 
 The purpose is to help Japanese learners study manga without paid APIs or per-request

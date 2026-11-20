@@ -3,6 +3,31 @@
 Phases 1–7 below describe the existing MVP boundaries and retain their historical names.
 Post-MVP increments use descriptive feature branches, not a new numbered phase.
 
+## Post-MVP detector/OCR evaluation boundary
+
+The existing TextDetector and OCREngine protocols remain the consumer interfaces.
+Factories select the original engines by default; explicit YOMISCAN_DETECTOR/YOMISCAN_OCR
+settings opt into local experimental adapters. Detector construction stays lazy on the
+owning worker; selected OCR and translation resources share the service lifetime.
+ONNX Runtime is an optional dependency and its CPU sessions disable telemetry before
+construction. Experimental adapters require pinned, hash-verified cached artifacts;
+the separate setup script is the only new download path.
+
+The detector supports independent bubble/free-text thresholds while retaining the
+legacy threshold argument and 0.50 defaults. Its ONNX candidate uses a separately
+pinned export whose weight equivalence is unproven. OCR controls separate original/2025
+weights, grayscale/RGB preprocessing, published/greedy generation and ONNX KV reuse.
+Uncalibrated confidence is additive OCR metadata and never an automatic rejection gate.
+Experimental token-limit failures are explicit; source text is not silently truncated.
+Stage 1 report allowlists carry the optional provenance and confidence method.
+
+vision_benchmark owns local annotation loading, metrics, isolated benchmark entry points
+and aggregate summaries. It reuses the existing page/grouping/OPUS/JMdict/renderer path
+for downstream measurements. It is not a reader scheduler, model manager or persistent
+cache. See [Stage 2 commands and measurement definitions](post-mvp-detection-ocr.md),
+[artifact provenance](research/stage2-model-provenance.md) and
+[measured decisions](research/stage2-detection-ocr-results.md).
+
 ## Post-MVP reliability and diagnostics
 
 Chapter rendering can opt into an in-memory PNG + diagnostic-snapshot transport bundle.

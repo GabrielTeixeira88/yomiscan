@@ -11,7 +11,7 @@ const snapshot=()=>({schema_version:1,build:{version:'0.1.0',revision:null},
   image:{width:800,height:1100,input_sha256:'a'.repeat(64)},models:{translation:{engine:'current',model:'Helsinki-NLP/opus-mt-ja-en'}},
   regions:[{id:7,bbox:[1,2,3,4],confidence:.9,block_ids:[1]}],
   blocks:[{id:1,region_ids:[7],bbox:{left:1,top:2,right:3,bottom:4},reading_order:1,
-    ocr:{status:'success',confidence:null},translation:{status:'success'},
+    ocr:{status:'success',confidence:null,confidence_method:null},translation:{status:'success'},
     render:{status:'skipped',reason_code:'overflow'},text:{original:'秘密の猫',translation:'Secret cat',translation_input:'秘密の猫'}}],
   timings:{analysis:{ocr_ms:3}},counts:{rendered:0,preserved:1,undetected:null}});
 
@@ -35,6 +35,7 @@ test('metadata-only report excludes text, raw errors, paths, URLs and unknown fi
   const regions=JSON.parse(new TextDecoder().decode(entries.get('regions.json')));
   assert.equal(regions.blocks[0].render.reason_code,'overflow');
   assert.equal(regions.blocks[0].ocr.confidence,null);
+  assert.equal(regions.blocks[0].ocr.confidence_method,null);
 });
 
 test('text requires explicit inclusion, is redacted, and cannot attach to a different page',async()=>{

@@ -55,6 +55,7 @@ class ConservativePageRenderer:
                 "reading_order": block.reading_order, "orientation": block.orientation,
                 "detection_confidence": block.confidence, "ocr_engine": block.ocr_engine,
                 "ocr_confidence": block.ocr_metadata.get("confidence"), "ocr_ms": block.ocr_ms,
+                "ocr_metadata": block.ocr_metadata,
                 "failure_stage": block.failure_stage,
                 "translation_input": translation.source_text if translation else
                     block.original_text if block.failure_stage == "translation" else None,
