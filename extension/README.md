@@ -1,7 +1,8 @@
 # YomiScan Chrome Study and Chapter Modes
 
 Manifest V3 extension using plain TypeScript/DOM and esbuild. No React, runtime CDN,
-analytics, third-party inference requests, or saved screenshots.
+analytics, third-party inference requests, or automatic screenshot storage. Explicit
+diagnostic downloads can include text/images chosen by the user.
 
 ## Build and load
 
@@ -42,6 +43,9 @@ around a visible bubble and release. Escape cancels selection. Loading is follow
 one study popup with original Japanese, translation, readings, lemmas, dictionary forms,
 POS, conjugation and dictionary senses. Extra senses expand inside it. Close with ×
 or Escape. Original OCR is read-only; editing/reanalysis is future work.
+**Copy Japanese** / **Copy English** copy the displayed sentence with keyboard-accessible
+controls and brief success/failure feedback. Browser clipboard restrictions leave text
+selection/manual copying available; no permission was added.
 
 Drag the title bar to move the popup. Its right edge, bottom edge, and bottom-right
 grip resize it. The close button and selectable body text do not start dragging.
@@ -59,6 +63,13 @@ OCR/translation/dictionary strings use `textContent`, never HTML. Dictionary sen
 remain candidates, not meanings selected for the sentence's context.
 
 ## Translate Chapter
+
+Post-MVP page actions: choose a page (or **Nearest viewport**) and **Retranslate Page**
+to refresh only its result, retaining the previous translation on failure/cancellation.
+**Export Page Report** downloads a metadata-only ZIP by default; optional OCR/translation
+text and original/translated pixels require explicit checkboxes. No upload/inference is
+performed during export. Recent originals and diagnostics live in bounded session memory;
+Clear/navigation releases them. See [report details and model-free browser validation](../docs/post-mvp-reliability-qol.md).
 
 Open a standard image-based reader and choose **Translate Chapter**. Backend health is
 checked before discovery. Large, loaded images in the dominant reader column are queued

@@ -15,6 +15,22 @@ Translate Chapter progressively renders supported image-based readers, prioritiz
 pages, discovers lazy-loaded images, and offers reversible Original/English overlays.
 Generic discovery and cross-origin capture have limitations; universal site support is not claimed.
 
+**Post-MVP: Reliability & Quality of Life (P01–P05).** Page diagnostics, automated CI,
+deferred acquisition retry correction, Study copy controls and individual page refresh
+extend the existing MVP. Post-MVP work uses descriptive feature branches; the original
+Phases 1–7 remain historical development records. See [Stage 1 usage and validation](docs/post-mvp-reliability-qol.md).
+
+| Current capability | Status |
+| --- | --- |
+| Study selection, draggable/resizable popup, readings/morphology/JMdict | Implemented; Copy Japanese / Copy English available |
+| Translate Chapter, lazy image discovery, source/capture fallbacks, Original/English | Implemented for supported image readers |
+| Retry failed/skipped pages; retranslate one successful page | Implemented; prior successful result retained on failed/cancelled refresh |
+| Per-page local diagnostic ZIP | Implemented; metadata-only default, explicit text/image inclusions |
+| Default sentence translation | OPUS-MT; quality limitations remain |
+| Hy/Qwen/Fugu/NLLB alternatives; VNTL adapter | Experimental; VNTL has no validated artifact at its documented pin |
+| Backend/extension automated checks | Model-free CI on Windows/Linux and Node 22 |
+| Persistent cache, detector/OCR experiments, new models, narrative context, vocabulary/JLPT | Outside Stage 1 |
+
 The purpose is to help Japanese learners study manga without paid APIs or per-request
 costs. Sentence translation is separate from ordered tokens with readings, dictionary
 forms, POS, conjugation information, and candidate English dictionary meanings.
@@ -83,6 +99,19 @@ close the controls with × to read unobstructed. **Stop Translation** stops futu
 while the current page may finish. **Retry Failed / Skipped** retries explicitly.
 **Clear Session** removes all translated overlays and releases cached images.
 
+Select a page in **Page** (or leave **Nearest viewport**) and choose **Retranslate Page**
+to process only that page again. Its previous translation remains usable until a valid
+replacement arrives. Stop cancels refresh while retaining that result; normal chapter
+Stop still lets the current initial page finish.
+
+**Export Page Report** downloads a local ZIP for that page without rerunning analysis.
+Metadata is the default. Expand **Report inclusions** to explicitly include OCR/translation
+text, original pixels or the translated image. Review these before sharing. No upload
+occurs; source URLs, raw exceptions, credentials and local paths are excluded. Original
+pixels are kept only for three recent acquisitions within a 24 MiB memory budget.
+Other available diagnostics remain until the session is cleared. See [report contents,
+limits and missing-data behavior](docs/post-mvp-reliability-qol.md#page-diagnostic-reports).
+
 **Select Text** (or Ctrl+Shift+Y) remains Study Mode. It stops chapter scheduling,
 waits for the current page, and switches to Original before screenshot selection.
 Chapter translation resumes only when explicitly started again.
@@ -116,7 +145,8 @@ predictions. See the [real-page skip audit and before/after observations](docs/p
 
 The existing server exposes `POST /api/v1/render-page`, multipart `file`, with the same
 `X-YomiScan-Client: study-extension-v1` header. It returns PNG and rendered/skipped counts
-in response headers. The Chrome extension remains Study Mode only.
+in response headers. Translate Chapter consumes this pipeline through its existing
+extension transport. The optional diagnostics response is documented separately.
 
 No additional model weights or font installation is needed; `uv sync` installs OpenCV
 headless and NumPy. Rendering uses CPU; `--device` controls analysis. Debug output includes
@@ -161,7 +191,9 @@ policy error; changing execution policy is unnecessary.
 3. Open a normal manga webpage, click YomiScan's extension action → **Select Text**, and drag around a
    Japanese speech bubble. Only that viewport crop is sent to the local backend.
 4. Read the original, translation, readings, lemmas, POS, conjugations, and dictionary
-   meanings in one scrollable popup. Extra senses expand inside it.
+   meanings in one scrollable popup. Extra senses expand inside it. Use **Copy Japanese**
+   or **Copy English** for explicit clipboard actions; if the browser refuses access,
+   select the text and copy manually.
 5. Close with **×** or **Escape**. Escape also cancels selection or dismisses pending work.
 
 The suggested shortcut is **Ctrl+Shift+Y** (**Command+Shift+Y** on macOS). Conflicts
@@ -172,7 +204,8 @@ but does not reload Chrome or type-check changes; run `npm.cmd run typecheck` se
 Selected screenshots are sent only to the local YomiScan backend at `127.0.0.1:8765`.
 Initial model/dictionary/dependency downloads are separate from local image analysis.
 The full visible-tab screenshot is transient in extension memory; only the selected
-crop is uploaded. Images/results are not saved by the application. There is no analytics,
+crop is uploaded. Images/results are not automatically saved to disk. A diagnostic
+download is saved only when requested; optional text/images can be sensitive. There is no analytics,
 cloud upload, paid API, or third-party inference. The attribution link opens externally
 only if clicked.
 

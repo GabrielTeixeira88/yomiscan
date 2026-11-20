@@ -1,5 +1,28 @@
 # YomiScan architecture
 
+Phases 1–7 below describe the existing MVP boundaries and retain their historical names.
+Post-MVP increments use descriptive feature branches, not a new numbered phase.
+
+## Post-MVP reliability and diagnostics
+
+Chapter rendering can opt into an in-memory PNG + diagnostic-snapshot transport bundle.
+The default render-page PNG and analysis DTOs remain compatible. The existing owning
+worker builds the snapshot from its one analysis/render result; no export reruns models.
+The extension validates the input byte hash/dimensions and retains the snapshot with the
+same page result. A page-level user action builds a local ZIP with allowlisted metadata;
+text and original/translated pixels require separate inclusion choices.
+
+diagnostics.py owns the bounded snapshot/transport representation; chapter/reports.ts
+owns export consent/redaction, and chapter/zip.ts owns stored ZIP integrity/limits.
+There is no backend report store, new authentication bypass or persistent stage cache.
+See [privacy/retention decision](decisions/diagnostic-report-privacy.md) and
+[usage/schema/validation](post-mvp-reliability-qol.md).
+
+ChapterQueue also supports explicit successful-page refresh. It retains the old result
+through queued/processing/failure states, replaces it only after validation, and releases
+late/cancelled URLs. Acquisition errors preserve actionable viewport/manual retry types
+and causes. The Study popup adds user-gesture clipboard actions without new permissions.
+
 Sentence translation also has opt-in manga adapters and an isolated benchmark.
 `translation/factory.py` selects the unchanged Marian default or a lazy local llama.cpp
 adapter, or a lazy direct Transformers NMT adapter (`fugumt`, `nllb-600m`).
@@ -13,8 +36,9 @@ See [benchmark boundaries and evidence](translation-benchmark.md).
 Rendering coverage now distinguishes bubble/narration, artwork text and preserved SFX.
 Tight masks and placement regions remain separate; a light-edged glyph fallback is
 local to rendering. Per-block stage diagnostics and aggregate coverage metrics travel
-through `PageRenderResult`; the PNG API exposes only aggregate counts in an additive
-header used by chapter summaries. See [coverage decisions and validation](phase-7-coverage.md).
+through `PageRenderResult`; the default PNG API exposes aggregate counts in an additive
+header used by chapter summaries. Opt-in diagnostic transport also carries per-block
+provenance. See [coverage decisions and validation](phase-7-coverage.md).
 
 ## Phase 1: implemented OCR boundary
 
