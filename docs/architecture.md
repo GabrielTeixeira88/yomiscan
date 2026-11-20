@@ -3,6 +3,49 @@
 Phases 1–7 below describe the existing MVP boundaries and retain their historical names.
 Post-MVP increments use descriptive feature branches, not a new numbered phase.
 
+## Post-MVP stage caches and chapter memory ownership
+
+`cache.py` owns a worker-local bounded byte LRU and opt-in SQLite BLOB storage.
+`cache_identity.py` builds effective artifact/configuration identities independently
+of redacted diagnostic metadata. Known adapters use hashes of their actual local
+artifacts and effective generation/preprocessing settings; unidentified engines
+bypass reuse. Tokenizer/dictionary adapters own their identities. SQLite dictionaries
+reopen an atomically replaced file where the platform permits replacement; Windows
+normally requires stopping the backend before reimporting its open database.
+
+`PageAnalysisService.extract()` separates detection/grouping and crop OCR from
+translation/lexical analysis. `TextAnalyzer.analyze_many()` preserves the existing
+ordered native translation batch and known per-block fallback behavior. Lexical
+entries are independently reusable and never include sentence translations.
+`rendering/cache.py` stores typed metadata plus PNG and keys renderer settings/font,
+actual page/translation inputs and extraction/translation lineage. Dictionary-only
+changes do not invalidate an otherwise identical rendered page.
+
+The service creates one request trace across stages. Translation refresh bypasses
+translation/render entries; failed refreshes leave previous good entries available.
+Cached inference timings are zero for the current job; lookup/deserialization and
+actual pipeline wall time are observed separately. Stage 1 upload-byte hashes retain
+their meaning alongside versioned canonical color/mode/alpha hashes. No URL is a
+cache identity. Debug images remain explicit and bypass the normal render cache.
+
+The existing single executor owns inference, dictionary and processing-cache SQLite
+creation/use/closure. Guarded cache controls run on that same executor. Disk storage
+is disabled until local consent; no telemetry/upload or file-access API is added.
+
+`ChapterQueue` owns result sizes, LRU order, pins, deferred releases and `evicted`
+states. `ChapterTranslationSession` reserves 256 KiB for at most three failed reports
+within the 128 MiB total; successful contexts and original report pixels have exactly
+one result owner. Visible/refreshing/exported results are protected. Eviction never
+schedules more work; viewport events can enqueue an eligible evicted result. Overlay
+references switch/detach before obsolete URLs are revoked. Export pins bind exact
+results even when a source/refresh replaces the page record.
+
+Backend session generations and expected configuration IDs prevent old browser
+results from being attached after a changed backend/settings generation. Legacy
+backends receive a new browser generation on each Start. Persistence is stage-keyed
+and remains reusable across backend generations. See [design decision](decisions/stage-cache.md)
+and [controls, limits and validation](post-mvp-caching-performance.md).
+
 ## Post-MVP detector/OCR evaluation boundary
 
 The existing TextDetector and OCREngine protocols remain the consumer interfaces.
@@ -39,7 +82,8 @@ text and original/translated pixels require separate inclusion choices.
 
 diagnostics.py owns the bounded snapshot/transport representation; chapter/reports.ts
 owns export consent/redaction, and chapter/zip.ts owns stored ZIP integrity/limits.
-There is no backend report store, new authentication bypass or persistent stage cache.
+There is no dedicated backend report store or new authentication bypass. Stage 3's
+separate opt-in processing cache is described above; report inclusion consent is unchanged.
 See [privacy/retention decision](decisions/diagnostic-report-privacy.md) and
 [usage/schema/validation](post-mvp-reliability-qol.md).
 
