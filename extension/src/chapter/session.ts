@@ -74,6 +74,24 @@ export class ChapterTranslationSession {
   }
   stop():void {this.startVersion++;this.queue.stop();this.acquiring?.abort();this.disconnect();this.notice="Stopped. The current page may finish; completed pages are retained.";this.update();}
   setView(view:ViewMode):void {this.queue.setView(view);}
+  pageOptions():{id:number;state:string;hasResult:boolean}[] {
+    return [...this.queue.pages.values()].map(p=>({id:p.id,state:p.refreshing?'refreshing':p.state,hasResult:!!p.result}));
+  }
+  private selectedPage(id?:number) {
+    const pages=[...this.queue.pages.values()];
+    return id===undefined ? pages.sort((a,b)=>{
+      const distance=(p:typeof a)=>{const r=p.source.image.getBoundingClientRect();return Math.abs((r.top+r.bottom)/2-innerHeight/2);};
+      return distance(a)-distance(b);
+    })[0] : pages.find(p=>p.id===id);
+  }
+  refreshPage(id?:number):void {
+    if(this.disposed || location.href!==this.url)return;
+    this.scan();
+    const page=this.selectedPage(id);
+    if(!page || !this.queue.refresh(page.key))this.notice='Choose a successfully processed page that is not already queued or processing.';
+    else {this.observe();this.notice=`Refreshing page ${page.id}; previous translation stays available.`;}
+    this.update();
+  }
   async study():Promise<void> {this.stop();this.setView("original");this.notice="Finishing any current page before Select Text…";this.update();await this.queue.idle();}
   diagnostics():void {
     this.debug=!this.debug;

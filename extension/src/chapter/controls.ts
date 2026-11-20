@@ -11,6 +11,7 @@ export class ChapterControls {
   private english:HTMLButtonElement;
   private sessionURL=location.href;
   private stitchEnabled=false;
+  private pageSelect=document.createElement('select');
   constructor(selectText:()=>void) {
     this.host.dataset.yomiscan="controls";
     this.host.style.cssText="all:initial!important;position:fixed!important;top:12px!important;right:12px!important;z-index:2147483646!important;";
@@ -36,6 +37,10 @@ export class ChapterControls {
     this.warning.className="warning";
     panel.append(this.status,this.warning,button("Retry Failed / Skipped",()=>{void this.current().start(true);}),
       button("Clear Session",()=>{this.session?.dispose();this.session=null;}));
+    const pageLabel=document.createElement('label');pageLabel.textContent='Page ';
+    this.pageSelect.setAttribute('aria-label','Chapter page');
+    pageLabel.append(this.pageSelect);panel.append(pageLabel,
+      button('Retranslate Page',()=>this.current().refreshPage(this.selectedPageId())));
     const help=document.createElement("small");help.textContent="Selected pages stay on this machine. CPU processing may take time.";panel.append(help);
     const details=document.createElement("details"),summary=document.createElement("summary");summary.textContent="Developer diagnostics";
     details.append(summary,button("Log discovery / states",()=>this.current().diagnostics()));panel.append(details);
@@ -45,6 +50,7 @@ export class ChapterControls {
     window.addEventListener("pagehide",()=>{this.session?.dispose();this.session=null;});
   }
   private showHost(visible:boolean):void {this.host.style.setProperty("display",visible?"block":"none","important");}
+  private selectedPageId():number|undefined {return this.pageSelect.value?Number(this.pageSelect.value):undefined;}
   open():void {this.showHost(true);}
   private current():ChapterTranslationSession {
     if(this.sessionURL!==location.href || this.session?.isDisposed){this.session?.dispose();this.session=null;this.sessionURL=location.href;}
@@ -53,6 +59,9 @@ export class ChapterControls {
     return this.session;
   }
   private show(status:ChapterSummary):void {
+    const selection=this.pageSelect.value,options=this.session?.pageOptions()??[];
+    this.pageSelect.replaceChildren(new Option('Nearest viewport',''),...options.map(p=>new Option(`Page ${p.id} · ${p.state}`,String(p.id))));
+    if(options.some(p=>String(p.id)===selection))this.pageSelect.value=selection;
     this.original.setAttribute("aria-pressed",String(status.view==="original"));this.english.setAttribute("aria-pressed",String(status.view==="english"));
     const pending=this.session?[...this.session.queue.pages.values()].some(p=>p.state==="queued"):false;
     this.status.textContent=`${status.translated} / ${status.total} pages translated · ${status.failed} failed · ${status.skipped} skipped\n`+

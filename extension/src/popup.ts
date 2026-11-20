@@ -1,6 +1,11 @@
 import type { Analysis, Meaning } from "./api";
 import { constrainPopup, popupPosition, resizePopup, type Point, type Rect, type ResizeEdge } from "./geometry";
 
+export async function copyStudyText(text:string,write:(text:string)=>Promise<void>=value=>navigator.clipboard.writeText(value)):Promise<string> {
+  try {await write(text);return 'Copied.';}
+  catch {return 'Copy unavailable. Select the text and copy it manually.';}
+}
+
 export const styles = `
   :host { all: initial; color-scheme: light; }
   * { box-sizing: border-box; }
@@ -18,6 +23,8 @@ export const styles = `
   button { font: inherit; cursor: pointer; background: #fff; border: 1px solid #b8c7bc;
     border-radius: 7px; width: 30px; height: 30px; color: #263d2b; }
   button:focus-visible, summary:focus-visible, a:focus-visible { outline: 2px solid #287946; outline-offset: 2px; }
+  button.copy { width:auto;height:auto;padding:4px 8px;margin-top:6px;font-size:12px; }
+  .copy-feedback { font-size:12px;color:#637366; }
   section { padding: 12px 16px; border-bottom: 1px solid #e8e9e2; }
   h2 { margin: 0 0 6px; font-size: 10px; letter-spacing: .13em; color: #637366; text-transform: uppercase; }
   p { margin: 4px 0; white-space: pre-wrap; }
@@ -178,6 +185,17 @@ export class StudyPopup {
     ]) {
       const section = element("section");
       section.append(element("h2", title), element("p", text, className));
+      const value=className==="original"?data.original_text:data.translation;
+      const copy=element('button',className==="original"?'Copy Japanese':'Copy English','copy');
+      copy.setAttribute('aria-label',className==="original"?'Copy original Japanese':'Copy English sentence translation');
+      copy.disabled=!value;
+      const feedback=element('p','','copy-feedback');feedback.setAttribute('role','status');
+      copy.addEventListener('click',()=>{void copyStudyText(value??'').then(message=>{
+        if(this.listeners.signal.aborted || !section.isConnected)return;
+        feedback.textContent=message;
+        window.setTimeout(()=>{if(feedback.textContent===message)feedback.textContent='';},3000);
+      });});
+      section.append(copy,feedback);
       if (className === "original") section.lang = "ja";
       this.body.append(section);
     }
