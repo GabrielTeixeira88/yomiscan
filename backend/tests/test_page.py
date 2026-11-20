@@ -63,6 +63,22 @@ def resources(regions):
     return detector, ocr, translator, analyzer
 
 
+def test_service_releases_the_selected_lazy_detector_once():
+    class Detector:
+        closed = 0
+        def detect(self, image):
+            return []
+        def close(self):
+            self.closed += 1
+    detector = Detector()
+    _, ocr, _, analyzer = resources([])
+    service = ImageAnalysisService(ocr, analyzer, detector=detector)
+    service.analyze_page(Image.new("RGB", (100, 100)))
+    service.close()
+    service.close()
+    assert detector.closed == 1
+
+
 def test_page_clipping_padding_filtering_batching_and_failure_isolation():
     detector, ocr, translator, analyzer = resources([
         region(3, (1, 60, 40, 98)), region(2, (0, 0, 20, 40)),

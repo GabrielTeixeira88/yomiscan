@@ -48,7 +48,8 @@ function models(value:unknown):RecordData {
   const input=object(value),output:RecordData={};
   for(const key of ['translation','detection','ocr','settings'])
     output[key]=pick(input[key],['engine','model','revision','model_revision','expected_revision','base_model','base_revision',
-      'device','analysis_device','target_language','threshold']);
+      'device','analysis_device','target_language','threshold','bubble_threshold','free_threshold','artifact','source_revision',
+      'preprocessing','decoding','threads','max_tokens','kv_cache']);
   for(const key of ['translation','settings'])Object.assign(object(output[key]),
     pick(input[key],['batch_size','num_beams','context_tokens','temperature','seed','prompt_version','padding','minimum_side',
       'minimum_font_size','maximum_font_size','preferred_font_size','font_margin']));
@@ -99,7 +100,8 @@ export async function createPageReport(context:PageReportContext,snapshot:PageSn
   const regions={regions:(snapshot?.regions??[]).map(r=>({...pick(r,['id','confidence','class','filtered']),bbox:bbox(r.bbox),block_ids:ids(r.block_ids)})),
     blocks:(snapshot?.blocks??[]).map(b=>({
       ...pick(b,['id','reading_order','orientation','detection_confidence']),region_ids:ids(b.region_ids),bbox:bbox(b.bbox),
-      ocr:pick(b.ocr,['status','engine','confidence','processing_ms']),
+      ocr:pick(b.ocr,['status','engine','model','revision','confidence','confidence_method','processing_ms',
+        'recognition_status','termination','tokens','uncertainty','preprocessing','decoding','kv_cache']),
       translation:pick(b.translation,['status','failure_stage','rejected','complete','engine','model','revision','expected_revision','device']),
       render:{...pick(b.render,['status','reason_code','reason','mask','mask_method','inpainting','layout','typesetting','font_size','category']),
         layout_bbox:bbox(object(b.render).layout_bbox)},

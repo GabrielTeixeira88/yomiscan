@@ -101,7 +101,10 @@ def test_pipeline_reports_partial_success_and_exact_failure_stage(failure):
         calls += 1
         if failure == "ocr" and calls == 2:
             raise OCRRecognitionError("private-path must not be exported")
-        return OCRResult("猫" if calls == 1 else "犬", "fake", 1)
+        return OCRResult("猫" if calls == 1 else "犬", "fake", 1, {
+            "confidence": .42, "confidence_method": "mean_token_probability_including_eos",
+            "recognition_status": "success", "model": "fixture/ocr", "revision": "abc123",
+            "private_url": "https://private-path.example/?token=private-path"})
 
     def translate(text):
         if failure == "translation" and text == "犬":
@@ -143,6 +146,8 @@ def test_pipeline_reports_partial_success_and_exact_failure_stage(failure):
     render_bundle(result.rendered_image, snapshot)
     assert ocr.recognize.call_count == before == 2
     assert snapshot["counts"]["rendered"] == (2 if failure is None else 1)
+    assert snapshot["blocks"][0]["ocr"]["confidence"] == .42
+    assert snapshot["blocks"][0]["ocr"]["confidence_method"] == "mean_token_probability_including_eos"
     codes = {b["render"]["reason_code"] for b in snapshot["blocks"]}
     expected = {None: "rendered", "ocr": "ocr_failed", "translation": "translation_or_analysis_failed",
                 "mask": "mask_failed", "typesetting": "typesetting_failed",
