@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import json
 from pathlib import Path
 from typing import Any
+from PIL import Image
 from ..vision_models import file_hash
 
 
@@ -34,12 +35,15 @@ def load_corpus(path: Path, *, split: str | None = None) -> list[PageCase]:
         if digest != entry["sha256"]:
             raise ValueError(f"Image fingerprint mismatch for {identity}; recheck annotations")
         regions = entry.get("regions")
+        with Image.open(image) as source:
+            width, height = source.size
         ids = set()
         if regions is not None:
             for region in regions:
                 box = region["bbox"]
                 if (region["id"] in ids or len(box) != 4 or any(type(n) is not int for n in box)
                     or box[0] < 0 or box[1] < 0 or box[2] <= box[0] or box[3] <= box[1]
+                    or box[2] > width or box[3] > height
                     or region["category"] not in ("dialogue", "narration", "artwork", "sfx", "control")
                     or region.get("text") is not None and not isinstance(region["text"], str)):
                     raise ValueError(f"Invalid region annotation for {identity}")

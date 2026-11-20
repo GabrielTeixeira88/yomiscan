@@ -138,3 +138,12 @@ def test_missing_optional_models_fail_with_setup_guidance_and_preserved_cause(tm
     with pytest.raises(OCRInitializationError, match="setup_vision_models") as caught:
         ONNXMangaOCREngine(model_dir=tmp_path)
     assert isinstance(caught.value.__cause__, FileNotFoundError)
+
+
+def test_current_ocr_rejects_unavailable_explicit_cuda_before_loading(monkeypatch):
+    import sys
+    from yomiscan.ocr.factory import create_ocr_engine
+    from yomiscan.ocr import OCRInitializationError
+    monkeypatch.setitem(sys.modules,"torch",SimpleNamespace(cuda=SimpleNamespace(is_available=lambda:False)))
+    with pytest.raises(OCRInitializationError,match="CUDA was explicitly requested"):
+        create_ocr_engine("current",device="cuda")

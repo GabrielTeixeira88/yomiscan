@@ -102,3 +102,27 @@ def test_corpus_fingerprint_prevents_scoring_annotations_for_replaced_pixels(tmp
     Image.new("RGB", (20, 20), "black").save(source)
     with pytest.raises(ValueError, match="fingerprint"):
         load_corpus(manifest)
+
+
+def test_invalid_ocr_bounds_and_overwriting_detector_input_are_rejected(tmp_path):
+    import json
+    import pytest
+    from hashlib import sha256
+    from yomiscan.vision_benchmark.corpus import load_corpus
+    from yomiscan.vision_benchmark.cli import main
+    source = tmp_path / "page.png"
+    Image.new("RGB", (20, 20), "white").save(source)
+    page = {"id":"one", "image":"page.png", "sha256":sha256(source.read_bytes()).hexdigest(),
+            "split":"held_out", "regions":[{"id":"one", "bbox":[0,0,21,20], "category":"dialogue", "text":"猫"}]}
+    manifest = tmp_path / "corpus.json"
+    manifest.write_text(json.dumps({"schema_version":1,"pages":[page]}),encoding="utf-8")
+    with pytest.raises(ValueError, match="Invalid region"):
+        load_corpus(manifest)
+    page["regions"] = None
+    manifest.write_text(json.dumps({"schema_version":1,"pages":[page]}),encoding="utf-8")
+    detector = tmp_path / "detector.json"
+    detector.write_text('{"keep":true}',encoding="utf-8")
+    with pytest.raises(SystemExit) as caught:
+        main("ocr", [str(manifest),"--detector-results",str(detector),"--output",str(detector)])
+    assert caught.value.code == 2
+    assert detector.read_text(encoding="utf-8") == '{"keep":true}'

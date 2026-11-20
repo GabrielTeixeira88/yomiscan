@@ -51,8 +51,11 @@ def main(kind: str, argv: list[str] | None = None) -> int:
     if args.repeats < 1 or args.warmup < 1 or args.threads < 1:
         parser.error("Repeats, warmup and threads must be positive")
     cases = load_corpus(args.dataset, split=args.split)
-    if args.output.resolve() in {args.dataset.resolve(), *(c.image for c in cases)}:
-        parser.error("Benchmark output must not overwrite the corpus or an input image")
+    protected = {args.dataset.resolve(), *(c.image for c in cases)}
+    if getattr(args, "detector_results", None) is not None:
+        protected.add(args.detector_results.resolve())
+    if args.output.resolve() in protected:
+        parser.error("Benchmark output must not overwrite any input image, corpus or detector report")
     try:
         if kind == "detection":
             report = evaluate_detection(cases, lambda: create_detector(args.engine, device=args.device,

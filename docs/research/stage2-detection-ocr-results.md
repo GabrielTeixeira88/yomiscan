@@ -173,3 +173,27 @@ The optional controls exist to make these comparisons reproducible, not as a pro
 of permanent model support. Reassess or remove them after a broader independent corpus
 test. Stage 3 caching, multilingual work, model-manager UI, translator changes and
 learning features were not started. The original MVP interfaces and safeguards remain.
+
+## Regression validation and review
+
+Final normal installation (`uv sync --frozen`, optional runtime absent): **216 backend
+tests passed**, with the existing Starlette/httpx deprecation warning. Package/import
+smoke checks constructed no engines. Extension `npm ci`, **51 tests**, strict TypeScript
+checking and build passed. Isolated Chrome 157 passed **24 checks** with a mocked backend:
+Study selection/copy/drag/resize, refresh failure/cancellation, ZIP export/stale jobs,
+lazy discovery, capture/fetch/stitch fallbacks, permissions and cleanup. This browser
+run is separate from the 13 real CPU model experiments above.
+
+### Standards review
+
+No hard standards violation was found. A possible repeated OCR selector/provenance
+switch was noted as a maintainability judgment; the current small explicit factories
+were retained rather than adding a model-manager abstraction.
+
+### Spec review
+
+Review identified missing OCR annotation bounds checking, output/input-report overwrite
+protection and unavailable explicit-CUDA handling in the original OCR factory. All
+three were fixed and regression-tested. Valid CPU benchmark inputs and inference
+settings were unaffected. Stage 1 main and Stage 2 PR hosted CI results are available
+on their GitHub checks; local results are not evidence of hosted Linux execution.

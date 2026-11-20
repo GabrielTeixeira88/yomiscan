@@ -11,6 +11,12 @@ def create_ocr_engine(name: str | None = None, *, device: str = "auto", threads:
     name = name or os.environ.get("YOMISCAN_OCR", "current")
     if name not in OCR_NAMES:
         raise ValueError(f"Unknown OCR engine {name!r}; choose {OCR_NAMES}")
+    if device not in ("auto", "cpu", "cuda"):
+        raise ValueError("OCR device must be auto, cpu or cuda")
+    if name == "current" and device == "cuda":
+        import torch
+        if not torch.cuda.is_available():
+            raise OCRInitializationError("CUDA was explicitly requested but is unavailable; select CPU")
     if name.startswith("2025-onnx"):
         if device == "cuda":
             raise OCRInitializationError("The experimental ONNX OCR is CPU-only; select --device cpu")
