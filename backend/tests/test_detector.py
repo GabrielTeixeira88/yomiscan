@@ -75,3 +75,20 @@ def test_detector_contextual_errors_keep_cause(runtime):
 def test_detector_invalid_configuration(kwargs):
     with pytest.raises(ValueError):
         ComicTextDetector(**kwargs)
+
+
+def test_class_thresholds_recover_bubble_text_without_lowering_free_text_floor(runtime):
+    _, _, _, processor, _ = runtime
+    def tensor(values):
+        value = Mock()
+        value.cpu.return_value.tolist.return_value = values
+        return value
+    processor.post_process_object_detection.return_value = [{
+        "boxes": tensor([[1, 2, 20, 30], [30, 2, 50, 30], [60, 2, 80, 30], [90, 2, 110, 30]]),
+        "scores": tensor([.35, .49, .55, .99]), "labels": tensor([1, 2, 2, 0]),
+    }]
+    detector = ComicTextDetector(device="cpu", bubble_threshold=.25, free_threshold=.5)
+    regions = detector.detect(Image.new("RGB", (200, 100)))
+    assert [(r.metadata["class"], r.confidence) for r in regions] == [
+        ("text_free", .55), ("text_bubble", .35)]
+    assert processor.post_process_object_detection.call_args.kwargs["threshold"] == .25
