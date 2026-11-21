@@ -72,6 +72,15 @@ class PillowTypesetter:
         self.preferred_size = max(minimum_size, min(preferred_size, maximum_size))
         self._fonts: dict[tuple[int, str], ImageFont.FreeTypeFont] = {}
 
+    def scaled(self, scale: float) -> "PillowTypesetter":
+        from .settings import RenderSettings
+        RenderSettings(scale)
+        # Keep the established absolute min/max. Larger scale raises the minimum
+        # acceptable size instead of squeezing overflowing dialogue back down.
+        minimum = min(self.maximum_size, max(self.minimum_size, round(self.minimum_size*scale)))
+        return PillowTypesetter(minimum_size=minimum, maximum_size=self.maximum_size,
+            preferred_size=max(minimum, min(self.maximum_size, round(self.preferred_size*scale))), margin=self.margin)
+
     def font(self, size: int, family: str = "aileron") -> ImageFont.FreeTypeFont:
         key = (size, family)
         if key not in self._fonts:

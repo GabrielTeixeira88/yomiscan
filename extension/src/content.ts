@@ -14,7 +14,7 @@ function viewport(): Viewport {
 }
 
 function install(): void {
-  const chapter = new ChapterControls(() => { void activateStudy(); });
+  const chapter = new ChapterControls(() => { void activateStudy(); },(data,rect)=>showExisting(data,rect));
   async function activateStudy(): Promise<void> { await chapter.prepareStudy(); start(); }
   let id: string | null = null;
   let host: HTMLDivElement | null = null;
@@ -45,6 +45,11 @@ function install(): void {
       popup = new StudyPopup(host!, root!, anchor, close);
     }
     return popup;
+  }
+
+  function showExisting(data:ReturnType<typeof parseAnalysis>,rect:Rect):void {
+    start();selection.abort();root!.querySelector('.selection')?.remove();mode='result';anchor=rect;
+    openPopup().show(data);
   }
 
   function start(): void {

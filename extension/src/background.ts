@@ -3,6 +3,9 @@ import {installSourceFetch} from './chapter/source-fetch';
 import {CaptureThrottle} from './chapter/capture-throttle';
 import {cacheRequest} from './chapter/cache-client';
 import {translationRequest,type TranslationOperation} from './chapter/translation-client';
+import {StudyHistory} from './history';
+import {readinessRequest} from './chapter/readiness-client';
+const history=new StudyHistory({get:key=>chrome.storage.local.get(key),set:items=>chrome.storage.local.set(items)});
 const captures=new CaptureThrottle();
 installSourceFetch();
 import { screenshotRect, validSelection, type Rect, type Viewport } from "./geometry";
@@ -102,6 +105,15 @@ async function capture(request: CaptureRequest, tab: chrome.tabs.Tab): Promise<u
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (sender.id !== chrome.runtime.id || sender.frameId !== 0 || sender.tab?.id === undefined) return;
+  if(message?.type==='chapter-readiness'){
+    void readinessRequest().then(data=>sendResponse({ok:true,data}),()=>sendResponse({ok:false,error:'Readiness unavailable. Start the updated local backend.'}));return true;
+  }
+  if(message?.type==='study-history'){
+    if(typeof message.operation!=='string'||!message.payload||typeof message.payload!=='object'||Array.isArray(message.payload)||
+      JSON.stringify(message.payload).length>150*1024){sendResponse({ok:false,error:'Invalid local history request'});return;}
+    void history.request(message.operation,message.payload).then(data=>sendResponse({ok:true,data}),
+      error=>sendResponse({ok:false,error:error instanceof Error?error.message:'Local history unavailable'}));return true;
+  }
   if(message?.type==='chapter-translation-settings'){
     if(!['profile','create-series','delete-series','save-term','delete-term'].includes(message.operation)||
       !message.payload||typeof message.payload!=='object'||Array.isArray(message.payload)||JSON.stringify(message.payload).length>1800){

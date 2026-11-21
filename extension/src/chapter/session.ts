@@ -9,6 +9,10 @@ import {validSelection,type Rect} from '../geometry';
 import {renderPage,ConfigurationChanged} from "./transport";
 import {createPageReport,type PageReportContext,type ReportOptions} from './reports';
 import {defaultTranslationOptions,validateProfile,type ReaderTranslationOptions} from './translation-options';
+import {fontScale as validateFontScale,retainsRenderedBlocks} from './font-settings';
+import {RegionInspector} from './region-inspector';
+import type {Analysis} from '../api';
+import {progressLabel} from './progress';
 export interface ChapterSummary { active:boolean; total:number; translated:number; failed:number; skipped:number; processing:number|null; message:string; view:ViewMode }
 const SESSION_BUDGET=128*1024*1024,FAILURE_REPORT_BUDGET=256*1024;
 
@@ -38,9 +42,14 @@ export class ChapterTranslationSession {
   private failureReports=new Map<object,{context:PageReportContext;bytes:number}>();
   private exporting=false;
   private downloads=new Set<string>();
+  private renderVersion=0;
+  private rerenders=new Set<object>();
+  private inspector:RegionInspector|null=null;
+  private stage='';
   constructor(private changed:(status:ChapterSummary)=>void,private hideControls:(hidden:boolean)=>void,
               private discovery:PageDiscoveryStrategy=new GenericPageDiscovery(),
-              private translation:ReaderTranslationOptions=defaultTranslationOptions()) {
+              private translation:ReaderTranslationOptions=defaultTranslationOptions(),private fontScale=1,
+              private showStudy:(data:Analysis,anchor:Rect)=>void=()=>{}) {
     this.queue=new ChapterQueue({process:(page,signal)=>this.process(page,signal),
       priority:page=>{const r=page.source.image.getBoundingClientRect();return viewportPriority(r.top,r.bottom,innerHeight);},
       cache:{budget:SESSION_BUDGET-FAILURE_REPORT_BUDGET,size:r=>r.bytes,protected:p=>{
@@ -69,10 +78,11 @@ export class ChapterTranslationSession {
     const pages=[...this.queue.pages.values()];
     return {active:this.queue.active,total:pages.length,translated:pages.filter(p=>p.state==="translated"||p.state==="evicted").length,
       failed:pages.filter(p=>p.state==="failed").length,skipped:pages.filter(p=>p.state==="skipped").length,
-      processing:pages.find(p=>p.state==="processing")?.id??null,message:this.notice,view:this.queue.view};
+      processing:pages.find(p=>p.state==="processing")?.id??null,message:this.notice+(this.stage?'\n'+this.stage:''),view:this.queue.view};
   }
   private update():void {
     if(this.disposed) return;
+    this.inspector?.refresh();
     if(this.notice.startsWith('Refreshing page') && ![...this.queue.pages.values()].some(p=>p.refreshing))
       this.notice='Page refresh finished; see any retained-result warning below.';
     this.overlays.update([...this.queue.pages.values()],this.queue.view);
@@ -116,7 +126,16 @@ export class ChapterTranslationSession {
   resumeAfterPermission(version:number,retry:boolean):void {
     if(!this.disposed && version===this.startVersion)void this.start(retry,true);
   }
-  stop():void {this.startVersion++;this.queue.stop();this.acquiring?.abort();this.disconnect();this.notice="Stopped. The current page may finish; completed pages are retained.";this.update();}
+  stop():void {this.startVersion++;this.renderVersion++;this.rerenders.clear();this.queue.stop();this.acquiring?.abort();this.disconnect();this.notice="Stopped. The current page may finish; completed pages are retained.";this.update();}
+  async setFontScale(value:number):Promise<void> {
+    const scale=validateFontScale(value);
+    this.stop();const version=++this.renderVersion;
+    await this.queue.idle();
+    if(this.disposed||version!==this.renderVersion)return;
+    this.fontScale=scale;this.observe();
+    for(const page of this.queue.pages.values())if(page.result){this.rerenders.add(page.key);this.queue.refresh(page.key);}
+    this.notice=`Font ${Math.round(scale*100)}%: rerendering processed pages; previous images remain until replacement.`;this.update();
+  }
   setView(view:ViewMode):void {this.queue.setView(view);}
   pageOptions():{id:number;state:string;hasResult:boolean}[] {
     return [...this.queue.pages.values()].map(p=>({id:p.id,state:p.refreshing?'refreshing':p.state,hasResult:!!p.result}));
@@ -127,6 +146,24 @@ export class ChapterTranslationSession {
       const distance=(p:typeof a)=>{const r=p.source.image.getBoundingClientRect();return Math.abs((r.top+r.bottom)/2-innerHeight/2);};
       return distance(a)-distance(b);
     })[0] : pages.find(p=>p.id===id);
+  }
+  inspectRegions(id?:number):void {
+    this.inspector?.dispose();
+    const page=this.selectedPage(id),result=page?.result;
+    if(!page||!result?.snapshot){this.notice=page?.state==='evicted'?'Page result was evicted. Reprocess it to inspect retained analysis.':'Process a page before inspecting regions.';this.update();return;}
+    const current=()=>!this.disposed&&location.href===this.url&&this.queue.pages.get(page.key)===page&&page.result===result&&
+      page.source.image.isConnected&&page.source.image.complete&&(page.source.image.currentSrc||page.source.image.src)===page.source.source&&
+      page.source.image.naturalWidth===page.source.width&&page.source.image.naturalHeight===page.source.height;
+    const unpin=this.queue.pin(page.key);
+    this.inspector=new RegionInspector(page.source.image,result.snapshot,current,this.showStudy,()=>{unpin();this.inspector=null;});
+  }
+  resourceSummary():string {
+    const snapshot=this.selectedPage()?.result?.snapshot;
+    if(!snapshot)return 'No retained completed-page timings. Backend process RSS is not measured.';
+    const cache=snapshot.cache as {memory_bytes?:number;disk_bytes?:number;stages?:{stage:string;restored:boolean;compute_ms?:number}[]}|undefined;
+    return (cache?.stages??[]).map(s=>s.stage+': '+(s.restored?'cached':typeof s.compute_ms==='number'?Math.round(s.compute_ms)+' ms':'processed')).join('\n')+
+      (cache?`\nBackend cache RAM ${((cache.memory_bytes??0)/1024/1024).toFixed(1)} MiB · disk cache ${((cache.disk_bytes??0)/1024/1024).toFixed(1)} MiB`:'')+
+      '\nProcess RSS / peak model RAM / VRAM are not measured.';
   }
   refreshPage(id?:number):void {
     if(this.disposed || location.href!==this.url)return;
@@ -226,17 +263,30 @@ export class ChapterTranslationSession {
     const context:PageReportContext={page_id:page.id,job_id:`${page.id}-${page.attempts}`,width:candidate.width,height:candidate.height,
       state:'processing',extension_version:chrome.runtime.getManifest().version,timings:{}};
     let failed=false;
-    try {return await this.processImage(candidate,signal,context,page.refreshing===true);}
+    const renderOnly=this.rerenders.delete(page.key),scale=this.fontScale;
+    this.stage='Acquiring page image';this.update();
+    const progress=(status:import('./progress').JobProgress)=>{if(!signal.aborted&&!this.disposed&&this.queue.pages.get(page.key)===page){this.stage=progressLabel(status);this.update();}};
+    try {
+      const previous=page.result;
+      const result=await this.processImage(candidate,signal,context,page.refreshing===true,renderOnly,scale,progress);
+      if(renderOnly&&previous&&!retainsRenderedBlocks(previous,result)){
+        URL.revokeObjectURL(result.url);
+        this.notice='Font change could not preserve all previously rendered bubbles. Previous translation retained; try a smaller font or reset.';
+        throw new Error(this.notice);
+      }
+      return result;
+    }
     catch(error){
       failed=true;
       if(error instanceof ConfigurationChanged){this.dispose();this.changed({...this.summary(),message:error.message});}
       context.state=signal.aborted||error instanceof SkipPage?'skipped':'failed';context.error_code=signal.aborted?'cancelled':
       error instanceof AcquisitionError?'acquisition_failed':'page_processing_failed';throw error;}
-    finally {context.timings.total_ms=performance.now()-start;
+    finally {this.stage='';context.timings.total_ms=performance.now()-start;
       if(failed && !this.disposed && this.queue.pages.get(page.key)===page)this.rememberFailure(page,context);
       else this.failureReports.delete(page);}
   }
-  private async processImage(candidate:MangaPageCandidate,signal:AbortSignal,context:PageReportContext,refresh:boolean):Promise<PageImageResult> {
+  private async processImage(candidate:MangaPageCandidate,signal:AbortSignal,context:PageReportContext,refresh:boolean,renderOnly=false,scale=1,
+    progress?:(status:import('./progress').JobProgress)=>void):Promise<PageImageResult> {
     const acquisitionStart=performance.now();
     const style=getComputedStyle(candidate.image);
     if(style.transform!=='none' || [style.paddingLeft,style.paddingRight,style.paddingTop,style.paddingBottom,
@@ -271,9 +321,11 @@ export class ChapterTranslationSession {
       throw new SkipPage('Image source changed during acquisition');
     if(Math.abs(pixels.width/pixels.height-candidate.width/candidate.height)>.02)throw new SkipPage('Source pixels do not match displayed image proportions');
     const renderStart=performance.now();
-    const result=await renderPage(pixels.blob,signal,{refresh,configuration:this.configuration,translation:this.translation}).finally(()=>{
+    this.stage='Processing locally';this.update();
+    const result=await renderPage(pixels.blob,signal,{refresh,renderOnly,fontScale:scale,configuration:this.configuration,translation:this.translation,progress}).finally(()=>{
       context.timings.backend_roundtrip_ms=performance.now()-renderStart;
     });signal.throwIfAborted();
+    this.stage='Finalizing output';this.update();
     context.input_sha256=result.input_sha256;
     if(result.snapshot && (result.snapshot.image.input_sha256!==context.input_sha256 ||
       result.snapshot.image.width!==pixels.width||result.snapshot.image.height!==pixels.height))
@@ -328,6 +380,7 @@ export class ChapterTranslationSession {
   verifyCapture(id:string):boolean{return this.capture?.id===id && verifyTicket(this.capture);}
   private disconnect():void {this.observer?.disconnect();this.intersection?.disconnect();this.events?.abort();clearTimeout(this.discoveryTimer);}
   dispose():void {
+    this.inspector?.dispose();
     if(this.disposed)return;this.disposed=true;this.startVersion++;this.disconnect();clearInterval(this.navigationTimer);this.lifetime.abort();this.queue.dispose();this.overlays.dispose();
     this.failureReports.clear();
     for(const url of this.downloads)URL.revokeObjectURL(url);this.downloads.clear();

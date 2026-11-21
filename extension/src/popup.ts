@@ -242,8 +242,14 @@ export class StudyPopup {
     attribution.target = "_blank"; attribution.rel = "noopener noreferrer";
     footer.append(attribution);
     const time = data.processing;
+    if(data.provenance?.analysis_origin==='page')footer.append(element('p','Reused completed page analysis; no new screenshot or OCR.'));
     footer.append(element("p", `Local processing · OCR ${Math.round(time.ocr_ms)} ms · Translation ${Math.round(time.translation_ms)} ms · Analysis ${Math.round(time.analysis_ms)} ms`));
     this.body.append(footer);
+    const save=element('button','Save to History'),saved=element('p','','copy-feedback');saved.setAttribute('role','status');
+    save.addEventListener('click',()=>{save.disabled=true;void chrome.runtime.sendMessage({type:'study-history',operation:'save',payload:{analysis:data}}).then(reply=>{
+      if(!this.listeners.signal.aborted)saved.textContent=reply?.ok?'Saved locally.':reply?.error??'History unavailable.';
+    },()=>{if(!this.listeners.signal.aborted)saved.textContent='History unavailable. Reload the extension.';}).finally(()=>{save.disabled=false;});});
+    this.body.append(save,saved);
     this.position();
   }
 }

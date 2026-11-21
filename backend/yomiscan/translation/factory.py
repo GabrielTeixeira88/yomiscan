@@ -20,7 +20,7 @@ def create_translation_engine(name: str | None = None, *, device: Device = "auto
         return MarianTranslationEngine(device=device, target_language="pt-BR" if name == "opus-ja-pt" else "es")
     if name in ("fugumt", "nllb-600m"):
         from .nmt import NMTTranslationEngine
-        return NMTTranslationEngine(name, device=device)
+        return NMTTranslationEngine(name, device=device, local_files_only=True)
     from .manga import LlamaServer, MangaTranslationEngine
     key = {"hy-mt2-manga": "HY_MT2", "qwen35-vntl": "QWEN35", "qwen25-manga": "QWEN25"}[name]
     model = os.environ.get(f"YOMISCAN_{key}_GGUF")

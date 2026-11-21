@@ -11,6 +11,7 @@ import sqlite3
 import threading
 from time import perf_counter, time_ns
 from typing import Literal
+from .progress import Progress
 
 from PIL import Image
 
@@ -273,6 +274,11 @@ class CacheRequest:
     cache: ProcessingCache
     refresh: Refresh = "none"
     stages: list[dict[str, object]] = field(default_factory=list)
+    progress: "Progress | None" = None
+
+    def notify(self, stage: str, state: str, elapsed: float | None = None) -> None:
+        if self.progress is not None:
+            self.progress(stage, state, elapsed)
 
     def key(self, stage: str, *inputs: object) -> str:
         return digest([SCHEMA, stage, *inputs])
@@ -283,11 +289,13 @@ class CacheRequest:
         payload, source = (None, "unidentified") if key is None else (None, "refresh") if bypass else self.cache.get(stage, key)
         self.stages.append({"stage": stage, "key": key, "source": source,
                             "restored": payload is not None, "lookup_ms": (perf_counter()-start)*1000})
+        self.notify(stage, "cached" if payload is not None else "running")
         return payload
 
     def put(self, stage: str, key: str | None, payload: bytes) -> None:
         if key is not None:
             self.cache.put(stage, key, payload)
+        self.notify(stage, "completed")
 
     def invalid(self, stage: str, key: str | None) -> None:
         if key is not None:
@@ -296,6 +304,7 @@ class CacheRequest:
             self.cache.hits -= 1
             self.cache.misses += 1
         self.stages[-1].update(source="corrupt", restored=False)
+        self.notify(stage, "running")
 
     def metadata(self) -> dict[str, object]:
         return {**self.cache.stats(), "refresh": self.refresh, "stages": self.stages}

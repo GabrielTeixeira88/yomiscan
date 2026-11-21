@@ -2,6 +2,10 @@ import {ChapterTranslationSession,type ChapterSummary} from "./session";
 import {coverageSummary} from './coverage';
 import {TranslationSettings} from './translation-settings';
 import {defaultTranslationOptions,targetLabel,type ReaderTranslationOptions} from './translation-options';
+import type {Analysis} from '../api';
+import type {Rect} from '../geometry';
+import {HistoryControls} from './history-controls';
+import {SetupControls} from './setup-controls';
 
 export class ChapterControls {
   private host=document.createElement("div");
@@ -17,7 +21,8 @@ export class ChapterControls {
   private exportButton:HTMLButtonElement;
   private translationOptions=defaultTranslationOptions();
   private translationSettings:TranslationSettings;
-  constructor(selectText:()=>void) {
+  private fontScale=1;
+  constructor(selectText:()=>void,private showStudy:(data:Analysis,anchor:Rect)=>void=()=>{}) {
     this.host.dataset.yomiscan="controls";
     this.host.style.cssText="all:initial!important;position:fixed!important;top:12px!important;right:12px!important;z-index:2147483646!important;";
     const style=document.createElement("style");style.textContent=`
@@ -63,7 +68,7 @@ export class ChapterControls {
       this.exportButton.disabled=true;
       void this.current().exportPageReport(this.selectedPageId(),{...inclusions}).finally(()=>{this.exportButton.disabled=false;});
     });
-    panel.append(this.exportButton,reportOptions);
+    panel.append(this.exportButton,reportOptions,button('Inspect Regions',()=>this.current().inspectRegions(this.selectedPageId())));
     const cacheDetails=document.createElement('details'),cacheTitle=document.createElement('summary');cacheTitle.textContent='Local processing cache';
     const cacheInfo=document.createElement('p'),cacheLabel=document.createElement('label'),persistent=document.createElement('input');
     persistent.type='checkbox';persistent.disabled=true;
@@ -92,6 +97,17 @@ export class ChapterControls {
       if(invalidate||identity(options)!==identity(this.translationOptions)){this.session?.dispose();this.session=null;}
       this.translationOptions=options;this.english.textContent=targetLabel(options.target_language);
     });panel.append(this.translationSettings.element);
+    panel.append(new HistoryControls(data=>this.showStudy(data,{x:16,y:16,width:0,height:0})).element);
+    panel.append(new SetupControls().element);
+    const resources=document.createElement('details'),resourceTitle=document.createElement('summary'),resourceText=document.createElement('p');
+    resourceTitle.textContent='Processing details';resources.append(resourceTitle,resourceText);
+    resources.addEventListener('toggle',()=>{if(resources.open)resourceText.textContent=this.session?.resourceSummary()??'No processed page retained.';});panel.append(resources);
+    const fontDetails=document.createElement('details'),fontTitle=document.createElement('summary');fontTitle.textContent='Translation font';
+    const scale=document.createElement('select');scale.setAttribute('aria-label','Translation font size');
+    for(const value of [.75,1,1.25,1.5])scale.add(new Option(`${Math.round(value*100)}%`,String(value)));scale.value='1';
+    const applyFont=()=>{this.fontScale=Number(scale.value);void this.current().setFontScale(this.fontScale);};
+    const fontHelp=document.createElement('small');fontHelp.textContent='Larger text may leave a block original when it cannot fit safely. Only rendering is refreshed.';
+    fontDetails.append(fontTitle,scale,button('Apply Font',applyFont),button('Reset Font',()=>{scale.value='1';applyFont();}),fontHelp);panel.append(fontDetails);
     const help=document.createElement("small");help.textContent="Selected pages stay on this machine. CPU processing may take time.";panel.append(help);
     const details=document.createElement("details"),summary=document.createElement("summary");summary.textContent="Developer diagnostics";
     details.append(summary,button("Log discovery / states",()=>this.current().diagnostics()));panel.append(details);
@@ -105,7 +121,7 @@ export class ChapterControls {
   open():void {this.showHost(true);}
   private current():ChapterTranslationSession {
     if(this.sessionURL!==location.href || this.session?.isDisposed){this.session?.dispose();this.session=null;this.sessionURL=location.href;}
-    if(!this.session)this.session=new ChapterTranslationSession(status=>this.show(status),hidden=>{this.host.style.setProperty("visibility",hidden?"hidden":"visible","important");},undefined,{...this.translationOptions});
+    if(!this.session)this.session=new ChapterTranslationSession(status=>this.show(status),hidden=>{this.host.style.setProperty("visibility",hidden?"hidden":"visible","important");},undefined,{...this.translationOptions},this.fontScale,this.showStudy);
     this.session.allowStitch=this.stitchEnabled;
     return this.session;
   }

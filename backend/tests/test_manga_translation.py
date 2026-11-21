@@ -190,7 +190,8 @@ def test_application_closes_optional_engine_even_if_ocr_initialization_fails(mon
     monkeypatch.setattr(service, "create_translation_engine", lambda **kwargs: engine)
     def unavailable(**kwargs):
         raise RuntimeError("OCR setup failed")
-    monkeypatch.setattr(service, "MangaOCREngine", unavailable)
+    monkeypatch.setattr("yomiscan.readiness.require_local_models", lambda *args, **kwargs: {})
+    monkeypatch.setattr("yomiscan.ocr.factory.create_ocr_engine", unavailable)
     with pytest.raises(RuntimeError, match="OCR setup"):
         with service.open_local_service():
             pass

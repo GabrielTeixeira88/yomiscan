@@ -152,6 +152,12 @@ class TextAnalyzer:
             if cancel is not None and cancel.is_set():
                 raise StructuredTranslationError("cancelled", "Page translation cancelled")
             values = [texts[i] for i in indexes]
+            load = getattr(type(self._translator), "load", None)
+            if cache and callable(load) and self.translation_metadata().get("device") == "unloaded":
+                cache.notify("initializing", "running")
+                load(self._translator)
+                cache.notify("initializing", "completed")
+                cache.notify("translation", "running")
             if options.mode != "sentences":
                 page = PageTranslationRequest(segments, options.target_language, options.mode, options.context,
                     tuple(sorted({k: v for hint in hints for k, v in hint.items()}.items())),
@@ -175,6 +181,7 @@ class TextAnalyzer:
                 for i, result in zip(nonblank, batch, strict=True):
                     translations[i] = result
             except TranslationError as exc:
+                if cache: cache.notify("translation", "failed")
                 batch_failed = True
                 logging.getLogger(__name__).exception("Page translation failed")
                 if options.mode != "sentences" or getattr(exc, "code", None) == "cancelled":

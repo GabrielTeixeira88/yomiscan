@@ -41,7 +41,7 @@ class MarianTranslationEngine:
 
             self._torch = torch
             self.device = select_device(device, cuda_available=torch.cuda.is_available())
-            options = {"revision": self.revision, **({"local_files_only": True} if spec else {})}
+            options = {"revision": self.revision, "local_files_only": True}
             self._tokenizer = MarianTokenizer.from_pretrained(self.model_id, **options)
             self._model = MarianMTModel.from_pretrained(self.model_id, **options)
             self._model.to(self.device)

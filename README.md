@@ -41,6 +41,15 @@ does not enforce glossary hints. JMdict definitions remain English. See
 [controls and contracts](docs/post-mvp-translation-improvements.md) and
 [measured results, failures and limits](docs/research/stage4-translation-results.md).
 
+**Post-MVP: Reader Experience & Distribution (P06/P10/P11/P12/P13).** Chapter controls
+offer bounded font scaling, explicit region inspection and Study Bubble reuse.
+Read-only setup checks and real, cache-aware stages explain local processing.
+Optional Study history is off by default and requires explicit Save. Unsigned extension
+ZIP/backend distributions include checksums and installation checks. See
+[reader controls and privacy](docs/post-mvp-reader-experience-distribution.md),
+[Windows/Linux installation](docs/installation.md) and
+[validation evidence](docs/research/stage5-validation-results.md).
+
 | Current capability | Status |
 | --- | --- |
 | Study selection, draggable/resizable popup, readings/morphology/JMdict | Implemented; Copy Japanese / Copy English available |
@@ -55,7 +64,11 @@ does not enforce glossary hints. JMdict definitions remain English. See
 | Series terminology | Implemented; separate local user database, target-specific overrides, safe matched hints on compatible engines |
 | Exact-ID translation and bounded dialogue context | Optional Hy/Qwen experiments; complete-output validation does not guarantee accurate meaning |
 | Panel ordering and PT/ES sentence targets | Experimental; generic Portuguese is not validated Brazilian register; NLLB is noncommercial |
-| Narrative context, new production models, vocabulary/JLPT, model/setup manager | Future work |
+| Font 75–150%, preserved-region reasons, Study Bubble | Implemented; render-only reuse and exact retained page analysis |
+| Setup/readiness and page stages | Implemented; local checks, real stage/cache observations, no automatic weight download |
+| Local Study history | Off by default; enable plus explicit Save, 100 entries/2 MiB, delete/clear/export |
+| Unsigned extension ZIP, backend wheel/sdist | Build workflow and installation checks; separate model/JMdict preparation |
+| Narrative context, new production models, vocabulary/JLPT, full graphical model manager | Future work |
 
 The purpose is to help Japanese learners study manga without paid APIs or per-request
 costs. Sentence translation is separate from ordered tokens with readings, dictionary
@@ -79,14 +92,19 @@ From the repository root:
 ```powershell
 py -3.13 --version
 uv --version
-uv sync
-uv run pytest
+uv sync --frozen
+uv run --frozen pytest
 ```
 
 `uv sync` creates a local `.venv`, installs the `yomiscan` package from `backend/`,
 and includes the dev dependency group. Python is constrained to `>=3.13,<3.14`.
 The generated `uv.lock` records resolved versions; direct dependencies live in
 `pyproject.toml`. No global Python configuration changes are needed.
+
+Prepare pinned production weights explicitly before running the API:
+`uv run yomiscan-prepare-defaults`. Import JMdict as described below. Normal backend
+startup and readiness do not download weights. Source-only legacy OCR experiment CLIs
+retain their documented behavior; the installed server uses local pinned artifacts.
 
 ## Single-page analysis (Phase 5)
 
@@ -198,12 +216,15 @@ manually for this MVP.
 Terminal 1, from the repository root:
 
 ```powershell
-uv sync
+uv sync --frozen
+uv run yomiscan-prepare-defaults
 uv run uvicorn yomiscan.api.main:app --host 127.0.0.1 --port 8765 --reload
 ```
 
-Wait for `Application startup complete`. First startup may download OCR/translation
-weights; subsequent requests reuse the initialized models. Set
+The API starts while required resources initialize. Open **Setup & readiness** to
+distinguish initializing, ready and missing resources; `/health` stays unavailable
+until initialization succeeds. Run preparation/import commands and restart after setup
+failures. Startup never silently downloads weights. Set
 `$env:YOMISCAN_DEVICE = "cpu"` before startup to force CPU (default `auto`).
 `YOMISCAN_DICTIONARY` overrides `data/jmdict.sqlite3`. Once models are cached, set
 `$env:HF_HUB_OFFLINE = "1"` to require offline model use.

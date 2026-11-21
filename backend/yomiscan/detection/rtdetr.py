@@ -50,9 +50,9 @@ class ComicTextDetector:
                 raise RuntimeError("CUDA unavailable; use cpu or install a compatible PyTorch CUDA build")
             self.device = "cuda" if device != "cpu" and torch.cuda.is_available() else "cpu"
             self._torch = torch
-            self._processor = RTDetrImageProcessorPil.from_pretrained(MODEL_ID, revision=MODEL_REVISION)
+            self._processor = RTDetrImageProcessorPil.from_pretrained(MODEL_ID, revision=MODEL_REVISION, local_files_only=True)
             self._model = RTDetrV2ForObjectDetection.from_pretrained(
-                MODEL_ID, revision=MODEL_REVISION, use_safetensors=True,
+                MODEL_ID, revision=MODEL_REVISION, use_safetensors=True, local_files_only=True,
             ).to(self.device).eval()
             from ..cache_identity import loaded_hf_identity
             self._cache_artifacts = loaded_hf_identity(self._model, MODEL_ID, MODEL_REVISION)

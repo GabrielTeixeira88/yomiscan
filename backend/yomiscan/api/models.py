@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 
-from yomiscan.analysis import ImageAnalysisResult
+from yomiscan.analysis import ImageAnalysisResult, TextAnalysisResult
 from yomiscan.ocr import OCRResult
 from yomiscan.page import PageAnalysisResult
 
@@ -40,20 +40,27 @@ class ImageAnalysisResponse(BaseModel):
     tokens: list[TokenResponse]
     target_language: str = "en"
     dictionary_language: str = "en"
+    provenance: dict[str, object] = {}
 
     @classmethod
     def from_result(cls, result: ImageAnalysisResult, total_ms: float) -> "ImageAnalysisResponse":
-        analysis = result.analysis
+        return cls.from_analysis(result.analysis, ocr_ms=result.ocr.processing_time_ms, total_ms=total_ms)
+
+    @classmethod
+    def from_analysis(cls, analysis: TextAnalysisResult, *, ocr_ms: float = 0, total_ms: float = 0, origin: str = "study") -> "ImageAnalysisResponse":
+        from ..diagnostics import model_info
+        translation = analysis.translation
         return cls(
             original_text=analysis.original_text,
             translation=analysis.translation.translated_text if analysis.translation else None,
             target_language=str(analysis.translation.metadata.get("requested_target", analysis.translation.metadata.get("target_language", "en")))
                 if analysis.translation else "en",
             processing=ProcessingTimes(
-                ocr_ms=result.ocr.processing_time_ms,
+                ocr_ms=ocr_ms,
                 translation_ms=analysis.translation.processing_time_ms if analysis.translation else 0,
                 analysis_ms=analysis.processing_time_ms, total_ms=total_ms,
             ),
+            provenance=(model_info({"engine": translation.engine, "model": translation.model, **translation.metadata}) if translation else {})|{"analysis_origin": origin},
             tokens=[TokenResponse(
                 surface=item.token.surface, reading=item.token.reading, lemma=item.token.lemma,
                 dictionary_form=item.lookup_form or item.token.orthographic_base or item.token.lemma,

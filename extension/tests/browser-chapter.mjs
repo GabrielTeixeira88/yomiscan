@@ -12,6 +12,8 @@ const reportDir=path.resolve('.cache/stage1-reports-'+Date.now());
 let mockServer,mockRenders=0,mockRefreshes=0,persistentCache=false,mockConfiguration='f'.repeat(64),extensionPath=path.resolve('extension/dist');
 const mockSeries=[{id:'global',label:'Global'}],mockTerms=[],translationCalls=[];
 let experimentalCapabilities=false,failProfileOnce=false;
+let mockRenderOnly=0,mockStudyCalls=0,nextSlow=0,failFontOnce=false,overflowFontOnce=false,failReadiness=false,initializingReadiness=false;
+const mockFontScales=[],mockJobs=new Map();
 if(mocked) {
   extensionPath=path.resolve('.cache/stage1-browser-extension');
   await mkdir(extensionPath,{recursive:true});
@@ -22,6 +24,21 @@ if(mocked) {
   mockServer=http.createServer(async(req,res)=>{
     try {
       if(req.url==='/health'){res.setHeader('Content-Type','application/json');res.setHeader('X-YomiScan-Configuration',mockConfiguration);res.end('{"status":"ok"}');return;}
+      if(req.url.startsWith('/api/v1/readiness')){
+        if(failReadiness){res.writeHead(503);res.end();return;}
+        res.setHeader('Content-Type','application/json');res.end(JSON.stringify({schema:1,version:'0.1.0',initialization:initializingReadiness?'initializing':'ready',busy:false,
+          configuration_valid:true,failure_code:null,selected_device:'cpu',dictionary:{installed:true,loaded:true,setup_command:'import dictionary'},
+          tokenizer:{installed:true,loaded:true,setup_command:'uv sync --frozen'},storage:{processing_cache:{disk_parent:'writable',persistent_enabled:false},glossary:{disk_parent:'writable',accessibility:'open'}},
+          models:[{id:'current',kind:'translation',model:'fixture/model',revision:'a'.repeat(40),license:'Apache-2.0',selected:true,
+            installed:true,loaded:!initializingReadiness,verification:'not_checked',experimental:false,targets:['en'],structured:false,glossary_hints:false,
+            setup_command:'yomiscan-prepare-defaults',warnings:[],approximate_download_bytes:1,compatible:true,compatibility_basis:'catalog_support_only',devices:['cpu','cuda'],dependency_available:true}]}));return;
+      }
+      if(req.url.startsWith('/api/v1/jobs/')){
+        const id=req.url.split('/').at(-1),job=mockJobs.get(id);if(!job){res.writeHead(404);res.end();return;}
+        const elapsed=Date.now()-job.started,current=elapsed>=job.delay?'completed':elapsed<1200?'initializing':elapsed<2100?'ocr':'translation';
+        res.setHeader('Content-Type','application/json');res.end(JSON.stringify({instance:'a'.repeat(32),job_id:id,version:Math.floor(elapsed/100)+1,
+          state:current==='completed'?'completed':'processing',current,stages:current==='completed'?{}:{[current]:{state:'running',computed:true,cache_hits:0}}}));return;
+      }
       if(req.url.startsWith('/api/v1/translation-profile')){
         if(failProfileOnce){failProfileOnce=false;res.writeHead(429);res.end();return;}
         const query=new URL(backend+req.url).searchParams,scope=query.get('scope')??'global',target=query.get('target')??'en';
@@ -56,8 +73,13 @@ if(mocked) {
       if(form.has('options_json'))translationCalls.push(JSON.parse(form.get('options_json')));
       if(req.url.startsWith('/api/v1/render-page'))mockRenders++;
       if(req.url.includes('refresh=translation'))mockRefreshes++;
-      await new Promise(resolve=>setTimeout(resolve,250));
+      if(req.url.includes('refresh=render')){mockRenderOnly++;if(failFontOnce){failFontOnce=false;res.writeHead(500);res.end();return;}}
+      const query=new URL(backend+req.url).searchParams,job=query.get('job_id'),delay=nextSlow||250;nextSlow=0;
+      if(job){mockJobs.set(job,{started:Date.now(),delay});while(mockJobs.size>32)mockJobs.delete(mockJobs.keys().next().value);}
+      mockFontScales.push(Number(query.get('font_scale')??1));
+      await new Promise(resolve=>setTimeout(resolve,delay));
       if(req.url.startsWith('/api/v1/analyze-image')) {
+        mockStudyCalls++;
         res.setHeader('Content-Type','application/json');res.end(JSON.stringify({
           original_text:'でも大丈夫',translation:'But it is okay.',tokens:[],processing:{ocr_ms:0,translation_ms:0,analysis_ms:0,total_ms:0}}));return;
       }
@@ -65,9 +87,15 @@ if(mocked) {
       const height=(bytes[20]*2**24+bytes[21]*65536+bytes[22]*256+bytes[23])>>>0;
       const snapshot={schema_version:1,build:{version:'fixture',revision:null},image:{
         width,height,input_sha256:createHash('sha256').update(bytes).digest('hex')},models:{},regions:[],
-        blocks:[{id:1,region_ids:[],ocr:{status:'success',confidence:null},translation:{status:'success'},
-          render:{status:'rendered',reason_code:'rendered'},text:{original:'でも大丈夫',translation:'But it is okay.'}}],
+        blocks:[{id:1,region_ids:[],bbox:{left:200,top:120,right:600,bottom:300},ocr:{status:'success',confidence:null},translation:{status:'success'},
+          render:{status:'rendered',reason_code:'rendered'},text:{original:'でも大丈夫',translation:'But it is okay.'}},
+          {id:2,region_ids:[],bbox:{left:200,top:400,right:600,bottom:550},ocr:{status:'success',confidence:.9},translation:{status:'success'},
+          render:{status:'skipped',reason_code:'overflow'},text:{original:'猫です',translation:'It is a cat.',study:{original_text:'猫です',translation:'It is a cat.',
+            target_language:'en',dictionary_language:'en',provenance:{analysis_origin:'page'},processing:{ocr_ms:0,translation_ms:0,analysis_ms:0,total_ms:0},
+            tokens:[{surface:'猫',reading:'ねこ',lemma:'猫',dictionary_form:'猫',part_of_speech:'noun',conjugation_type:null,conjugation_form:null,
+              meanings:[{entry_id:1,glosses:['cat'],parts_of_speech:['noun'],spellings:[],readings:[],notes:[],labels:[]}]}]}}}],
         timings:{analysis:{ocr_ms:0}},counts:{rendered:1,preserved:0,undetected:null}};
+      if(overflowFontOnce&&req.url.includes('refresh=render')){overflowFontOnce=false;snapshot.blocks[0].render={status:'skipped',reason_code:'overflow'};snapshot.counts.rendered=0;snapshot.counts.preserved=2;}
       const archive=packZip([{name:'rendered.png',data:bytes},
         {name:'snapshot.json',data:new TextEncoder().encode(JSON.stringify(snapshot))}]);
       res.setHeader('Content-Type','application/zip');res.end(Buffer.from(await archive.arrayBuffer()));
@@ -107,7 +135,7 @@ async function until(check,timeout=60000){const end=Date.now()+timeout;while(Dat
 function nodes(root){return [root,...(root.children??[]).flatMap(nodes),...(root.shadowRoots??[]).flatMap(nodes)];}
 let session,worker,extensionId,offscreen;
 async function find(predicate){const doc=await call("DOM.getDocument",{depth:-1,pierce:true},session);return nodes(doc.root).find(predicate);}
-async function invoke(node,fn){const o=await call("DOM.resolveNode",{nodeId:node.nodeId},session);const r=await call("Runtime.callFunctionOn",{objectId:o.object.objectId,functionDeclaration:fn,returnByValue:true,awaitPromise:true,userGesture:true},session);if(r.exceptionDetails)throw new Error(JSON.stringify(r.exceptionDetails));return r.result.value;}
+async function invoke(node,fn){const o=await call("DOM.resolveNode",node.backendNodeId?{backendNodeId:node.backendNodeId}:{nodeId:node.nodeId},session);const r=await call("Runtime.callFunctionOn",{objectId:o.object.objectId,functionDeclaration:fn,returnByValue:true,awaitPromise:true,userGesture:true},session);if(r.exceptionDetails)throw new Error(JSON.stringify(r.exceptionDetails));return r.result.value;}
 const byClass=name=>n=>{const index=n.attributes?.indexOf('class')??-1;return index>=0&&n.attributes[index+1].split(/\s+/).includes(name);};
 let panelObject;
 async function panel(){
@@ -151,6 +179,7 @@ try {
   const offTarget=await until(async()=>(await call("Target.getTargets")).targetInfos.find(t=>t.url.includes(extensionId+"/offscreen.html")));
   offscreen=(await call("Target.attachToTarget",{targetId:offTarget.targetId,flatten:true})).sessionId;
   await evaluate(offscreen,`globalThis.testCalls=[];globalThis.failPage2=true;const nativeFetch=fetch;globalThis.fetch=async(url,options)=>{
+    if(options?.method==='GET')return nativeFetch(url,options);
     const bitmap=await createImageBitmap(options.body.get('file'));const canvas=new OffscreenCanvas(bitmap.width,bitmap.height);const ctx=canvas.getContext('2d');ctx.drawImage(bitmap,0,0);bitmap.close();
     const id=ctx.getImageData(0,0,1,1).data[0];testCalls.push(id);
     if(id===2&&failPage2){failPage2=false;return new Response('',{status:500});}
@@ -187,6 +216,7 @@ try {
   await until(async()=>(await panel()).includes('5 / 5 pages translated'));
   report.checks.push('Successful-page refresh reruns only the selected page');
   await evaluate(offscreen,`const refreshFetch=fetch;globalThis.failRefresh=true;globalThis.fetch=async(url,options)=>{
+    if(options?.method==='GET')return refreshFetch(url,options);
     if(failRefresh){failRefresh=false;return new Response('',{status:500});}return refreshFetch(url,options);};`);
   await click('Retranslate Page');
   await until(async()=>(await panel()).includes('Refresh failed; previous translation retained.'));
@@ -343,6 +373,7 @@ try {
   await click("Clear Session");
   // Exercise a longer queue without claiming 24 additional neural-render evaluations.
   await evaluate(offscreen,`globalThis.longCalls=0;globalThis.fetch=async(url,options)=>{
+    if(options?.method==='GET')return nativeFetch(url,options);
     longCalls++;const png=new Uint8Array(await options.body.get('file').arrayBuffer());
     const length=8*1024*1024,chunk=new Uint8Array(length+12),view=new DataView(chunk.buffer);
     view.setUint32(0,length);chunk.set([116,69,88,116],4);chunk.set(new TextEncoder().encode('fixture'),8);
@@ -429,6 +460,88 @@ try {
     await until(()=>mockTerms.length===2);await until(async()=>(await panel()).includes('Stop translation, wait for it to finish'));
     assert.ok(!await find(n=>n.attributes?.includes('overlays')));
     report.checks.push('Repeated glossary invalidation retires a newly started session even while the editor version remains unknown');
+    await click('Reload Translation Settings');await wait(150);
+    await invoke(await select('Translation contract'),"function(){this.value='sentences';this.dispatchEvent(new Event('change'))}");
+    await invoke(await find(n=>n.nodeName==='INPUT'&&n.attributes?.includes('glossary-enabled')),"function(){this.checked=false;this.dispatchEvent(new Event('change'))}");
+    await evaluate(session,"document.querySelector('main img').scrollIntoView()");
+    await click('Translate Chapter');await until(async()=>(await panel()).includes('1 / 1 pages translated'));
+    const fontSummary=await find(n=>n.nodeName==='SUMMARY'&&n.children?.some(c=>c.nodeValue==='Translation font'));
+    await invoke(fontSummary,'function(){this.click()}');
+    const overlayURL=async()=>invoke(await find(n=>n.nodeName==='IMG'&&n.attributes?.includes('aria-hidden')),'function(){return this.src}');
+    const previousURL=await overlayURL(),beforeFont=mockRenderOnly,beforeTranslation=mockRefreshes;
+    nextSlow=1800;await invoke(await select('Translation font size'),"function(){this.value='1.5'}");await click('Apply Font');
+    await until(()=>mockRenderOnly>beforeFont);assert.equal(await overlayURL(),previousURL);
+    await until(async()=>await overlayURL()!==previousURL);
+    assert.equal(mockFontScales.at(-1),1.5);assert.equal(mockRefreshes,beforeTranslation);
+    const retainedURL=await overlayURL();failFontOnce=true;await click('Reset Font');
+    await until(async()=>(await panel()).includes('Refresh failed; previous translation retained.'));
+    assert.equal(await overlayURL(),retainedURL);
+    overflowFontOnce=true;await click('Reset Font');
+    await until(async()=>(await panel()).includes('Font change could not preserve all previously rendered bubbles'));
+    assert.equal(await overlayURL(),retainedURL);
+    await click('Reset Font');await until(async()=>await overlayURL()!==retainedURL);assert.equal(mockFontScales.at(-1),1);
+    report.checks.push('Font scaling/reset uses render-only refresh and retains the overlay while pending, on backend failure and on newly overflowing rendered bubbles');
+    await click('Inspect Regions');
+    const regionSelect=()=>find(n=>n.nodeName==='SELECT'&&n.attributes?.includes('Detected region'));
+    await invoke(await regionSelect(),"function(){this.value='B2';this.dispatchEvent(new Event('change'))}");
+    const inspectPanel=await find(byClass('inspect-panel'));
+    assert.match(await invoke(inspectPanel,'function(){return this.innerText}'),/did not fit safely/);
+    assert.ok(!(await invoke(inspectPanel,'function(){return this.innerText}')).includes('猫です'));
+    await invoke(inspectPanel,"function(){const box=this.querySelector('input');box.click()}");
+    assert.ok((await invoke(inspectPanel,'function(){return this.innerText}')).includes('猫です'));
+    const beforeBubble=mockStudyCalls;await click('Study Bubble');
+    await until(()=>find(byClass('panel')));
+    assert.ok((await invoke(await find(byClass('panel')),'function(){return this.innerText}')).includes('ねこ'));
+    assert.equal(mockStudyCalls,beforeBubble);
+    await click('Save to History');await until(async()=>(await invoke(await find(byClass('panel')),'function(){return this.innerText}')).includes('History is off'));
+    await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27},session);
+    const historySummary=await find(n=>n.nodeName==='SUMMARY'&&n.children?.some(c=>c.nodeValue==='Study history'));
+    await invoke(historySummary,'function(){this.click()}');await until(async()=>(await panel()).includes('New writes disabled'));
+    const historyEnabled=await find(n=>n.nodeName==='INPUT'&&n.attributes?.includes('study-history'));
+    assert.equal(await invoke(historyEnabled,'function(){return this.checked}'),false);
+    await invoke(historyEnabled,'function(){this.click()}');await until(async()=>(await panel()).includes('Saving enabled'));
+    await click('Inspect Regions');await invoke(await regionSelect(),"function(){this.value='B2';this.dispatchEvent(new Event('change'))}");
+    await click('Study Bubble');await click('Save to History');
+    await until(async()=>(await invoke(await find(byClass('panel')),'function(){return this.innerText}')).includes('Saved locally.'));
+    await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27},session);
+    await click('Reload History');await until(async()=>(await panel()).includes('1 saved entries'));
+    await click('Open Study Entry');await until(()=>find(byClass('panel')));
+    assert.ok((await invoke(await find(byClass('panel')),'function(){return this.innerText}')).includes('Reused completed page analysis'));
+    assert.equal(mockStudyCalls,beforeBubble);
+    await click('Copy Japanese');await until(async()=>(await evaluate(session,'navigator.clipboard.readText()'))==='猫です');
+    await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27},session);
+    await click('Export History');await until(async()=>(await readdir(reportDir)).some(name=>name.startsWith('yomiscan-study-history-')));
+    const historyName=(await readdir(reportDir)).find(name=>name.startsWith('yomiscan-study-history-'));
+    const historyExport=JSON.parse(await readFile(path.join(reportDir,historyName),'utf8'));
+    assert.equal(historyExport.entries.length,1);assert.ok(!JSON.stringify(historyExport).includes('http://127.0.0.1'));
+    await click('Clear Persistent Cache');await click('Reload History');assert.ok((await panel()).includes('1 saved entries'));
+    await click('Delete Study Entry');await until(async()=>(await panel()).includes('0 saved entries'));
+    await click('Clear History');await until(async()=>!await invoke(historyEnabled,'function(){return this.disabled}'));
+    await invoke(historyEnabled,'function(){this.click()}');await until(async()=>(await panel()).includes('New writes disabled'));
+    report.checks.push('Preserved region shows truthful reason and opt-in text; bubble Study reuses readings/dictionary without another OCR; history is opt-in and supports save/reopen/copy/export/delete independently of cache');
+    await click('Inspect Regions');
+    await call('Emulation.setDeviceMetricsOverride',{width:1000,height:900,deviceScaleFactor:1,mobile:false},session);
+    await evaluate(session,"document.querySelector('main img').scrollIntoView()");await wait(150);
+    const regionBox=await find(n=>n.nodeName==='BUTTON'&&n.attributes?.includes('Inspect B2'));
+    const mapped=await invoke(regionBox,'function(){const r=this.getBoundingClientRect();return [r.left,r.top,r.width,r.height]}');
+    const expected=await evaluate(session,"(()=>{const i=document.querySelector('main img'),r=i.getBoundingClientRect();return [r.left+200*r.width/800,r.top+400*r.height/1100,400*r.width/800,150*r.height/1100]})()");
+    assert.ok(mapped.every((value,index)=>Math.abs(value-expected[index])<1));
+    await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27},session);
+    await until(async()=>!await find(byClass('inspect-panel')));
+    report.checks.push('Region geometry follows CSS scaling/resize/scroll and Escape removes the inspection interaction');
+    const setupSummary=await find(n=>n.nodeName==='SUMMARY'&&n.children?.some(c=>c.nodeValue==='Setup & readiness'));
+    initializingReadiness=true;await invoke(setupSummary,'function(){this.click()}');await until(async()=>(await panel()).includes('Backend initializing'));
+    failReadiness=true;await click('Check Setup');await until(async()=>(await panel()).includes('Cannot reach readiness'));
+    failReadiness=false;initializingReadiness=false;await click('Check Setup');await until(async()=>(await panel()).includes('Backend ready'));
+    report.checks.push('Read-only setup distinguishes slow initialization, loaded state and missing-backend recovery guidance');
+    await click('Clear Session');nextSlow=3600;await click('Translate Chapter');
+    await until(async()=>(await panel()).includes('Initializing required models'));
+    await until(async()=>(await panel()).includes('Running OCR')||(await panel()).includes('Translating Japanese'));
+    await until(async()=>(await panel()).includes('1 / 1 pages translated'));
+    report.checks.push('Job-correlated slow-page simulation reports actual mock initialization/OCR/translation stages without fabricated percentages');
+    await click('Inspect Regions');await evaluate(session,"document.querySelector('main img').src='data:image/png;base64,'+document.querySelector('main img').src.split(',')[1]+'#changed'");
+    await until(async()=>!await find(byClass('inspect-panel')));await click('Clear Session');
+    report.checks.push('Source replacement invalidates inspected page identity and releases the pinned result');
   }
   report.status=await panel();report.requestOrder=await evaluate(offscreen,"testCalls");
   await mkdir(".cache",{recursive:true});await writeFile(mocked?".cache/stage1-browser.json":".cache/phase-7-browser.json",JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
