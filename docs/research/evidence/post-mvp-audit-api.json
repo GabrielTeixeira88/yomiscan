@@ -1,0 +1,132 @@
+{
+  "baseline": "178e506f8bc03ef541f4c4f8d60ecb44476f023a",
+  "api_cases": [
+    {
+      "case": "host_rebinding",
+      "status": 400,
+      "expected": 400
+    },
+    {
+      "case": "unrelated_site_read",
+      "status": 403,
+      "expected": 403
+    },
+    {
+      "case": "opaque_origin",
+      "status": 403,
+      "expected": 403
+    },
+    {
+      "case": "missing_private_read_header",
+      "status": 403,
+      "expected": 403
+    },
+    {
+      "case": "other_extension",
+      "status": 403,
+      "expected": 403
+    },
+    {
+      "case": "allowed_extension",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "case": "missing_write_header",
+      "status": 403,
+      "expected": 403
+    },
+    {
+      "case": "hostile_write",
+      "status": 403,
+      "expected": 403
+    },
+    {
+      "case": "admin_body_limit",
+      "status": 413,
+      "expected": 413
+    },
+    {
+      "case": "unknown_cache_option",
+      "status": 422,
+      "expected": 422
+    },
+    {
+      "case": "coerced_setting",
+      "status": 422,
+      "expected": 422
+    },
+    {
+      "case": "invalid_font",
+      "status": 422,
+      "expected": 422
+    },
+    {
+      "case": "invalid_job_id",
+      "status": 422,
+      "expected": 422
+    },
+    {
+      "case": "invalid_image",
+      "status": 400,
+      "expected": 400
+    },
+    {
+      "case": "invalid_options",
+      "status": 422,
+      "expected": 422
+    },
+    {
+      "case": "decoded_pixel_limit",
+      "status": 400,
+      "expected": 400
+    },
+    {
+      "case": "upload_size_limit",
+      "status": 413,
+      "expected": 413
+    },
+    {
+      "case": "clear_cache_preserves_synthetic_glossary",
+      "result": true
+    },
+    {
+      "case": "cancel_between_ocr_crops",
+      "cancel_requested_after_crop": 1,
+      "actual_crops": 2,
+      "terminal": "cancelled"
+    }
+  ],
+  "missing_resource_cases": [
+    {
+      "scenario": "missing_ocr",
+      "code": "ocr_artifacts_missing"
+    },
+    {
+      "scenario": "missing_translation",
+      "code": "translation_artifacts_missing"
+    },
+    {
+      "scenario": "missing_detection",
+      "code": "detection_artifacts_missing"
+    },
+    {
+      "scenario": "optional_runtime_missing",
+      "code": "optional_dependency_missing"
+    }
+  ],
+  "synthetic_adapter_probes": {
+    "failed_nmt_load": {
+      "model_is_none": true,
+      "reported_loaded": true
+    },
+    "explicit_cpu_vs_environment": {
+      "passed_device": "cpu",
+      "preflight_failure": "invalid_configuration"
+    },
+    "default_log_disclosure": {
+      "synthetic_upstream_body_in_error_log": true,
+      "record_debug": false
+    }
+  }
+}
