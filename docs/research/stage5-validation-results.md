@@ -99,12 +99,46 @@ startup/readiness and checksum verification. The extracted ZIP loaded in Chrome
 157.0.8103.79: MV3, packaged service worker and reader controls all activated.
 These were executed checks. Preview provenance is dirty and is not a clean release.
 
-Clean exact-commit builds, same-host byte reproducibility and hosted artifact checks
-are recorded in final delivery evidence. CI gates Windows/Linux backend and Node
+Clean exact-commit builds and same-host byte reproducibility passed as recorded below.
+CI gates Windows/Linux backend and Node
 before an exact checkout, package build/install, actual extracted-ZIP Chrome load and
 run-associated upload. Manual dispatch is supported. No model downloads/inference,
 version tag or GitHub Release is part of packaging. Local Windows evidence alone
 does not establish Linux/hosted execution.
+
+### Clean build and delivery evidence
+
+PR [#5](https://github.com/GabrielTeixeira88/yomiscan/pull/5) targets main and is left
+open/unmerged. Initial commits are `5bd742e` (reader features/tests), `642996d`
+(packaging/install tooling) and `8af180c` (usage/architecture/validation).
+
+Clean source **`8af180c49b351f201ac0a065fe1f4f82db4e928b`** was built twice into
+separate output directories on Windows. All **eight** files, including manifest and
+checksums, matched byte for byte. Fresh wheel/sdist installation, six CLI entry points,
+font/import/version checks, missing-resource API startup and extracted-ZIP Chrome
+activation passed. The manifest reports actual locked FastAPI 0.142.2, Torch 2.14.0
+and transformers 5.17.0 rather than global packages.
+
+These hashes identify that specific local Windows build. Use the `SHA256SUMS` shipped
+with a chosen workflow run for that run's artifacts; other commits/platforms can differ.
+
+| Local clean artifact at `8af180c` | SHA-256 |
+| --- | --- |
+| `yomiscan-0.1.0-py3-none-any.whl` | `75ad0a148bc994d8ac67f4904e898e2452777bb673af2a226efb36b8374041da` |
+| `yomiscan-0.1.0.tar.gz` | `a5b61f2a65b5c06c41a40db64f4f6f74e232adef3407e68a85f489afc4397058` |
+| `yomiscan-extension-0.1.0-8af180c49b35.zip` | `0db343c8d4974c365271ee0ee89d6a3e329db064bf15e37ded6ef89001077b43` |
+
+Hosted backend tests at `8af180c` also passed: **317 on Linux**, **316 plus the
+existing skip on Windows**, and the Node/build gate passed. The first hosted
+distribution attempt exposed an offline installation bug: exported name/version
+requirements required registry metadata even though `uv sync --frozen` had cached
+their locked artifacts. Installation now uses frozen offline sync into the new
+smoke environment with a subprocess-only `UV_PROJECT_ENVIRONMENT`, excluding the
+project until its actual wheel/sdist is installed. Existing environments are rejected
+before creation; the project environment is untouched. This follows uv's
+[documented environment override](https://docs.astral.sh/uv/concepts/projects/config/#project-environment-path).
+The original hosted installation step is the regression gate; final hosted artifact
+results are linked from the PR checks after the corrective run.
 
 ## Independent pre-commit reviews
 

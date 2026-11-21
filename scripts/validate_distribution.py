@@ -44,9 +44,10 @@ def main(argv: list[str] | None = None) -> int:
         raise ValueError("Manifest omitted locked runtime dependency versions")
     run(["uv", "venv", str(environment), "--python", "3.13"])
     python = environment/("Scripts/python.exe" if os.name == "nt" else "bin/python")
-    requirements = environment/"locked-requirements.txt"
-    run(["uv", "export", "--frozen", "--no-dev", "--no-emit-project", "--output-file", str(requirements)], stdout=subprocess.DEVNULL)
-    run(["uv", "pip", "sync", "--python", str(python), "--offline", str(requirements)])
+    # Frozen sync can use exact cached lockfile URLs without a cached registry index.
+    # pip's requirements resolver may need index metadata that sync never requested.
+    run(["uv", "sync", "--frozen", "--no-dev", "--no-install-project", "--offline"],
+        env={**os.environ, "UV_PROJECT_ENVIRONMENT": str(environment)})
     wheel, source = next(artifacts.glob("*.whl")), next(artifacts.glob("*.tar.gz"))
     imports = ("import importlib.metadata,sys; from pathlib import Path; import yomiscan; import yomiscan.api.main; "
         "from yomiscan.rendering.typesetting import LATIN_FONT; assert LATIN_FONT.is_file(); "
