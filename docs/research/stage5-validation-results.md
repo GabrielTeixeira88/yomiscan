@@ -137,8 +137,22 @@ smoke environment with a subprocess-only `UV_PROJECT_ENVIRONMENT`, excluding the
 project until its actual wheel/sdist is installed. Existing environments are rejected
 before creation; the project environment is untouched. This follows uv's
 [documented environment override](https://docs.astral.sh/uv/concepts/projects/config/#project-environment-path).
-The original hosted installation step is the regression gate; final hosted artifact
-results are linked from the PR checks after the corrective run.
+The original hosted installation step passed after that correction. At
+`99d3934bd6b14e38821cf30766493726fba7edd1`, all **eight jobs** across the
+[push run](https://github.com/GabrielTeixeira88/yomiscan/actions/runs/44855294494)
+and [PR run](https://github.com/GabrielTeixeira88/yomiscan/actions/runs/44855300758)
+completed successfully. Hosted Linux used Python 3.13.18 and Chrome 157.0.8103.78.
+Both runs built packages, installed wheel/sdist, checked CLI/fonts/imports/readiness,
+loaded the actual extracted extension ZIP and uploaded unsigned artifacts.
+
+The [head-commit artifact](https://github.com/GabrielTeixeira88/yomiscan/actions/runs/44855294494/artifacts/14687068227)
+is 2,998,157 bytes, with GitHub outer archive digest
+`sha256:2b01cb6840105c1008a1a8bf4f89b3435d325601b95580f08da1e98e224f778c`.
+Individual package hashes are in its `SHA256SUMS`. The PR run additionally validated
+GitHub's synthetic merge commit `7504ca8c8dd14b1903a2d8f5eef41785d4a7a237`;
+that artifact is distinct from the pushed head. Artifacts expire after 14 days.
+This evidence records the executed code commit; subsequent documentation-only updates
+do not change those recorded hashes. The latest run always identifies its own source.
 
 ## Independent pre-commit reviews
 
