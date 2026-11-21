@@ -1,0 +1,116 @@
+{
+  "baseline": "178e506f8bc03ef541f4c4f8d60ecb44476f023a",
+  "cases": {
+    "independent_rotate": {
+      "source": {
+        "x": 0,
+        "y": 0,
+        "width": 600,
+        "height": 825,
+        "transform": "none",
+        "rotate": "180deg"
+      },
+      "actual_hit": {
+        "x": 75,
+        "y": 75,
+        "width": 150,
+        "height": 112.5,
+        "hidden": false
+      },
+      "expected_rotated": {
+        "x": 375,
+        "y": 637.5
+      },
+      "unsafe_accepted": true
+    },
+    "object_fit_none": {
+      "source_visible_pixels": {
+        "left": 200,
+        "top": 275,
+        "right": 600,
+        "bottom": 825
+      },
+      "selected_source_box": {
+        "left": 100,
+        "top": 100,
+        "right": 300,
+        "bottom": 250
+      },
+      "expected_hit_visible": false,
+      "actual": {
+        "hidden": false,
+        "x": 50,
+        "y": 50,
+        "width": 100,
+        "height": 75
+      }
+    },
+    "hidden_ancestor": {
+      "ancestor_opacity": "0",
+      "overlay": {
+        "display": "block",
+        "opacity": "1",
+        "src": true
+      }
+    },
+    "readiness_order": {
+      "old_response_overwrites_ready": true
+    },
+    "study_navigation_before_capture": {
+      "url_changed": true,
+      "request_sent": true,
+      "pixel": [
+        20,
+        20,
+        220,
+        255
+      ],
+      "popup_after_navigation": true
+    },
+    "save_button": {
+      "width": 30,
+      "height": 30,
+      "clientHeight": 28,
+      "scrollHeight": 148,
+      "label": "Save to History",
+      "font": "14px / 21px system-ui, -apple-system, \"Segoe UI\", sans-serif"
+    },
+    "study_navigation_during_ocr": {
+      "popup_after_navigation": true,
+      "captured_pixel": [
+        20,
+        20,
+        220,
+        255
+      ]
+    },
+    "controls": {
+      "width": 263,
+      "height": 718,
+      "scrollHeight": 3046,
+      "buttons": 28,
+      "selects": 8
+    }
+  },
+  "browser": "Chrome/157.0.8103.79",
+  "real_model_composition": {
+    "baseline": "178e506f8bc03ef541f4c4f8d60ecb44476f023a",
+    "browser": "Chrome/157.0.8103.79",
+    "models": "prepared production CPU",
+    "offline": true,
+    "chapter_ui_wall_ms": 1302,
+    "overlay_present": true,
+    "bubble": {
+      "reused": true,
+      "tokens": 5,
+      "original_chars": 8,
+      "additional_analyze_calls": 0
+    },
+    "study": {
+      "tokens": 6,
+      "original_chars": 10,
+      "has_translation": true,
+      "api_calls": 1
+    }
+  }
+}
