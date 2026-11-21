@@ -5,6 +5,9 @@ from dataclasses import dataclass
 from time import perf_counter
 
 from .base import Device, TranslationError, TranslationInitializationError, TranslationResult, select_device, validate_text
+from .options import TargetLanguage, TranslationCapabilities
+
+NLLB_TARGETS = {"en": "eng_Latn", "pt-BR": "por_Latn", "es": "spa_Latn"}
 
 
 @dataclass(frozen=True)
@@ -42,7 +45,28 @@ class NMTTranslationEngine:
 
     def diagnostic_metadata(self) -> dict[str, object]:
         return {"engine": self.engine, "model": self.spec.model, "revision": self.spec.revision, "device": self.device,
-                "batch_size": self.batch_size, "num_beams": self.num_beams}
+                "batch_size": self.batch_size, "num_beams": self.num_beams, "license": self.spec.license}
+
+    def capabilities(self) -> TranslationCapabilities:
+        return TranslationCapabilities(targets=("en", "pt-BR", "es"), experimental_targets=("pt-BR", "es")) if self.engine == "nllb-600m" else TranslationCapabilities()
+
+    def translate_many_to(self, texts: Sequence[str], target_language: TargetLanguage) -> list[TranslationResult]:
+        if target_language not in self.capabilities().targets:
+            raise ValueError("Selected NMT checkpoint does not support this language target")
+        if target_language == "en":
+            return self.translate_many(texts)
+        if isinstance(texts, str):
+            raise TypeError("translate_many_to expects a sequence of strings")
+        sources = list(texts)
+        for text in sources:
+            validate_text(text)
+        if not sources:
+            return []
+        self.load()
+        results = []
+        for offset in range(0, len(sources), self.batch_size):
+            results.extend(self._translate_batch(sources[offset:offset+self.batch_size], target_language=target_language))
+        return results
 
     def load(self) -> None:
         if self._model is not None:
@@ -104,7 +128,7 @@ class NMTTranslationEngine:
             results.extend(self._translate_batch(sources[offset:offset + self.batch_size]))
         return results
 
-    def _translate_batch(self, sources: list[str]) -> list[TranslationResult]:
+    def _translate_batch(self, sources: list[str], *, target_language: TargetLanguage = "en") -> list[TranslationResult]:
         start = perf_counter()
         try:
             inputs = self._tokenizer([" ".join(text.split()) for text in sources],
@@ -115,7 +139,12 @@ class NMTTranslationEngine:
             if inputs["input_ids"].shape[1] > limit:
                 raise ValueError(f"Input exceeds {limit} tokens; supply a shorter text region")
             inputs = inputs.to(self.device)
-            language = {"forced_bos_token_id": self._target_id} if self._target_id is not None else {}
+            target_id = self._target_id
+            if target_language != "en":
+                target_id = self._tokenizer.convert_tokens_to_ids(NLLB_TARGETS[target_language])
+                if target_id is None or target_id == self._tokenizer.unk_token_id:
+                    raise ValueError("Pinned NLLB tokenizer does not contain the requested target ID")
+            language = {"forced_bos_token_id": target_id} if target_id is not None else {}
             with self._torch.inference_mode():
                 generated = self._model.generate(**inputs, **language, num_beams=self.num_beams, do_sample=False,
                                                  max_new_tokens=511, max_length=None, forced_eos_token_id=None)
@@ -134,5 +163,6 @@ class NMTTranslationEngine:
                                   {"device": self.device, "revision": self.spec.revision, "license": self.spec.license,
                                    "timing_scope": "batch", "batch_size": len(sources), "num_beams": self.num_beams, "dtype": "float32",
                                    "source_language": "jpn_Jpan" if self.engine == "nllb-600m" else "ja",
-                                   "target_language": "eng_Latn" if self.engine == "nllb-600m" else "en"})
+                                   "target_language": NLLB_TARGETS[target_language] if self.engine == "nllb-600m" else "en",
+                                   "requested_target": target_language, "regional_variant_verified": target_language != "pt-BR"})
                 for source, output in zip(sources, outputs, strict=True)]

@@ -61,6 +61,14 @@ def model_info(metadata: dict[str, Any]) -> dict[str, object]:
             result[key] = number(metadata[key])
     if isinstance(metadata.get("kv_cache"), bool):
         result["kv_cache"] = metadata["kv_cache"]
+    for key in ("target_language", "requested_target", "grammar_contract", "translation_mode", "context_policy", "glossary_application", "fallback"):
+        if key in metadata:
+            result[key] = identifier(metadata[key])
+    for key in ("glossary_terms", "input_tokens", "output_tokens", "token_budget", "panel_id"):
+        if key in metadata:
+            result[key] = number(metadata[key])
+    if type(metadata.get("regional_variant_verified")) is bool:
+        result["regional_variant_verified"] = metadata["regional_variant_verified"]
     return result
 
 
@@ -98,6 +106,7 @@ def page_snapshot(image: Image.Image, result: PageRenderResult, *, input_sha256:
                             # TranslationError also covers transport/inference failures. Neither
                             # rejection nor generation completeness can be inferred from it.
                             "rejected": None, "complete": None,
+                            "error_code": identifier(detail.get("translation_error_code")),
                             **model_info(detail.get("translation_metadata", {}))},
             "render": {"status": detail.get("render"), "reason_code": reason_code, "reason": REASONS[reason_code],
                        "mask": detail.get("mask"), "mask_method": detail.get("mask_method"),
@@ -126,6 +135,10 @@ def page_snapshot(image: Image.Image, result: PageRenderResult, *, input_sha256:
         "coverage": result.diagnostics.get("coverage", {}),
         "limitations": ["OCR confidence and raw rejected model responses are unavailable unless recorded by the engine."],
     }
+    snapshot["translation_settings"] = result.diagnostics.get("translation_settings", {})
+    layout = result.diagnostics.get("layout", {})
+    if isinstance(layout, dict):
+        snapshot["layout"] = {k: layout[k] for k in ("strategy", "fallback_reason", "block_ids", "panel_by_block") if k in layout}
     from .cache import pixel_identity
     # These coexist: uploaded-byte identity, historical diagnostic pixel identity,
     # and the versioned canonical pixels used by stage caching.

@@ -127,6 +127,9 @@ function install(): void {
     if (sender.id !== chrome.runtime.id) return;
     if (message?.type === "activate") { void activateStudy(); respond(true); }
     if (message?.type === "chapter-controls") { chapter.open(); respond(true); }
+    if(message?.type==='chapter-glossary-changed'&&typeof message.scope==='string'){
+      chapter.glossaryChanged(message.scope,message.target,message.deleted===true);respond(true);
+    }
     if (message?.type === "verify-page-capture") respond(chapter.verifyCapture(message.id));
     if (message?.type === "resolve-page-source") respond(chapter.resolveSource(message.id));
     if (message?.type === "chapter-access-resolved") {chapter.resumeAfterPermission(message.version,message.retry);respond(true);}

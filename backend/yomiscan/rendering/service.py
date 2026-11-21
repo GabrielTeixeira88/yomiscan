@@ -34,6 +34,8 @@ class PageTranslationRenderService:
              "filter_reason": analysis.filtered_regions.get(region.id),
              "block_ids": [b.id for b in analysis.text_blocks if region.id in b.region_ids]}
             for region in analysis.regions]
+        result.diagnostics["translation_settings"] = analysis.translation_settings
+        result.diagnostics["layout"] = analysis.layout
         if cache:
             # OCR timing belongs to this job, including when the layout came from disk.
             details = result.diagnostics.get("blocks", {})
@@ -41,6 +43,10 @@ class PageTranslationRenderService:
                 detail = details.get(block.id, details.get(str(block.id))) if isinstance(details, dict) else None
                 if isinstance(detail, dict):
                     detail["ocr_ms"] = block.ocr_ms
+                    if block.analysis and block.analysis.translation:
+                        translation = block.analysis.translation
+                        detail["translation_metadata"] = {"engine": translation.engine, "model": translation.model, **translation.metadata}
+                    detail["translation_error_code"] = block.error_code
             result.diagnostics["cache"] = cache.metadata()
         if debug:
             # Debug drawing is opt-in; normal HTTP rendering saves nothing to disk.

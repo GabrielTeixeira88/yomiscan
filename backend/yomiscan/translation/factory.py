@@ -5,7 +5,7 @@ from pathlib import Path
 
 from .base import Device, TranslationEngine, TranslationInitializationError
 
-ENGINE_NAMES = ("current", "hy-mt2-manga", "qwen35-vntl", "qwen25-manga", "fugumt", "nllb-600m")
+ENGINE_NAMES = ("current", "hy-mt2-manga", "qwen35-vntl", "qwen25-manga", "fugumt", "nllb-600m", "opus-ja-pt", "opus-ja-es")
 
 
 def create_translation_engine(name: str | None = None, *, device: Device = "auto") -> TranslationEngine:
@@ -15,6 +15,9 @@ def create_translation_engine(name: str | None = None, *, device: Device = "auto
         return MarianTranslationEngine(device=device)
     if name not in ENGINE_NAMES:
         raise ValueError(f"Unknown translation engine {name!r}; choose one of {', '.join(ENGINE_NAMES)}")
+    if name in ("opus-ja-pt", "opus-ja-es"):
+        from .marian import MarianTranslationEngine
+        return MarianTranslationEngine(device=device, target_language="pt-BR" if name == "opus-ja-pt" else "es")
     if name in ("fugumt", "nllb-600m"):
         from .nmt import NMTTranslationEngine
         return NMTTranslationEngine(name, device=device)

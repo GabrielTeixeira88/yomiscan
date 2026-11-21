@@ -30,7 +30,9 @@ def cached_render(renderer: PageRenderer, image: Image.Image, analysis: PageAnal
                  if block.analysis and block.analysis.translation else None} for block in analysis.text_blocks]
     for block in semantic:
         if block["translation"]:
-            block["translation"]["metadata"] = result_metadata(block["translation"]["metadata"])
+            # Per-request provenance does not change pixels. Effective target,
+            # prompt, context and hints are already represented by stage lineage.
+            block["translation"].pop("metadata", None)
     lineage = [(s["stage"], s["key"]) for s in cache.stages if s["stage"] in ("detection", "ocr", "translation")] if cache else []
     # Unidentified upstream input must not gain a persistent identity at rendering.
     valid = all(key is not None for _, key in lineage)

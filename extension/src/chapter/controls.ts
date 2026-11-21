@@ -1,5 +1,7 @@
 import {ChapterTranslationSession,type ChapterSummary} from "./session";
 import {coverageSummary} from './coverage';
+import {TranslationSettings} from './translation-settings';
+import {defaultTranslationOptions,targetLabel,type ReaderTranslationOptions} from './translation-options';
 
 export class ChapterControls {
   private host=document.createElement("div");
@@ -13,6 +15,8 @@ export class ChapterControls {
   private stitchEnabled=false;
   private pageSelect=document.createElement('select');
   private exportButton:HTMLButtonElement;
+  private translationOptions=defaultTranslationOptions();
+  private translationSettings:TranslationSettings;
   constructor(selectText:()=>void) {
     this.host.dataset.yomiscan="controls";
     this.host.style.cssText="all:initial!important;position:fixed!important;top:12px!important;right:12px!important;z-index:2147483646!important;";
@@ -48,6 +52,7 @@ export class ChapterControls {
     for(const [key,label] of [['text','Include OCR and translation text'],['original','Include original page image'],
       ['rendered','Include translated page image']] as const) {
       const row=document.createElement('label'),box=document.createElement('input');box.type='checkbox';
+      box.dataset.purpose='report-'+key;
       box.addEventListener('change',()=>{inclusions[key]=box.checked;});
       row.style.display='block';row.append(box,document.createTextNode(label));reportOptions.append(row);
     }
@@ -62,6 +67,7 @@ export class ChapterControls {
     const cacheDetails=document.createElement('details'),cacheTitle=document.createElement('summary');cacheTitle.textContent='Local processing cache';
     const cacheInfo=document.createElement('p'),cacheLabel=document.createElement('label'),persistent=document.createElement('input');
     persistent.type='checkbox';persistent.disabled=true;
+    persistent.dataset.purpose='persistent-cache';
     cacheLabel.append(persistent,document.createTextNode('Save page processing on disk (pixels and text)'));
     const cacheHelp=document.createElement('small');cacheHelp.textContent='Off by default. Saved only on this computer, without page URLs. Disabling retains stored entries until cleared. Clear Session only removes browser results.';
     const cacheAction=async(operation:'read'|'settings'|'clear')=>{
@@ -80,6 +86,12 @@ export class ChapterControls {
     cacheDetails.addEventListener('toggle',()=>{if(cacheDetails.open)void cacheAction('read');});
     cacheDetails.append(cacheTitle,cacheLabel,cacheHelp,cacheInfo,button('Refresh Cache Usage',()=>{void cacheAction('read');}),
       button('Clear Persistent Cache',()=>{void cacheAction('clear');}));panel.append(cacheDetails);
+    this.translationSettings=new TranslationSettings((options,invalidate=false)=>{
+      const identity=(value:ReaderTranslationOptions)=>JSON.stringify({...value,series_id:value.glossary_enabled?value.series_id:null,
+        glossary_version:value.glossary_enabled?value.glossary_version:null});
+      if(invalidate||identity(options)!==identity(this.translationOptions)){this.session?.dispose();this.session=null;}
+      this.translationOptions=options;this.english.textContent=targetLabel(options.target_language);
+    });panel.append(this.translationSettings.element);
     const help=document.createElement("small");help.textContent="Selected pages stay on this machine. CPU processing may take time.";panel.append(help);
     const details=document.createElement("details"),summary=document.createElement("summary");summary.textContent="Developer diagnostics";
     details.append(summary,button("Log discovery / states",()=>this.current().diagnostics()));panel.append(details);
@@ -93,11 +105,12 @@ export class ChapterControls {
   open():void {this.showHost(true);}
   private current():ChapterTranslationSession {
     if(this.sessionURL!==location.href || this.session?.isDisposed){this.session?.dispose();this.session=null;this.sessionURL=location.href;}
-    if(!this.session)this.session=new ChapterTranslationSession(status=>this.show(status),hidden=>{this.host.style.setProperty("visibility",hidden?"hidden":"visible","important");});
+    if(!this.session)this.session=new ChapterTranslationSession(status=>this.show(status),hidden=>{this.host.style.setProperty("visibility",hidden?"hidden":"visible","important");},undefined,{...this.translationOptions});
     this.session.allowStitch=this.stitchEnabled;
     return this.session;
   }
   private show(status:ChapterSummary):void {
+    this.english.textContent=targetLabel(this.session?.targetLanguage??this.translationOptions.target_language);
     const selection=this.pageSelect.value,options=this.session?.pageOptions()??[];
     this.pageSelect.replaceChildren(new Option('Nearest viewport',''),...options.map(p=>new Option(`Page ${p.id} · ${p.state}`,String(p.id))));
     if(options.some(p=>String(p.id)===selection))this.pageSelect.value=selection;
@@ -117,4 +130,5 @@ export class ChapterControls {
   verifyCapture(id:string):boolean{return this.session?.verifyCapture(id)??false;}
   resolveSource(id:string):string|null{return this.session?.resolveSource(id)??null;}
   resumeAfterPermission(version:number,retry:boolean):void {this.session?.resumeAfterPermission(version,retry);}
+  glossaryChanged(scope:string,target?:string,deleted=false):void {this.translationSettings.invalidate(scope,target,deleted);}
 }

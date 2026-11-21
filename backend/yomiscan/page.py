@@ -15,6 +15,11 @@ from .cache import CacheRequest, pixel_identity
 from .cache_identity import component_identity, algorithm, result_metadata
 from pydantic import TypeAdapter, ValidationError
 from .ocr import OCRResult
+from .translation.options import TranslationOptions, capabilities
+from .glossary import GlossaryEntry
+from .panel_order import PageOrder, page_order
+from threading import Event
+from dataclasses import asdict
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +51,7 @@ class TextBlock:
     ocr_metadata: dict[str, object] = field(default_factory=dict)
     ocr_ms: float | None = None
     failure_stage: str | None = None
+    error_code: str | None = None
 
 
 @dataclass(frozen=True)
@@ -66,6 +72,8 @@ class PageAnalysisResult:
     processing: PageProcessing
     filtered_regions: dict[int, str] = field(default_factory=dict)
     cache: dict[str, object] = field(default_factory=dict)
+    translation_settings: dict[str, object] = field(default_factory=dict)
+    layout: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -163,21 +171,45 @@ class PageAnalysisService:
             blocks.append(block)
         return DetectionResult(tuple(raw), tuple(blocks), filtered)
 
-    def analyze_page(self, image: Image.Image, *, cache: CacheRequest | None = None) -> PageAnalysisResult:
+    def analyze_page(self, image: Image.Image, *, cache: CacheRequest | None = None,
+                     options: TranslationOptions | None = None, entries: tuple[GlossaryEntry, ...] = (),
+                     cancel: Event | None = None) -> PageAnalysisResult:
         start = perf_counter()
         extraction = self.extract(image, cache=cache)
-        blocks = list(extraction.blocks)
+        effective = options or TranslationOptions(target_language=capabilities(self.analyzer._translator).targets[0])
+        order_key = cache.key("ordering", pixel_identity(image), [(b.id, asdict(b.bbox)) for b in extraction.blocks],
+                              effective.ordering, algorithm("panel_order.py", "page_layout.py")) if cache else None
+        payload = cache.get("ordering", order_key) if cache else None
+        order = None
+        if payload is not None:
+            try:
+                order = TypeAdapter(PageOrder).validate_json(payload)
+                if len(order.block_ids) != len(extraction.blocks) or set(order.block_ids) != {b.id for b in extraction.blocks}:
+                    raise ValueError("Cached ordering does not preserve exact block identities")
+            except (ValidationError, ValueError):
+                cache.invalid("ordering", order_key)
+                order = None
+        if order is None:
+            order = page_order(image, extraction.blocks, effective.ordering)
+            if cache:
+                cache.put("ordering", order_key, TypeAdapter(PageOrder).dump_json(order))
+        by_id = {b.id: b for b in extraction.blocks}
+        blocks = [replace(by_id[identifier], reading_order=index) for index, identifier in enumerate(order.block_ids, 1)]
+        ocr_lineage = {b.id: key for b, key in zip(extraction.blocks, extraction.lineage, strict=True)}
         analysis_ms = 0.0
         eligible = [i for i, block in enumerate(blocks) if block.status == "success"]
         analysis_start = perf_counter()
         texts = [blocks[i].original_text for i in eligible]
-        results = self.analyzer.analyze_many(texts, cache=cache,
-                    lineage=[(blocks[i].id, extraction.lineage[i]) for i in eligible]) if cache else self.analyzer.analyze_many(texts)
+        keywords = {"cache": cache, "lineage": [(blocks[i].id, ocr_lineage[blocks[i].id]) for i in eligible],
+                    "options": effective, "entries": entries, "block_ids": [blocks[i].id for i in eligible],
+                    "panel_ids": [order.panel_by_block[blocks[i].id] for i in eligible], "cancel": cancel}
+        results = self.analyzer.analyze_many(texts, **keywords) if cache or options is not None else self.analyzer.analyze_many(texts)
         elapsed = (perf_counter() - analysis_start) * 1000
         for i, result in zip(eligible, results, strict=True):
             if isinstance(result, Exception):
                 blocks[i] = replace(blocks[i], status="error", error_message="Text analysis failed for this block.",
-                                    failure_stage="translation" if isinstance(result, TranslationError) else "analysis")
+                                    failure_stage="translation" if isinstance(result, TranslationError) else "analysis",
+                                    error_code=getattr(result, "code", None))
             else:
                 analysis_ms += result.processing_time_ms
                 blocks[i] = replace(blocks[i], analysis=result)
@@ -188,4 +220,9 @@ class PageAnalysisService:
         return PageAnalysisResult(image.width, image.height, extraction.detection.regions, tuple(blocks),
                                   PageProcessing(extraction.detection_ms, extraction.ocr_ms, translation_ms, analysis_ms,
                                                  (perf_counter() - start) * 1000), extraction.detection.filtered,
-                                  cache.metadata() if cache else {})
+                                  cache.metadata() if cache else {},
+                                  {"target_language": effective.target_language, "translation_mode": effective.mode,
+                                   "context_policy": effective.context, "ordering": effective.ordering,
+                                   "glossary_enabled": effective.glossary_enabled,
+                                   "glossary_application": "hints" if effective.glossary_enabled and capabilities(self.analyzer._translator).glossary_hints else
+                                        "unsupported" if effective.glossary_enabled else "none"}, asdict(order))

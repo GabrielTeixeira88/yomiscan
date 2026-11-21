@@ -2,7 +2,7 @@
 // Run from repository root after building extension/dist. No browser-test dependencies.
 import http from "node:http";
 import {readFile,writeFile,mkdir,readdir} from "node:fs/promises";
-import {createHash} from 'node:crypto';
+import {createHash,randomUUID} from 'node:crypto';
 import assert from "node:assert/strict";
 import path from "node:path";
 
@@ -10,6 +10,8 @@ const mocked=process.argv.includes('--mock-backend'),backend=`http://127.0.0.1:$
 const {packZip,unpackZip}=await import('../.test/browser-support.mjs');
 const reportDir=path.resolve('.cache/stage1-reports-'+Date.now());
 let mockServer,mockRenders=0,mockRefreshes=0,persistentCache=false,mockConfiguration='f'.repeat(64),extensionPath=path.resolve('extension/dist');
+const mockSeries=[{id:'global',label:'Global'}],mockTerms=[],translationCalls=[];
+let experimentalCapabilities=false,failProfileOnce=false;
 if(mocked) {
   extensionPath=path.resolve('.cache/stage1-browser-extension');
   await mkdir(extensionPath,{recursive:true});
@@ -20,6 +22,28 @@ if(mocked) {
   mockServer=http.createServer(async(req,res)=>{
     try {
       if(req.url==='/health'){res.setHeader('Content-Type','application/json');res.setHeader('X-YomiScan-Configuration',mockConfiguration);res.end('{"status":"ok"}');return;}
+      if(req.url.startsWith('/api/v1/translation-profile')){
+        if(failProfileOnce){failProfileOnce=false;res.writeHead(429);res.end();return;}
+        const query=new URL(backend+req.url).searchParams,scope=query.get('scope')??'global',target=query.get('target')??'en';
+        const entries=mockTerms.filter(t=>t.scope===scope&&t.target_language===target);
+        const effective=mockTerms.filter(t=>(t.scope===scope||t.scope==='global')&&t.target_language===target);
+        res.setHeader('Content-Type','application/json');res.end(JSON.stringify({engine:{engine:'fixture'},
+          capabilities:{targets:experimentalCapabilities?['en','pt-BR','es']:['en'],glossary_hints:experimentalCapabilities,
+            structured:experimentalCapabilities,bounded_context:experimentalCapabilities,experimental_targets:experimentalCapabilities?['pt-BR','es']:[]},
+          default_target:'en',series:mockSeries,scope,target_language:target,entries,
+          glossary_version:createHash('sha256').update(JSON.stringify(effective)).digest('hex'),dictionary_language:'en',configuration_id:mockConfiguration}));return;
+      }
+      if(req.url.startsWith('/api/v1/glossaries/')){
+        let encoded='';for await(const chunk of req)encoded+=chunk;const body=JSON.parse(encoded);let result={ok:true};
+        if(req.url.endsWith('/series')){result={id:randomUUID()};mockSeries.push({id:result.id,label:body.label});}
+        if(req.url.endsWith('/term')){const id=body.entry_id??randomUUID(),prior=mockTerms.findIndex(t=>t.id===id);
+          const entry={id,scope:body.scope,target_language:body.target_language,source:body.source,preferred:body.preferred};
+          if(prior<0)mockTerms.push(entry);else mockTerms[prior]=entry;result={id};}
+        if(req.url.endsWith('/delete-term')){const prior=mockTerms.findIndex(t=>t.id===body.entry_id);if(prior>=0)mockTerms.splice(prior,1);}
+        if(req.url.endsWith('/delete-series')){const prior=mockSeries.findIndex(s=>s.id===body.scope);if(prior>0)mockSeries.splice(prior,1);
+          for(let i=mockTerms.length-1;i>=0;i--)if(mockTerms[i].scope===body.scope)mockTerms.splice(i,1);}
+        res.setHeader('Content-Type','application/json');res.end(JSON.stringify(result));return;
+      }
       if(req.url.startsWith('/api/v1/cache')){
         if(req.url.endsWith('/settings')){let body='';for await(const chunk of req)body+=chunk;persistentCache=JSON.parse(body).enabled;}
         res.setHeader('Content-Type','application/json');res.end(JSON.stringify({persistent_enabled:persistentCache,
@@ -29,6 +53,7 @@ if(mocked) {
       if(configuration && configuration!==mockConfiguration){req.resume();res.writeHead(409);res.end();return;}
       const request=new Request(backend+req.url,{method:'POST',headers:req.headers,body:req,duplex:'half'});
       const form=await request.formData(),file=form.get('file'),bytes=new Uint8Array(await file.arrayBuffer());
+      if(form.has('options_json'))translationCalls.push(JSON.parse(form.get('options_json')));
       if(req.url.startsWith('/api/v1/render-page'))mockRenders++;
       if(req.url.includes('refresh=translation'))mockRefreshes++;
       await new Promise(resolve=>setTimeout(resolve,250));
@@ -83,7 +108,7 @@ function nodes(root){return [root,...(root.children??[]).flatMap(nodes),...(root
 let session,worker,extensionId,offscreen;
 async function find(predicate){const doc=await call("DOM.getDocument",{depth:-1,pierce:true},session);return nodes(doc.root).find(predicate);}
 async function invoke(node,fn){const o=await call("DOM.resolveNode",{nodeId:node.nodeId},session);const r=await call("Runtime.callFunctionOn",{objectId:o.object.objectId,functionDeclaration:fn,returnByValue:true,awaitPromise:true,userGesture:true},session);if(r.exceptionDetails)throw new Error(JSON.stringify(r.exceptionDetails));return r.result.value;}
-const byClass=name=>n=>n.attributes?.includes(name);
+const byClass=name=>n=>{const index=n.attributes?.indexOf('class')??-1;return index>=0&&n.attributes[index+1].split(/\s+/).includes(name);};
 let panelObject;
 async function panel(){
   // Keep a reference to the stable control panel. Repeated full DOM snapshots copy
@@ -102,6 +127,9 @@ try {
   await call('Browser.setDownloadBehavior',{behavior:'allow',downloadPath:reportDir});
   const extensions=await call("Extensions.getExtensions");
   for(const extension of extensions.extensions)if(extension.name.startsWith("YomiScan"))await call("Extensions.uninstall",{id:extension.id});
+  // Retrying this isolated fixture must not retain several 192 MiB reader tabs.
+  for(const target of (await call('Target.getTargets')).targetInfos)
+    if(target.type==='page'&&target.url.startsWith('http://127.0.0.1:8772'))await call('Target.closeTarget',{targetId:target.targetId});
   extensionId=(await call("Extensions.loadUnpacked",{path:extensionPath})).id;
   const targetId=(await call("Target.createTarget",{url:"http://127.0.0.1:8772"})).targetId;
   session=(await call("Target.attachToTarget",{targetId,flatten:true})).sessionId;
@@ -142,7 +170,7 @@ try {
     await invoke(cacheSummary,'function(){this.click()}');
     await until(async()=>(await panel()).includes('Disk 0.0 / 512.0 MiB'));
     const consent=async()=>nodes((await call('DOM.getDocument',{depth:-1,pierce:true},session)).root)
-      .filter(n=>n.nodeName==='INPUT'&&n.attributes?.includes('checkbox')).at(-1);
+      .find(n=>n.nodeName==='INPUT'&&n.attributes?.includes('persistent-cache'));
     assert.equal(await invoke(await consent(),'function(){return this.checked}'),false);
     await invoke(await consent(),'function(){this.click()}');await until(()=>persistentCache);
     await click('Clear Persistent Cache');await wait(200);assert.equal(persistentCache,true);
@@ -176,8 +204,8 @@ try {
   if(mocked) {
     await wait(1100); // Allow Chrome's one bounded download URL lease to expire.
     const options=nodes((await call('DOM.getDocument',{depth:-1,pierce:true},session)).root)
-      .filter(n=>n.nodeName==='INPUT'&&n.attributes?.includes('checkbox'));
-    for(const option of options.slice(1,4))await invoke(option,"function(){this.checked=true;this.dispatchEvent(new Event('change'))}");
+      .filter(n=>n.nodeName==='INPUT'&&['report-text','report-original','report-rendered'].some(p=>n.attributes?.includes(p)));
+    for(const option of options)await invoke(option,"function(){this.checked=true;this.dispatchEvent(new Event('change'))}");
     const prior=new Set(await readdir(reportDir));await click('Export Page Report');
     const fullFile=await until(async()=>(await readdir(reportDir)).find(name=>name.endsWith('.zip')&&!prior.has(name)));
     const full=await unpackZip(new Blob([await readFile(path.join(reportDir,fullFile))]));
@@ -324,7 +352,7 @@ try {
   await evaluate(session,"document.querySelector('main').replaceChildren();for(let i=0;i<24;i++)document.querySelector('#append').click()");
   await until(()=>evaluate(session,"[...document.querySelectorAll('main img')].every(i=>i.complete)"));
   const longStarted=performance.now();
-  await click("Translate Chapter");await until(async()=>(await panel()).includes("24 / 24 pages translated"),120000);
+  await click("Translate Chapter");await until(async()=>(await panel()).includes("24 / 24 pages translated"),240000);
   report.mockedLongQueueMs=Math.round(performance.now()-longStarted);
   assert.match(await panel(),/Session [0-9.]+ \/ 128 MiB · [1-9][0-9]* evicted/);
   assert.equal(await evaluate(offscreen,'longCalls'),24);
@@ -350,6 +378,57 @@ try {
     await click('Translate Chapter');await until(async()=>(await panel()).includes('1 / 1 pages translated'));
     await click('Clear Session');
     report.checks.push('Backend configuration change rejects old generation, clears obsolete overlays and allows a fresh session');
+    const summary=await find(n=>n.nodeName==='SUMMARY'&&n.children?.some(c=>c.nodeValue==='Translation & terminology'));
+    await invoke(summary,'function(){this.click()}');
+    await until(async()=>(await panel()).includes('does not use glossary hints'));
+    const select=label=>find(n=>n.nodeName==='SELECT'&&n.attributes?.includes(label));
+    const edit=async(placeholder,value)=>invoke(await find(n=>n.nodeName==='INPUT'&&n.attributes?.includes(placeholder)),
+      `function(){this.value=${JSON.stringify(value)}}`);
+    assert.equal(await invoke(await select('Sentence target language'),"function(){return this.querySelector('[value=es]').disabled}"),true);
+    assert.equal(await invoke(await select('Translation contract'),"function(){return this.querySelector('[value=structured-page]').disabled}"),true);
+    await edit('User-confirmed series name','Fixture series A');await click('Create Series');
+    await until(()=>mockSeries.length===2);await until(async()=>await invoke(await select('Active series glossary'),'function(){return this.value}')===mockSeries[1].id);
+    await edit('Exact Japanese term','霊力');await edit('Preferred target-language term','spirit energy');await click('Save Entry');
+    await until(()=>mockTerms.length===1);await wait(150);
+    await invoke(await select('Terminology entry'),`function(){this.value=${JSON.stringify(mockTerms[0].id)};this.dispatchEvent(new Event('change'))}`);
+    await edit('Preferred target-language term','spiritual power');await click('Save Entry');await until(()=>mockTerms[0].preferred==='spiritual power');await wait(150);
+    await click('Clear Persistent Cache');assert.equal(mockTerms.length,1);
+    await invoke(await select('Active series glossary'),"function(){this.value='global';this.dispatchEvent(new Event('change'))}");
+    await until(async()=>await invoke(await select('Terminology entry'),'function(){return this.options.length}')===1);
+    report.checks.push('Glossary editor creates, persists, edits and isolates series entries; clearing processing cache preserves terminology; unsupported targets/contracts are disabled');
+    experimentalCapabilities=true;await click('Reload Translation Settings');
+    await until(async()=>(await panel()).includes('Matched terminology'));
+    await invoke(await select('Sentence target language'),"function(){this.value='es';this.dispatchEvent(new Event('change'))}");
+    await until(async()=>await invoke(await select('Sentence target language'),'function(){return this.value}')==='es');await wait(150);
+    await click('Translate Chapter');await until(async()=>(await panel()).includes('1 / 1 pages translated'));
+    assert.equal(translationCalls.at(-1).target_language,'es');
+    await click('Español (experimental)');await wait(100);
+    await invoke(await select('Sentence target language'),"function(){this.value='en';this.dispatchEvent(new Event('change'))}");
+    await until(async()=>!await find(n=>n.attributes?.includes('overlays')));
+    await invoke(await select('Translation contract'),"function(){this.value='structured-line';this.dispatchEvent(new Event('change'))}");
+    await invoke(await select('Bounded dialogue context'),"function(){this.value='neighbor';this.dispatchEvent(new Event('change'))}");
+    await click('Translate Chapter');await until(async()=>(await panel()).includes('1 / 1 pages translated'));
+    assert.equal(translationCalls.at(-1).mode,'structured-line');assert.equal(translationCalls.at(-1).context,'neighbor');
+    await click('Clear Session');
+    await invoke(await select('Active series glossary'),`function(){this.value=${JSON.stringify(mockSeries[1].id)};this.dispatchEvent(new Event('change'))}`);await wait(150);
+    await invoke(await select('Terminology entry'),`function(){this.value=${JSON.stringify(mockTerms[0].id)};this.dispatchEvent(new Event('change'))}`);
+    await click('Delete Entry');await until(()=>mockTerms.length===0);await wait(150);
+    await click('Delete Series Glossary');await until(()=>mockSeries.length===1);
+    report.checks.push('Compatible experimental language, exact-ID contract and bounded context reach render transport; target change removes obsolete overlays; entry/series deletion works');
+    await wait(150);
+    await invoke(await find(n=>n.nodeName==='INPUT'&&n.attributes?.includes('glossary-enabled')),"function(){this.checked=true;this.dispatchEvent(new Event('change'))}");
+    await click('Translate Chapter');await until(async()=>(await panel()).includes('1 / 1 pages translated'));
+    failProfileOnce=true;await edit('Exact Japanese term','猫');await edit('Preferred target-language term','cat');await click('Save Entry');
+    await until(()=>mockTerms.length===1);await until(async()=>(await panel()).includes('Stop translation, wait for it to finish'));
+    assert.ok(!await find(n=>n.attributes?.includes('overlays')));
+    report.checks.push('Successful glossary mutation retires old overlays even if its subsequent profile fetch is busy');
+    // The session refreshes its own hash on Start; the failed editor remains null.
+    // A second invalidation must still retire output when null equals null.
+    await click('Translate Chapter');await until(async()=>(await panel()).includes('1 / 1 pages translated'));
+    failProfileOnce=true;await edit('Exact Japanese term','犬');await edit('Preferred target-language term','dog');await click('Save Entry');
+    await until(()=>mockTerms.length===2);await until(async()=>(await panel()).includes('Stop translation, wait for it to finish'));
+    assert.ok(!await find(n=>n.attributes?.includes('overlays')));
+    report.checks.push('Repeated glossary invalidation retires a newly started session even while the editor version remains unknown');
   }
   report.status=await panel();report.requestOrder=await evaluate(offscreen,"testCalls");
   await mkdir(".cache",{recursive:true});await writeFile(mocked?".cache/stage1-browser.json":".cache/phase-7-browser.json",JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));

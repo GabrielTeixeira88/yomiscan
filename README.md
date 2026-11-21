@@ -33,6 +33,14 @@ default**; enable **Local processing cache → Save page processing on disk** on
 you want page pixels and text retained locally. See [controls, privacy, limits and
 validation](docs/post-mvp-caching-performance.md).
 
+**Post-MVP: Translation Improvements (P09/P18/P19/P20).** Local per-series terminology
+editing is available in **Translation & terminology**. Compatible local LLMs have
+optional exact-ID structured translation and bounded context; white-gutter panel
+ordering and PT/ES targets are experimental. OPUS English remains the default and
+does not enforce glossary hints. JMdict definitions remain English. See
+[controls and contracts](docs/post-mvp-translation-improvements.md) and
+[measured results, failures and limits](docs/research/stage4-translation-results.md).
+
 | Current capability | Status |
 | --- | --- |
 | Study selection, draggable/resizable popup, readings/morphology/JMdict | Implemented; Copy Japanese / Copy English available |
@@ -44,6 +52,9 @@ validation](docs/post-mvp-caching-performance.md).
 | Backend/extension automated checks | Model-free CI on Windows/Linux and Node 22 |
 | Detection thresholds, ONNX detector, 2025 OCR and confidence | Optional Stage 2 experiments; no confidence rejection gate or default model change |
 | Session LRU and persistent processing cache | Implemented; 128 MiB browser budget, 64 MiB backend RAM, opt-in bounded local disk |
+| Series terminology | Implemented; separate local user database, target-specific overrides, safe matched hints on compatible engines |
+| Exact-ID translation and bounded dialogue context | Optional Hy/Qwen experiments; complete-output validation does not guarantee accurate meaning |
+| Panel ordering and PT/ES sentence targets | Experimental; generic Portuguese is not validated Brazilian register; NLLB is noncommercial |
 | Narrative context, new production models, vocabulary/JLPT, model/setup manager | Future work |
 
 The purpose is to help Japanese learners study manga without paid APIs or per-request

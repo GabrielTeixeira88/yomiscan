@@ -1,6 +1,7 @@
 import {CHUNK, MAX_INPUT, encodeChunk, decodeChunk} from "./chapter/wire";
 import {readRenderResponse} from './chapter/render-response';
 import {imageHash} from './chapter/reports';
+import {validateTranslationOptions,type ReaderTranslationOptions} from './chapter/translation-options';
 
 // Serialize across chapter tabs too. Study requests still use the backend busy guard.
 let tail: Promise<void> = Promise.resolve();
@@ -11,6 +12,7 @@ chrome.runtime.onConnect.addListener(port => {
   ports++;
   let parts: Uint8Array<ArrayBuffer>[] = [], size = 0, expected = 0, submitted = false, connected = true, mime='image/png';
   let refresh=false,configuration:string|undefined;
+  let translation:ReaderTranslationOptions|undefined;
   const controller = new AbortController();
   const timer = setTimeout(()=>controller.abort(),300_000);
   const send = (message: unknown) => { if(connected) port.postMessage(message); };
@@ -27,6 +29,7 @@ chrome.runtime.onConnect.addListener(port => {
         if(message.refresh!==undefined && typeof message.refresh!=='boolean')throw new Error('Invalid refresh option');
         if(message.configuration!==undefined && (typeof message.configuration!=='string'||!/^[a-f0-9]{64}$/.test(message.configuration)))throw new Error('Invalid configuration identity');
         refresh=message.refresh===true;configuration=message.configuration;
+        if(message.translation!==undefined)translation=validateTranslationOptions(message.translation);
       } else if(message.type === "chunk") {
         if(!expected) throw new Error("Missing image header");
         const data=decodeChunk(message.data); size+=data.length;
@@ -41,6 +44,7 @@ chrome.runtime.onConnect.addListener(port => {
           try {
             controller.signal.throwIfAborted();
             const form=new FormData(); form.append("file",blob,mime==='image/jpeg'?'page.jpg':mime==='image/webp'?'page.webp':'page.png');
+            if(translation)form.append('options_json',JSON.stringify(translation));
             const inputHash=await imageHash(blob);
             const query=new URLSearchParams({diagnostics:'true'});
             if(refresh)query.set('refresh','translation');

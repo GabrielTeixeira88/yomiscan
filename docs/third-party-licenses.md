@@ -123,7 +123,22 @@ English rendering uses the **Aileron Regular subset embedded in Pillow**, not an
 font. The [font author's terms](https://dotcolon.net/fonts/aileron/) state
 **No Rights Reserved** and permit modification/redistribution. Pillow's code remains
 under [MIT-CMU](https://github.com/python-pillow/Pillow/blob/main/LICENSE).
-No font binaries are copied into this repository; Pillow supplies the font during
+For the historical English default, Pillow supplies this font during
 installation. This font is not relicensed under YomiScan's MIT license. Preserve Pillow
 and relevant third-party notices in future packaged runtimes. The subset does not cover
 every Unicode character; unsupported translations are safely skipped.
+
+## Stage 4 Latin font and translation candidates
+
+Portuguese/Spanish accents missing from that subset use the unmodified **Noto Sans
+2.015** font bundled in `backend/yomiscan/resources/fonts/`, under **SIL OFL-1.1**.
+Its full notice, source pin and checksum accompany the resource. OFL permits
+bundling with software while retaining the font's notice/license; rendered page
+images do not inherit OFL. YomiScan source remains MIT. There is no runtime font download.
+
+The pinned Helsinki JA→PT and JA→ES candidates declare **Apache-2.0** on their model
+cards. NLLB-200 distilled 600M declares **CC-BY-NC-4.0**, a noncommercial limitation;
+it remains an optional research adapter, with no weights bundled. Generic Portuguese
+support is not validation of Brazilian manga usage. Exact revisions, checksums,
+primary-source links and evaluation limits appear in
+[Stage 4 results](research/stage4-translation-results.md).
