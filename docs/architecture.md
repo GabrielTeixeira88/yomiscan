@@ -3,6 +3,59 @@
 Phases 1–7 below describe the existing MVP boundaries and retain their historical names.
 Post-MVP increments use descriptive feature branches, not a new numbered phase.
 
+## Post-MVP reader controls, readiness and distribution
+
+`rendering/settings.py` validates immutable font scale 0.75–1.5.
+`PillowTypesetter.scaled()` retains absolute readable-size limits, margins, fallback
+fonts and crop safety. The effective renderer participates in the Stage 3 render key;
+`refresh=render` reuses extraction, lexical analysis and translation. The browser keeps
+its old result until replacement succeeds. Font refresh losing any previously
+rendered ID is rejected, even with unchanged total coverage. New pages still preserve
+original pixels where no safe layout fits.
+
+`chapter/region-inspector.ts` owns one explicit pinned page/result lease. It reads
+retained diagnostics, separately labels detector/OCR confidence and reveals text only
+on request. Pixel-to-image geometry follows scroll/resize, clips hit targets and
+rejects transforms/borders/padding. Source, dimensions, session, result and navigation
+checks retire stale inspection. Escape/disposal release listeners, pins and focus.
+Successful block analysis uses the existing Study response contract under
+`block.text.study`; Study Bubble opens the popup without screenshot/OCR/translation.
+Missing/evicted/oversized snapshots explain reprocessing. Default report exports still
+omit text, Study data and pixels. Extracting a neutral serializer from the API DTO is
+optional maintenance, not another analysis pipeline.
+
+`readiness.py` inspects pinned catalogs and local file metadata without downloading,
+hashing large files, importing Torch or loading engines. Installed, integrity not
+checked, loaded and experimental remain distinct. IDs are checked by component kind.
+Catalog device modes do not certify runtime compatibility; observed rejection is
+reported. Parent writability, cache enabled state and glossary open/unknown state are
+distinct. The existing owning worker publishes snapshots after initialization, image
+work and administration; readiness never queues behind neural inference.
+
+`progress.py` holds at most 16 random job IDs, instance identity, monotonic versions
+and text-free observations. Terminal records expire after 30 seconds. Actual stage/cache
+callbacks report work/reuse/failure without another scheduler. Offscreen polls at
+800 ms only while its request is active, with a 2 s read timeout. Content rejects
+wrong jobs/instances/versions and stale sources/sessions. The single executor retains
+resource ownership after cancellation. New readiness/job GETs use existing host,
+origin and client-header protections.
+
+`history.ts` serializes background-owned `chrome.storage.local` operations. History
+defaults off and needs explicit Save, whitelists analysis/provenance fields, caps
+storage at 100 entries/2 MiB and rejects entries above 128 KiB. It owns no images,
+source URLs, processing caches or glossaries. Disable retains; Delete/Clear erase;
+Export is an explicit JSON download. Chrome Sync is unused.
+
+`scripts/build_distribution.py` builds an exact runtime-file extension ZIP plus
+wheel/sdist from locked tooling, recording source commit, actual project-interpreter
+versions and hashes. Clean installation checks both Python formats, CLI/fonts/imports
+and protected missing-resource startup. A separate owned Chrome smoke loads the
+actual extracted ZIP and activates controls. CI runs packaging after Windows/Linux
+and Node gates, with manual dispatch and run-associated unsigned artifacts. Models,
+JMdict, private samples and user data remain external. See
+[Stage 5 controls](post-mvp-reader-experience-distribution.md),
+[installation](installation.md) and [validation](research/stage5-validation-results.md).
+
 ## Post-MVP terminology and experimental translation
 
 `glossary.py` owns persistent user-created series/target terms in a separate SQLite
