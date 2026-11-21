@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling==1.33.0"]
 build-backend = "hatchling.build"
 
 [project]
@@ -30,11 +30,22 @@ dependencies = [
 benchmark = ["psutil>=7,<8"]
 vision = ["onnxruntime>=1.32,<2"]
 
+[project.scripts]
+yomiscan-server = "yomiscan.cli:server_main"
+yomiscan-import-jmdict = "yomiscan.dictionary.cli:main"
+yomiscan-prepare-defaults = "yomiscan.cli:prepare_defaults"
+yomiscan-prepare-vision = "yomiscan.vision_models:main"
+yomiscan-prepare-translation = "yomiscan.translation.setup_models:main"
+yomiscan-translate = "yomiscan.translation.cli:main"
+
 [dependency-groups]
 dev = ["pytest>=8", "httpx>=0.28,<1"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["backend/yomiscan"]
+
+[tool.hatch.build.targets.sdist]
+include = ["/backend/yomiscan", "/scripts", "/docs", "/README.md", "/LICENSE", "/pyproject.toml", "/uv.lock"]
 
 [tool.pytest.ini_options]
 testpaths = ["backend/tests"]

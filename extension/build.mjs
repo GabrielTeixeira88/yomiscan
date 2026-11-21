@@ -18,7 +18,7 @@ if (process.argv.includes("--test")) {
     {entryPoints: ["src/image-access.ts"], outfile: "dist/image-access.js", format: "esm"},
   ];
   for (const entry of options) {
-    const settings = {...entry, bundle: true, target: "chrome120", sourcemap: true};
+    const settings = {...entry, bundle: true, target: "chrome120", sourcemap: !process.argv.includes('--release')};
     if (process.argv.includes("--watch")) {
       await (await context(settings)).watch();
     } else {
