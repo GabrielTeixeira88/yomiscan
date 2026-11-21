@@ -13,7 +13,7 @@ from pathlib import Path
 from time import perf_counter
 from typing import Annotated, cast
 
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile, Query, Form
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile, Query, Form, Path as PathParameter
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
 from pydantic import TypeAdapter, ValidationError
 from dataclasses import fields
@@ -31,6 +31,9 @@ from yomiscan.detection import DetectionInitializationError
 from .images import decode_image, MAX_FILE_BYTES
 from .models import ImageAnalysisResponse, PageAnalysisResponse
 from .security import EXTENSION_ORIGIN, LocalRequestGuard
+from ..rendering.settings import RenderSettings
+from ..progress import JobRegistry, Progress
+from ..readiness import SetupUnavailable
 
 logger = logging.getLogger(__name__)
 ServiceFactory = Callable[[], AbstractContextManager[ImageAnalysisService]]
@@ -92,7 +95,8 @@ def default_service() -> AbstractContextManager[ImageAnalysisService]:
 def analyze_upload(service: ImageAnalysisService, data: bytes, page: bool = False,
                    render: bool = False, diagnostics: bool = False, refresh: Refresh = "none",
                    configuration: str | None = None, options: TranslationOptions | None = None,
-                   cancel: Event | None = None) -> ImageAnalysisResponse | PageAnalysisResponse | Response:
+                   cancel: Event | None = None, font_scale: float = 1.0,
+                   progress: Progress | None = None) -> ImageAnalysisResponse | PageAnalysisResponse | Response:
     start = perf_counter()
     try:
         image = decode_image(data)
@@ -109,10 +113,13 @@ def analyze_upload(service: ImageAnalysisService, data: bytes, page: bool = Fals
                         if refresh != "none": keywords["refresh"] = refresh
                         if options is not None: keywords["options"] = options
                         if cancel is not None: keywords["cancel"] = cancel
+                        if font_scale != 1.0: keywords["render_settings"] = RenderSettings(font_scale)
+                        if progress is not None: keywords["progress"] = progress
                         result = service.translate_and_render_page(image, **keywords)
                     except PageRefreshError as exc:
                         raise HTTPException(502, "Page refresh failed; previous translation retained. See server logs.") from exc
                     if diagnostics:
+                        if progress: progress("finalizing", "running", None)
                         from yomiscan.diagnostics import page_snapshot, render_bundle
                         models = service.diagnostic_models()
                         models.setdefault("settings", {}).update(result.diagnostics.get("translation_settings", {}))
@@ -140,12 +147,15 @@ def analyze_upload(service: ImageAnalysisService, data: bytes, page: bool = Fals
             except DetectionInitializationError as exc:
                 logger.exception("Page detector unavailable")
                 raise HTTPException(503, "Page detector unavailable. Check server logs and model setup.") from exc
+            except SetupUnavailable as exc:
+                raise HTTPException(503, "Selected model artifacts are unavailable. Open Setup & readiness, prepare them explicitly, then restart.") from exc
         result = service.analyze_image(image)
     return ImageAnalysisResponse.from_result(result, (perf_counter() - start) * 1000)
 
 
 def create_app(
     service_factory: ServiceFactory = default_service, *, allowed_origins: list[str] | None = None,
+    background_initialization: bool | None = None,
 ) -> FastAPI:
     origins = allowed_origins if allowed_origins is not None else [
         value.strip() for value in os.getenv("YOMISCAN_EXTENSION_ORIGINS", "").split(",") if value.strip()
@@ -159,6 +169,11 @@ def create_app(
         app.state.service = None
         app.state.busy = False
         app.state.configuration_id = None
+        app.state.jobs = JobRegistry()
+        app.state.initialization = "initializing"
+        app.state.failure_code = None
+        app.state.runtime_state = {}
+        app.state.readiness_environment = dict(os.environ)
         context = None
 
         def initialize():
@@ -169,15 +184,28 @@ def create_app(
                 app.state.configuration_id = service.configuration_id()
             return service
 
-        try:
+        async def initialize_resources():
             try:
                 app.state.service = await asyncio.wrap_future(executor.submit(initialize))
-            except Exception:
+                app.state.runtime_state = await asyncio.wrap_future(executor.submit(app.state.service.runtime_state)) if isinstance(app.state.service, ImageAnalysisService) else {}
+                app.state.initialization = "ready"
+            except Exception as exc:
                 # Startup boundary: expose availability, retain full diagnostics only in logs.
                 logger.exception("YomiScan initialization failed; check dictionary, model cache and device. Restart after fixing.")
+                app.state.initialization = "failed"
+                from ..translation.base import TranslationInitializationError
+                from ..ocr import OCRInitializationError
+                from ..dictionary.models import DictionaryError
+                from ..readiness import SetupUnavailable
+                app.state.failure_code = exc.code if isinstance(exc, SetupUnavailable) else "dictionary_unavailable" if isinstance(exc, DictionaryError) else "translation_unavailable" if isinstance(exc, TranslationInitializationError) else "ocr_unavailable" if isinstance(exc, OCRInitializationError) else "initialization_failed"
+        initialization_task = asyncio.create_task(initialize_resources())
+        try:
+            if not (background_initialization if background_initialization is not None else service_factory is default_service):
+                await initialization_task
             yield
         finally:
             try:
+                await initialization_task
                 if app.state.service is not None and context is not None:
                     await asyncio.wrap_future(executor.submit(context.__exit__, None, None, None))
             finally:
@@ -203,6 +231,20 @@ def create_app(
         response.headers["Cache-Control"] = "no-store"
         return {"status": "ok"}
 
+    @app.get("/api/v1/readiness")
+    async def readiness(request: Request):
+        from ..readiness import readiness_snapshot
+        state = request.app.state
+        return readiness_snapshot(initialization=state.initialization, busy=state.busy,
+            failure_code=state.failure_code, loaded=state.runtime_state, environment=state.readiness_environment)
+
+    @app.get("/api/v1/jobs/{job_id}")
+    async def job_status(request: Request, job_id: Annotated[str, PathParameter(pattern=r"^[a-f0-9-]{36}$", max_length=36)]):
+        result = request.app.state.jobs.snapshot(job_id)
+        if result is None:
+            raise HTTPException(404, "Job status unavailable or expired")
+        return result
+
     @app.post("/api/v1/analyze-image", response_model=ImageAnalysisResponse)
     async def analyze(request: Request, file: Annotated[UploadFile, File()]) -> ImageAnalysisResponse:
         return await handle_upload(request, file, page=False)
@@ -216,10 +258,12 @@ def create_app(
               responses={200: {"content": {"image/png": {}, "application/zip": {}}}})
     async def render_page(request: Request, file: Annotated[UploadFile, File()], diagnostics: bool = False,
                           refresh: Refresh = "none",
+                          font_scale: Annotated[float, Query(ge=.75, le=1.5)] = 1.0,
+                          job_id: Annotated[str | None, Query(pattern=r"^[a-f0-9-]{36}$", max_length=36)] = None,
                           options_json: Annotated[str | None, Form(max_length=2048)] = None,
                           configuration: Annotated[str | None, Query(pattern=r"^[a-f0-9]{64}$", max_length=64)] = None) -> Response:
         return await handle_upload(request, file, page=True, render=True, diagnostics=diagnostics,
-                                   refresh=refresh, configuration=configuration, options=parse_options(options_json))
+                                   refresh=refresh, configuration=configuration, options=parse_options(options_json), font_scale=font_scale, job_id=job_id)
 
     async def cache_operation(request: Request, operation: Callable[[ImageAnalysisService], object]):
         state = request.app.state
@@ -228,7 +272,13 @@ def create_app(
         if state.busy:
             raise HTTPException(429, "Processing is active; try cache controls after the current page finishes.")
         state.busy = True
-        future = asyncio.get_running_loop().run_in_executor(state.executor, operation, state.service)
+        def perform_operation():
+            try:
+                return operation(state.service)
+            finally:
+                if isinstance(state.service, ImageAnalysisService):
+                    state.runtime_state = state.service.runtime_state()
+        future = asyncio.get_running_loop().run_in_executor(state.executor, perform_operation)
         def finished(task: asyncio.Future) -> None:
             state.busy = False
             if not task.cancelled():
@@ -288,7 +338,8 @@ def create_app(
 
     async def handle_upload(request: Request, file: UploadFile, *, page: bool,
                             render: bool = False, diagnostics: bool = False, refresh: Refresh = "none",
-                            configuration: str | None = None, options: TranslationOptions | None = None) -> ImageAnalysisResponse | PageAnalysisResponse | Response:
+                            configuration: str | None = None, options: TranslationOptions | None = None,
+                            font_scale: float = 1.0, job_id: str | None = None) -> ImageAnalysisResponse | PageAnalysisResponse | Response:
         try:
             data = await file.read(MAX_FILE_BYTES + 1)
         finally:
@@ -302,12 +353,19 @@ def create_app(
             raise HTTPException(503, "Analysis resources unavailable. Check server logs and restart after setup.")
         if state.busy:
             raise HTTPException(429, "YomiScan is processing another crop. Please try again shortly.")
+        progress = None
+        if job_id is not None:
+            try: progress = state.jobs.start(job_id)
+            except ValueError as exc: raise HTTPException(409, "Use a new job identifier") from exc
         state.busy = True
-        cancel = Event() if options is not None and options.mode != "sentences" else None
+        cancel = Event() if job_id is not None or (options is not None and options.mode != "sentences") else None
         def perform_upload():
             if isinstance(state.service, ImageAnalysisService):
                 state.configuration_id = state.service.configuration_id()
-            return analyze_upload(state.service, data, page, render, diagnostics, refresh, configuration, options, cancel)
+            try:
+                return analyze_upload(state.service, data, page, render, diagnostics, refresh, configuration, options, cancel, font_scale, progress)
+            finally:
+                if isinstance(state.service, ImageAnalysisService): state.runtime_state = state.service.runtime_state()
         future = asyncio.get_running_loop().run_in_executor(state.executor, perform_upload)
 
         def finished(task: asyncio.Future) -> None:
@@ -315,6 +373,7 @@ def create_app(
             # Retrieve failures even if the HTTP client disconnected while inference ran.
             if not task.cancelled():
                 error = task.exception()
+                if job_id is not None: state.jobs.finish(job_id, "cancelled" if cancel is not None and cancel.is_set() else "failed" if error is not None else "completed")
                 if error is not None and not isinstance(error, HTTPException):
                     logger.error("Image analysis failed", exc_info=(type(error), error, error.__traceback__))
 

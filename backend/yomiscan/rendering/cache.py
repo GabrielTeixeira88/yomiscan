@@ -63,6 +63,8 @@ def cached_render(renderer: PageRenderer, image: Image.Image, analysis: PageAnal
         details = result.diagnostics.get("blocks", {})
         failed = any(b.status == "error" for b in analysis.text_blocks) or (isinstance(details, dict) and
             any(isinstance(d, dict) and any(d.get(s) == "error" for s in ("mask", "typesetting", "inpainting", "layout")) for d in details.values()))
+        if failed:
+            cache.notify("render", "failed")
         if not failed and not debug:
             safe_diagnostics = deepcopy(result.diagnostics)
             for detail in safe_diagnostics.get("blocks", {}).values():

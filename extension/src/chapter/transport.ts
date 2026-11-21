@@ -3,15 +3,18 @@ import {parseCoverage,type PageCoverage} from './coverage';
 import {parseSnapshot} from './reports';
 import type {RenderedPage} from './render-response';
 import type {ReaderTranslationOptions} from './translation-options';
+import {ProgressTracker,type JobProgress} from './progress';
 export type {RenderedPage} from './render-response';
 export class ConfigurationChanged extends Error {}
 export async function renderPage(blob: Blob, signal: AbortSignal,
-  options:{refresh?:boolean;configuration?:string;translation?:ReaderTranslationOptions}={}): Promise<RenderedPage> {
+  options:{refresh?:boolean;renderOnly?:boolean;fontScale?:number;configuration?:string;translation?:ReaderTranslationOptions;
+    progress?:(status:JobProgress)=>void}={}): Promise<RenderedPage> {
   if (blob.size > MAX_INPUT) throw new Error("Page exceeds the backend's 10 MiB limit");
   const ready = await chrome.runtime.sendMessage({type: "chapter-prepare"});
   if (!ready?.ok) throw new Error(ready?.error || "Could not start local page transport");
   signal.throwIfAborted();
   return new Promise((resolve,reject) => {
+    const job=crypto.randomUUID(),tracker=new ProgressTracker(job),{progress,...wireOptions}=options;
     const port = chrome.runtime.connect({name: "yomiscan-page-render"});
     let done = false, size = 0, parts: Uint8Array<ArrayBuffer>[] = [];
     const finish = (error?: Error, result?: RenderedPage) => {
@@ -27,13 +30,14 @@ export async function renderPage(blob: Blob, signal: AbortSignal,
       if (done) return;
       try {
         if (message.type === "ready") void (async () => {
-          port.postMessage({type:"begin", bytes:blob.size, mime:blob.type,...options});
+          port.postMessage({type:"begin", bytes:blob.size, mime:blob.type,job_id:job,...wireOptions});
           for(let offset=0; offset<blob.size; offset+=CHUNK) {
             const data = await encodeChunk(blob.slice(offset,offset+CHUNK));
             if(done) return; port.postMessage({type:"chunk", data});
           }
           if(!done) port.postMessage({type:"end"});
         })().catch(error=>finish(error));
+        else if(message.type==='progress'){const status=tracker.accept(message.data);if(status)progress?.(status);}
         else if (message.type === "chunk") {
           const bytes = decodeChunk(message.data); size += bytes.length;
           if(size>MAX_OUTPUT) throw new Error("Rendered page exceeds memory limit");

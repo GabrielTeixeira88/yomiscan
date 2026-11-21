@@ -24,6 +24,8 @@ from threading import Event
 from dataclasses import asdict
 from .glossary import GlossaryStore, GlossaryEntry
 from .translation.options import TranslationOptions, capabilities, validate_options, TARGET_NAMES
+from .rendering.settings import RenderSettings
+from .progress import Progress
 
 if TYPE_CHECKING:
     from .rendering.base import PageRenderResult
@@ -131,6 +133,14 @@ class ImageAnalysisService:
                 "detection": model_info(detection_metadata), "ocr": model_info(ocr_metadata),
                 "settings": settings}
 
+    def runtime_state(self) -> dict[str, object]:
+        """Code-owned observations, copied after work by the owning worker."""
+        translation = self._analyzer.translation_metadata()
+        detector = self._page_service.detector if self._page_service is not None else self._detector
+        return {"ocr": {"loaded": True}, "translation": {"loaded": translation.get("device") not in (None, "unloaded"),
+            "device": translation.get("device")}, "detection": {"loaded": detector is not None},
+            "processing_cache": {"persistent_enabled": self.cache.enabled}, "glossary_open": self._glossaries is not None}
+
     def analyze_image(self, image: Image.Image) -> ImageAnalysisResult:
         return analyze_image(image, self._ocr, self._analyzer)
 
@@ -153,27 +163,32 @@ class ImageAnalysisService:
         effective, entries = self._prepare_translation(options)
         # Lazy initialization on the same owning worker: Study Mode never needs this model.
         if self._page_service is None:
+            request.notify("initializing", "running")
             from .detection.factory import create_detector
+            if self._detector is None:
+                from .readiness import require_local_models
+                require_local_models(dict(os.environ), kinds=("detection",))
             detector = self._detector if self._detector is not None else create_detector(device=self._device)
             self._page_service = PageAnalysisService(detector, self._ocr, self._analyzer)
         return self._page_service.analyze_page(image, cache=request, options=effective, entries=entries, cancel=cancel)
 
     def translate_and_render_page(self, image: Image.Image, analysis: PageAnalysisResult | None = None,
                                   *, debug: bool = False, refresh: Refresh = "none",
-                                  options: TranslationOptions | None = None, cancel: Event | None = None) -> "PageRenderResult":
+                                  options: TranslationOptions | None = None, cancel: Event | None = None,
+                                  render_settings: RenderSettings = RenderSettings(), progress: Progress | None = None) -> "PageRenderResult":
         start = perf_counter()
         if self._render_service is None:
             from .rendering.renderer import ConservativePageRenderer
             from .rendering.service import PageTranslationRenderService
             self._render_service = PageTranslationRenderService(self, ConservativePageRenderer())
-        request = CacheRequest(self.cache, refresh)
+        request = CacheRequest(self.cache, refresh, progress=progress)
         if analysis is None:
             analysis = self._analyze_page(image, request, options=options, cancel=cancel)
         if options is not None and options.mode != "sentences" and any(b.status == "error" for b in analysis.text_blocks):
             raise PageRefreshError("Structured page failed; original or previous translation retained")
         if refresh in ("translation", "all") and any(b.status == "error" for b in analysis.text_blocks):
             raise PageRefreshError("Page refresh failed; previous translation retained.")
-        result = self._render_service.translate_and_render_page(image, analysis, debug=debug, cache=request)
+        result = self._render_service.translate_and_render_page(image, analysis, debug=debug, cache=request, settings=render_settings)
         result.analysis_processing["pipeline_total_ms"] = (perf_counter()-start)*1000
         if refresh != "none":
             details = result.diagnostics.get("blocks", {})
@@ -189,16 +204,19 @@ def open_local_service(
 ) -> Iterator[ImageAnalysisService]:
     """Create, use, and close this context on the same owning worker thread."""
     with SQLiteDictionary(dictionary_path) as dictionary, ExitStack() as cleanup:
+        from .readiness import require_local_models, SetupUnavailable
+        require_local_models(dict(os.environ))
+        if device == "cuda":
+            import torch
+            if not torch.cuda.is_available():
+                raise SetupUnavailable("unsupported_device")
         tokenizer = FugashiTokenizer()
         translator = create_translation_engine(device=device)
         close = getattr(translator, "close", None)
         if callable(close):
             cleanup.callback(close)
-        if os.environ.get("YOMISCAN_OCR", "current") == "current":
-            ocr = MangaOCREngine(force_cpu=device == "cpu")
-        else:
-            from .ocr.factory import create_ocr_engine
-            ocr = create_ocr_engine(device=device)
+        from .ocr.factory import create_ocr_engine
+        ocr = create_ocr_engine(device=device, pinned=True)
         close = getattr(ocr, "close", None)
         if callable(close):
             cleanup.callback(close)

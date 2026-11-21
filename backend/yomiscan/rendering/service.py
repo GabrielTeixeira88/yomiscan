@@ -8,6 +8,7 @@ from .base import PageRenderer, PageRenderResult
 from ..cache import CacheRequest
 from .cache import cached_render
 from dataclasses import asdict
+from .settings import RenderSettings
 
 
 class PageAnalyzer(Protocol):
@@ -19,11 +20,19 @@ class PageTranslationRenderService:
         self.analyzer, self.renderer = analyzer, renderer
 
     def translate_and_render_page(self, image: Image.Image, analysis: PageAnalysisResult | None = None,
-                                  *, debug: bool = False, cache: CacheRequest | None = None) -> PageRenderResult:
+                                  *, debug: bool = False, cache: CacheRequest | None = None,
+                                  settings: RenderSettings = RenderSettings()) -> PageRenderResult:
         start = perf_counter()
         if analysis is None:
             analysis = self.analyzer.analyze_page(image)
-        result = cached_render(self.renderer, image, analysis, cache, debug=debug)
+        renderer = self.renderer
+        if settings.font_scale != 1.0:
+            from .renderer import ConservativePageRenderer
+            from .typesetting import PillowTypesetter
+            if not isinstance(renderer, ConservativePageRenderer) or not isinstance(renderer.typesetter, PillowTypesetter):
+                raise ValueError("Selected renderer does not support reader font scaling")
+            renderer = ConservativePageRenderer(renderer.inpainter, renderer.typesetter.scaled(settings.font_scale), renderer.masks)
+        result = cached_render(renderer, image, analysis, cache, debug=debug)
         result.analysis_processing = asdict(analysis.processing)
         result.analysis_processing["pipeline_total_ms"] = (perf_counter()-start)*1000
         # Keep provenance even without debug images: a filtered/dropped region never
@@ -36,6 +45,15 @@ class PageTranslationRenderService:
             for region in analysis.regions]
         result.diagnostics["translation_settings"] = analysis.translation_settings
         result.diagnostics["layout"] = analysis.layout
+        result.diagnostics["render_settings"] = asdict(settings)
+        # Reuse the lexical and translation results from this exact analysis.
+        # It is transported inside the existing explicit text-consent section.
+        from ..api.models import ImageAnalysisResponse
+        details = result.diagnostics.get("blocks", {})
+        for block in analysis.text_blocks:
+            detail = details.get(block.id, details.get(str(block.id))) if isinstance(details, dict) else None
+            if isinstance(detail, dict) and block.analysis is not None:
+                detail["study"] = ImageAnalysisResponse.from_analysis(block.analysis, ocr_ms=block.ocr_ms or 0, origin="page").model_dump()
         if cache:
             # OCR timing belongs to this job, including when the layout came from disk.
             details = result.diagnostics.get("blocks", {})

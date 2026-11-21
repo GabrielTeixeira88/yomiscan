@@ -12,6 +12,7 @@ export interface Analysis {
   processing: {ocr_ms: number; translation_ms: number; analysis_ms: number; total_ms: number};
   tokens: Token[];
   target_language?:string;dictionary_language?:string;
+  provenance?:Record<string,unknown>;
 }
 
 const record = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);

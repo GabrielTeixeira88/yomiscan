@@ -144,6 +144,7 @@ class PageAnalysisService:
                 block = replace(block, original_text=recognized.text, ocr_engine=recognized.engine,
                                 ocr_metadata=recognized.metadata, ocr_ms=recognized.processing_time_ms)
             except OCRRecognitionError:
+                if cache: cache.notify("ocr", "failed")
                 logger.exception("Page block %s OCR failed", block.id)
                 ocr_ms += (perf_counter()-ocr_start)*1000
                 block = replace(block, status="error", error_message="OCR failed for this block.", failure_stage="ocr")

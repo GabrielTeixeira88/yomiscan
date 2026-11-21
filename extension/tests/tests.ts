@@ -9,6 +9,7 @@ import "./acquisition-tests";
 import "./coverage-tests";
 import "./report-tests";
 import "./translation-tests";
+import "./reader-tests";
 
 const viewport = {width: 800, height: 600};
 test("study copy writes exact Japanese/English and reports clipboard failures safely",async()=>{
@@ -127,7 +128,7 @@ test("aborted requests produce useful timeout guidance", async context => {
 test("manifest limits access to active tab and loopback; no content scripts run automatically", async () => {
   const manifest = JSON.parse(await readFile("manifest.json", "utf8"));
   assert.equal(manifest.manifest_version, 3);
-  assert.deepEqual(manifest.permissions, ["activeTab", "scripting", "offscreen"]);
+  assert.deepEqual(manifest.permissions, ["activeTab", "scripting", "offscreen", "storage"]);
   assert.deepEqual(manifest.host_permissions, ["http://127.0.0.1/*"]);
   assert.deepEqual(manifest.optional_host_permissions, ["http://*/*", "https://*/*"]);
   assert.equal(manifest.content_scripts, undefined);

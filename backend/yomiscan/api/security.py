@@ -28,7 +28,8 @@ class LocalRequestGuard:
         if origin and not allowed:
             await JSONResponse({"detail": "This browser origin is not allowed."}, 403)(scope, receive, send)
             return
-        private_read = scope.get("path") == "/api/v1/translation-profile" and scope["method"] == "GET"
+        private_read = (scope.get("path") in ("/api/v1/translation-profile", "/api/v1/readiness") or
+                        scope.get("path", "").startswith("/api/v1/jobs/")) and scope["method"] == "GET"
         if private_read and headers.get(CLIENT_HEADER) != CLIENT_VALUE:
             await JSONResponse({"detail": "Missing YomiScan client header."}, 403)(scope, receive, send)
             return

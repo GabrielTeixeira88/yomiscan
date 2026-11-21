@@ -115,7 +115,7 @@ def page_snapshot(image: Image.Image, result: PageRenderResult, *, input_sha256:
                        "font_size": detail.get("font_size"), "category": detail.get("category")},
             # Only this explicit section is eligible for the opt-in text export.
             "text": {"original": detail.get("original_text"), "translation": detail.get("translated_text"),
-                     "translation_input": detail.get("translation_input")},
+                     "translation_input": detail.get("translation_input"), "study": detail.get("study")},
         })
     regions = [
         {"id": r["id"], "bbox": list(r["bbox"]), "confidence": number(r.get("confidence")),
@@ -136,6 +136,7 @@ def page_snapshot(image: Image.Image, result: PageRenderResult, *, input_sha256:
         "limitations": ["OCR confidence and raw rejected model responses are unavailable unless recorded by the engine."],
     }
     snapshot["translation_settings"] = result.diagnostics.get("translation_settings", {})
+    snapshot["render_settings"] = result.diagnostics.get("render_settings", {})
     layout = result.diagnostics.get("layout", {})
     if isinstance(layout, dict):
         snapshot["layout"] = {k: layout[k] for k in ("strategy", "fallback_reason", "block_ids", "panel_by_block") if k in layout}
