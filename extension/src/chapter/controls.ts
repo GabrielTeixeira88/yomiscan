@@ -140,7 +140,7 @@ export class ChapterControls {
     const errors=this.session?[...this.session.queue.pages.values()].filter(p=>p.error&&!p.cancelled).slice(0,3).map(p=>`Page ${p.id}: ${p.error}`):[];
     const results=this.session?[...this.session.queue.pages.values()].flatMap(p=>p.result?[p.result]:[]):[];
     this.warning.textContent=errors.join("\n")+'\n'+coverageSummary(results);
-    if(status.message.includes("backend")||status.message.includes("server"))this.warning.textContent+="\nStart: uv run uvicorn yomiscan.api.main:app --host 127.0.0.1 --port 8765";
+    if(status.message.includes("backend")||status.message.includes("server"))this.warning.textContent+="\nStart the backend (uv run yomiscan-server); its port must match Setup & readiness.";
   }
   async prepareStudy():Promise<void> {if(this.session)await this.session.study();this.showHost(false);}
   verifyCapture(id:string):boolean{return this.session?.verifyCapture(id)??false;}

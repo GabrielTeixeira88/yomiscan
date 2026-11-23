@@ -34,7 +34,7 @@ Experimental backend selection is explicit:
 $env:YOMISCAN_DEVICE = 'cpu'
 $env:YOMISCAN_DETECTOR = 'onnx-int8'   # default: current
 $env:YOMISCAN_OCR = '2025-onnx'      # default: current
-uv run --frozen --extra vision uvicorn yomiscan.api.main:app --host 127.0.0.1 --port 8765
+uv run --frozen --extra vision uvicorn yomiscan.api.main:app --host 127.0.0.1 --port 47615
 ```
 
 Remove these two selection variables (or set each to `current`) before ordinary use.

@@ -28,7 +28,7 @@ In another terminal at the repository root:
 
 ```powershell
 uv sync
-uv run uvicorn yomiscan.api.main:app --host 127.0.0.1 --port 8765 --reload
+uv run uvicorn yomiscan.api.main:app --host 127.0.0.1 --port 47615 --reload
 ```
 
 Import JMdict using the root README first; wait for application startup and model
@@ -96,7 +96,7 @@ See [Phase 7 details and test matrix](../docs/phase-7-chapter.md).
 `activeTab` and `scripting` permit on-demand injection after explicit activation. There
 is no all-sites content script or `<all_urls>` permission. The service worker captures
 with `chrome.tabs.captureVisibleTab`, verifies tab/viewport stability, crops through
-`OffscreenCanvas`, then posts PNG to `http://127.0.0.1:8765/api/v1/analyze-image`.
+`OffscreenCanvas`, then posts PNG to `http://127.0.0.1:<port>/api/v1/analyze-image` (default port 47615).
 Only the crop is sent; the full screenshot stays transiently in extension memory and
 is never returned to webpage code. No screenshot/analysis history is stored.
 
@@ -127,7 +127,7 @@ scroll offset is added. Scroll, resize, hidden tabs and stale selection IDs inva
 pending capture. Pinch zoom is unsupported; reset it first. Animated page content can
 still change between selection and capture.
 
-The localhost host permission covers ports; backend requests use the fixed port 8765 URL.
+The localhost host permission covers ports. Backend requests use loopback with the port saved in Setup & readiness (default 47615; never AnkiConnect's 8765). The offscreen document accepts only a validated `http://127.0.0.1:<port>` origin from the content script.
 The extension CSP also permits HTTP(S) source-image fetches, gated by Chrome host access.
 The worker resolves an active image ticket through the isolated content script; it does
 not accept an arbitrary message-supplied URL. The EDRDG

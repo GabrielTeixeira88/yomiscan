@@ -129,7 +129,7 @@ Start the configured backend and build the extension:
 
 ```powershell
 # Terminal 1, repository root (after model/JMdict setup)
-uv run uvicorn yomiscan.api.main:app --host 127.0.0.1 --port 8765 --reload
+uv run uvicorn yomiscan.api.main:app --host 127.0.0.1 --port 47615 --reload
 # Terminal 2
 cd extension
 npm.cmd ci
@@ -218,7 +218,7 @@ Terminal 1, from the repository root:
 ```powershell
 uv sync --frozen
 uv run yomiscan-prepare-defaults
-uv run uvicorn yomiscan.api.main:app --host 127.0.0.1 --port 8765 --reload
+uv run uvicorn yomiscan.api.main:app --host 127.0.0.1 --port 47615 --reload
 ```
 
 The API starts while required resources initialize. Open **Setup & readiness** to
@@ -260,7 +260,7 @@ can leave it unassigned; change the binding at `chrome://extensions/shortcuts`.
 Reload the extension and refresh the manga tab after rebuilding. Watch rebuilds code
 but does not reload Chrome or type-check changes; run `npm.cmd run typecheck` separately.
 
-Selected screenshots are sent only to the local YomiScan backend at `127.0.0.1:8765`.
+Selected screenshots are sent only to the local YomiScan backend at `127.0.0.1:47615` (or your configured port).
 Initial model/dictionary/dependency downloads are separate from local image analysis.
 The full visible-tab screenshot is transient in extension memory; only the selected
 crop is uploaded. Images/results are not automatically saved to disk. A diagnostic
@@ -274,12 +274,12 @@ only if clicked.
   failure. Fix setup and restart; see terminal diagnostics.
 - `POST /api/v1/analyze-image`: multipart upload named **`file`**, plus header
   **`X-YomiScan-Client: study-extension-v1`**. Supports still PNG, JPEG and WebP.
-- API schema: `http://127.0.0.1:8765/docs`. POST clients must supply the client header;
+- API schema: `http://127.0.0.1:47615/docs`. POST clients must supply the client header;
   the curl example is the simplest manual request.
 
 ```powershell
-curl.exe http://127.0.0.1:8765/health
-curl.exe -H "X-YomiScan-Client: study-extension-v1" -F "file=@samples/test.png" http://127.0.0.1:8765/api/v1/analyze-image
+curl.exe http://127.0.0.1:47615/health
+curl.exe -H "X-YomiScan-Client: study-extension-v1" -F "file=@samples/test.png" http://127.0.0.1:47615/api/v1/analyze-image
 ```
 
 JSON contains `original_text`, separate `translation`, `processing` times, and ordered
@@ -299,9 +299,14 @@ $env:YOMISCAN_EXTENSION_ORIGINS = "chrome-extension://YOUR_EXTENSION_ID"
 
 The custom header requires preflight for webpage requests; unapproved Origin/Host
 headers are rejected. This is a local development boundary, not authentication against
-other programs on your machine. The extension's fixed backend request URL sends analysis
-to loopback port 8765; optional source-image host access is separate. Keep that port unless you
-rebuild the extension with matching changes. Use one Uvicorn worker to avoid duplicating
+other programs on your machine. The extension sends analysis only to loopback
+(`127.0.0.1`) on its configured port; optional source-image host access is separate.
+
+**Backend port.** The default is **47615** (`yomiscan-server` and the extension). It is
+deliberately not 8765, AnkiConnect's default port, which earlier YomiScan versions used.
+To use another port, start `uv run yomiscan-server --port 8790` and enter the same number
+in **Setup & readiness → Backend port → Save Port**. Ports below 1024 are rejected.
+Use one Uvicorn worker to avoid duplicating
 model memory. See [extension instructions](extension/README.md) and
 [Phase 4 validation/checklist](docs/phase-4-validation.md).
 

@@ -1,3 +1,4 @@
+import {backendBase} from '../backend';
 import {validateProfile,type TranslationProfile} from './translation-options';
 export type TranslationOperation='profile'|'create-series'|'delete-series'|'save-term'|'delete-term';
 const endpoints:Record<TranslationOperation,string>={profile:'translation-profile','create-series':'glossaries/series',
@@ -5,7 +6,7 @@ const endpoints:Record<TranslationOperation,string>={profile:'translation-profil
 /** Fixed local endpoints, bounded JSON, no paths, URLs or implicit model downloads. */
 export async function translationRequest(operation:TranslationOperation,payload:Record<string,unknown>):Promise<unknown> {
   if(!Object.hasOwn(endpoints,operation)||JSON.stringify(payload).length>1800)throw new Error('Invalid translation settings request');
-  let url='http://127.0.0.1:8765/api/v1/'+endpoints[operation];
+  let url=await backendBase()+'/api/v1/'+endpoints[operation];
   if(operation==='profile'){
     const query=new URLSearchParams();
     if(typeof payload.scope==='string')query.set('scope',payload.scope);

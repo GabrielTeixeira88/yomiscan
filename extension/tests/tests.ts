@@ -10,6 +10,7 @@ import "./coverage-tests";
 import "./report-tests";
 import "./translation-tests";
 import "./reader-tests";
+import "./backend-tests";
 
 const viewport = {width: 800, height: 600};
 test("study copy writes exact Japanese/English and reports clipboard failures safely",async()=>{
@@ -97,7 +98,7 @@ test("friendly HTTP messages never require raw server errors", () => {
 
 test("request sends only crop to fixed localhost endpoint and parses JSON", async context => {
   context.mock.method(globalThis, "fetch", async (url: string, options: RequestInit) => {
-    assert.equal(url, "http://127.0.0.1:8765/api/v1/analyze-image");
+    assert.equal(url, "http://127.0.0.1:47615/api/v1/analyze-image");
     assert.equal(options.method, "POST");
     assert.equal(options.credentials, "omit");
     assert.equal((options.headers as Record<string, string>)["X-YomiScan-Client"], "study-extension-v1");

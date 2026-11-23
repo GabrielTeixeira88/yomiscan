@@ -6,7 +6,7 @@ import {createHash,randomUUID} from 'node:crypto';
 import assert from "node:assert/strict";
 import path from "node:path";
 
-const mocked=process.argv.includes('--mock-backend'),backend=`http://127.0.0.1:${mocked?8774:8765}`;
+const mocked=process.argv.includes('--mock-backend'),backend=`http://127.0.0.1:${mocked?8774:47615}`;
 const {packZip,unpackZip}=await import('../.test/browser-support.mjs');
 const reportDir=path.resolve('.cache/stage1-reports-'+Date.now());
 let mockServer,mockRenders=0,mockRefreshes=0,persistentCache=false,mockConfiguration='f'.repeat(64),extensionPath=path.resolve('extension/dist');
@@ -17,10 +17,16 @@ const mockFontScales=[],mockJobs=new Map();
 if(mocked) {
   extensionPath=path.resolve('.cache/stage1-browser-extension');
   await mkdir(extensionPath,{recursive:true});
+  // Point the built bundles' default backend port at the mock server; fail if nothing matched.
+  // (The offscreen document receives the address from the content script.)
+  const redirected=[];
   for(const name of await readdir('extension/dist')) {
     const source=await readFile(path.join('extension/dist',name),'utf8');
-    await writeFile(path.join(extensionPath,name),source.replaceAll('127.0.0.1:8765','127.0.0.1:8774'));
+    const rewritten=source.replaceAll('DEFAULT_BACKEND_PORT = 47615','DEFAULT_BACKEND_PORT = 8774');
+    if(rewritten!==source&&name.endsWith('.js'))redirected.push(name);
+    await writeFile(path.join(extensionPath,name),rewritten);
   }
+  assert.deepEqual(redirected.sort(),['background.js','content.js'],'Mock backend port substitution did not match the built bundles');
   mockServer=http.createServer(async(req,res)=>{
     try {
       if(req.url==='/health'){res.setHeader('Content-Type','application/json');res.setHeader('X-YomiScan-Configuration',mockConfiguration);res.end('{"status":"ok"}');return;}

@@ -1,3 +1,4 @@
+import {backendBase} from '../backend';
 import {CHUNK, MAX_INPUT, MAX_OUTPUT, encodeChunk, decodeChunk} from "./wire";
 import {parseCoverage,type PageCoverage} from './coverage';
 import {parseSnapshot} from './reports';
@@ -12,6 +13,7 @@ export async function renderPage(blob: Blob, signal: AbortSignal,
   if (blob.size > MAX_INPUT) throw new Error("Page exceeds the backend's 10 MiB limit");
   const ready = await chrome.runtime.sendMessage({type: "chapter-prepare"});
   if (!ready?.ok) throw new Error(ready?.error || "Could not start local page transport");
+  const backend = await backendBase();
   signal.throwIfAborted();
   return new Promise((resolve,reject) => {
     const job=crypto.randomUUID(),tracker=new ProgressTracker(job),{progress,...wireOptions}=options;
@@ -30,7 +32,7 @@ export async function renderPage(blob: Blob, signal: AbortSignal,
       if (done) return;
       try {
         if (message.type === "ready") void (async () => {
-          port.postMessage({type:"begin", bytes:blob.size, mime:blob.type,job_id:job,...wireOptions});
+          port.postMessage({type:"begin", bytes:blob.size, mime:blob.type,job_id:job,backend,...wireOptions});
           for(let offset=0; offset<blob.size; offset+=CHUNK) {
             const data = await encodeChunk(blob.slice(offset,offset+CHUNK));
             if(done) return; port.postMessage({type:"chunk", data});

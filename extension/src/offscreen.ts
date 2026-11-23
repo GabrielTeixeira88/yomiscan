@@ -1,3 +1,4 @@
+import {parseBackendOrigin} from './backend';
 import {CHUNK, MAX_INPUT, encodeChunk, decodeChunk} from "./chapter/wire";
 import {readRenderResponse} from './chapter/render-response';
 import {imageHash} from './chapter/reports';
@@ -12,7 +13,7 @@ chrome.runtime.onConnect.addListener(port => {
   if (ports >= 8) { port.postMessage({type:"error",error:"Too many active chapter tabs"}); return; }
   ports++;
   let parts: Uint8Array<ArrayBuffer>[] = [], size = 0, expected = 0, submitted = false, connected = true, mime='image/png';
-  let refresh=false,configuration:string|undefined;
+  let refresh=false,configuration:string|undefined,backend='';
   let scale=1,renderOnly=false;
   let job:string|undefined;
   let translation:ReaderTranslationOptions|undefined;
@@ -32,6 +33,7 @@ chrome.runtime.onConnect.addListener(port => {
         if(message.refresh!==undefined && typeof message.refresh!=='boolean')throw new Error('Invalid refresh option');
         if(message.configuration!==undefined && (typeof message.configuration!=='string'||!/^[a-f0-9]{64}$/.test(message.configuration)))throw new Error('Invalid configuration identity');
         refresh=message.refresh===true;configuration=message.configuration;
+        backend=parseBackendOrigin(message.backend);
         if(message.fontScale!==undefined)scale=fontScale(message.fontScale);
         if(message.renderOnly!==undefined&&typeof message.renderOnly!=='boolean')throw new Error('Invalid render-only request');
         renderOnly=message.renderOnly===true;
@@ -58,12 +60,12 @@ chrome.runtime.onConnect.addListener(port => {
             query.set('font_scale',String(scale));
             if(configuration)query.set('configuration',configuration);
             if(job)query.set('job_id',job);
-            const responsePromise=fetch("http://127.0.0.1:8765/api/v1/render-page?"+query,{method:"POST",body:form,
+            const responsePromise=fetch(backend+"/api/v1/render-page?"+query,{method:"POST",body:form,
               headers:{"X-YomiScan-Client":"study-extension-v1"},signal:controller.signal,credentials:"omit",redirect:"error",cache:"no-store"});
             let polling=true;
             const poll=async()=>{
               while(polling&&connected&&!controller.signal.aborted){
-                try{const response=await fetch('http://127.0.0.1:8765/api/v1/jobs/'+job,{method:'GET',
+                try{const response=await fetch(backend+'/api/v1/jobs/'+job,{method:'GET',
                   headers:{'X-YomiScan-Client':'study-extension-v1'},signal:AbortSignal.any([controller.signal,AbortSignal.timeout(2000)]),
                   credentials:'omit',redirect:'error',cache:'no-store'});
                   if(response.ok){const text=await response.text();if(text.length<=16*1024&&polling)send({type:'progress',data:JSON.parse(text)});}

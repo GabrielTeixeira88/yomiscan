@@ -1,3 +1,4 @@
+import {backendBase} from '../backend';
 /** Fixed loopback operations only. Never accepts a filesystem path or arbitrary URL. */
 export interface CacheStatus {
   persistent_enabled:boolean;memory_bytes:number;memory_limit:number;disk_bytes:number;disk_limit:number;
@@ -5,7 +6,7 @@ export interface CacheStatus {
 }
 export async function cacheRequest(operation:'read'|'settings'|'clear',enabled?:boolean):Promise<CacheStatus> {
   const suffix=operation==='read'?'':operation==='settings'?'/settings':'/clear';
-  const response=await fetch('http://127.0.0.1:8765/api/v1/cache'+suffix,{
+  const response=await fetch(await backendBase()+'/api/v1/cache'+suffix,{
     method:operation==='read'?'GET':'POST',credentials:'omit',redirect:'error',cache:'no-store',
     signal:AbortSignal.timeout(10_000),headers:{'X-YomiScan-Client':'study-extension-v1','Content-Type':'application/json'},
     body:operation==='settings'?JSON.stringify({enabled}):undefined,

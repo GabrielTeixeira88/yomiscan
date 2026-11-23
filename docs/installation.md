@@ -75,7 +75,7 @@ documented separately; no runtime or optional weights are included in these arti
 Extract the extension ZIP to a stable folder. Open `chrome://extensions`, enable
 Developer mode and choose **Load unpacked**, selecting the folder containing
 `manifest.json`. Use an ordinary manga-reader tab, activate YomiScan, then open
-**Setup & readiness → Check Setup**. The server binds only to `127.0.0.1:8765`.
+**Setup & readiness → Check Setup**. The server binds only to `127.0.0.1`, on port 47615 by default (`--port` changes it; set the same port in **Setup & readiness**).
 The MV3 package requests local `storage` for explicit Study history; it does not use
 Chrome Sync. Missing resources are reported with preparation/import commands.
 

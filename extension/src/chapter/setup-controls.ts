@@ -1,3 +1,4 @@
+import {BACKEND_PORT_KEY,DEFAULT_BACKEND_PORT,backendPort,validBackendPort} from '../backend';
 interface ModelStatus {id:string;kind:string;model:string;revision:string;license:string;selected:boolean;installed:boolean;loaded:boolean;
   verification:string;experimental:boolean;targets:string[];structured:boolean;glossary_hints:boolean;setup_command:string;warnings:string[];
   approximate_download_bytes:number|null;compatible:boolean;compatibility_basis:string;devices:string[];dependency_available:boolean}
@@ -24,17 +25,33 @@ export function validateReadiness(value:unknown):Readiness {
 }
 export class SetupControls {
   readonly element=document.createElement('details');private output=document.createElement('div');
+  private port=document.createElement('input');private portStatus=document.createElement('p');
   constructor(){
     const summary=document.createElement('summary');summary.textContent='Setup & readiness';
     const reload=document.createElement('button');reload.textContent='Check Setup';reload.onclick=()=>{void this.load();};
-    this.element.append(summary,reload,this.output);
-    this.element.addEventListener('toggle',()=>{if(this.element.open)void this.load();});
+    const label=document.createElement('label');label.textContent='Backend port ';
+    Object.assign(this.port,{type:'number',min:'1024',max:'65535',step:'1'});label.append(this.port);
+    const save=document.createElement('button');save.textContent='Save Port';save.onclick=()=>{void this.savePort();};
+    this.portStatus.setAttribute('role','status');
+    this.element.append(summary,label,save,this.portStatus,reload,this.output);
+    this.element.addEventListener('toggle',()=>{if(this.element.open){void this.showPort();void this.load();}});
+  }
+  private async showPort():Promise<void>{
+    const port=await backendPort();this.port.value=String(port);
+    this.portStatus.textContent=`Start the backend with: yomiscan-server --port ${port}`;
+  }
+  private async savePort():Promise<void>{
+    const value=Number(this.port.value);
+    if(!validBackendPort(value)){this.portStatus.textContent='Enter a whole number from 1024 to 65535.';return;}
+    await chrome.storage.local.set({[BACKEND_PORT_KEY]:value});
+    this.portStatus.textContent=`Saved. Start the backend with: yomiscan-server --port ${value}`+
+      (value===DEFAULT_BACKEND_PORT?'':` (default ${DEFAULT_BACKEND_PORT})`)+'. Then Check Setup.';
   }
   private async load():Promise<void>{
     this.output.textContent='Checking local setup…';
     try{
       const reply=await chrome.runtime.sendMessage({type:'chapter-readiness'});
-      if(!reply?.ok)throw new Error('Cannot reach readiness. Start the updated backend: yomiscan-server. See README setup instructions.');
+      if(!reply?.ok)throw new Error(`Cannot reach readiness. Start the updated backend: yomiscan-server --port ${await backendPort()}. See README setup instructions.`);
       const data=validateReadiness(reply.data);
       const line=(text:string)=>{const p=document.createElement('p');p.textContent=text;this.output.append(p);};this.output.replaceChildren();
       line(`Backend ${data.initialization}${data.busy?' · processing':''} · version ${data.version} · configured device ${data.selected_device}`);

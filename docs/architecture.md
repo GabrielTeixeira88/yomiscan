@@ -31,6 +31,14 @@ Particles and auxiliaries drop non-agreeing homophones when an agreeing entry ex
 Sense order within an entry is unchanged. The lexical cache key includes the ranking
 module. Multi-token expressions (しょうがない) and grammar notes remain Stage 3 work.
 
+**Configurable loopback port.** `extension/src/backend.ts` owns the backend address:
+`http://127.0.0.1:<port>`, default 47615 (not AnkiConnect's 8765), with an optional
+`backendPort` in `chrome.storage.local` (1024–65535), edited in Setup & readiness.
+The service worker and content scripts read it from storage. The offscreen document has
+no storage access, so the content-side transport sends the origin in its `begin`
+message and the offscreen document accepts only a parsed loopback origin.
+`yomiscan-server --port` defaults to the same 47615 (`cli.DEFAULT_PORT`).
+
 ## Post-MVP reader controls, readiness and distribution
 
 `rendering/settings.py` validates immutable font scale 0.75–1.5.
