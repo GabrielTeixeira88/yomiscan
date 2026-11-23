@@ -52,6 +52,20 @@ appear as this word's. The footer states how a selection was read
 (`provenance.study_ocr`). Text actions (`button.action`) no longer inherit the 30×30
 close-button size (audit AU-04).
 
+**Evaluation.** `lexical_evaluation.py` (`scripts/evaluate_lexical.py`) scores ranking
+against `benchmarks/lexical-golden.jsonl` without models. See
+[evaluation sets](evaluation/README.md). The page-corpus manifest reuses `vision_benchmark`.
+
+**Deferred from Stage 1, with reasons.**
+- *ONNX INT8 detector as default:* its adoption rule (recall within 1 block per 100 of
+  PyTorch) needs the owner-supplied page corpus. The existing 3-page result is not enough.
+  It would also cut Study's added ~0.8 s detection time to about 0.1 s (Repo-reported).
+- *CUDA-enabled PyTorch for the owner's GPU:* resolving CUDA wheels in `uv.lock` affects
+  every platform and CI download size. Stage 2 may make PyTorch optional (ONNX/browser
+  runtimes), so this waits for that decision. A CUDA build installed into the local
+  `.venv` with `uv pip` works for experiments, but the next `uv sync` restores the locked CPU build.
+- *Expanded translation set:* waits for real lines from the page corpus.
+
 ## Post-MVP reader controls, readiness and distribution
 
 `rendering/settings.py` validates immutable font scale 0.75–1.5.

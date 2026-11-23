@@ -523,6 +523,11 @@ mocked OCR/translation-to-analysis pipeline. Tests need no network or neural wei
 downloaded JMdict database is not required for tests. See
 [Phase 2 validation](docs/phase-2-validation.md) for actual execution results.
 
+`uv run python scripts/evaluate_lexical.py` scores dictionary ranking against the
+hand-written golden set in `benchmarks/lexical-golden.jsonl` using your local JMdict
+(no models). See [evaluation sets](docs/evaluation/README.md) for the format, recorded
+results (76.1% → 99.3% on its 138 expectations) and the owner-supplied page corpus specification.
+
 See [sample testing instructions](samples/README.md) for a manual evaluation matrix.
 Do not commit copyrighted screenshots. Compare actual OCR with a manually verified
 transcription before describing recognition as reliable.
