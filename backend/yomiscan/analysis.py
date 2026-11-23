@@ -21,6 +21,7 @@ from .cache import CacheRequest
 from .cache_identity import component_identity, algorithm, result_metadata
 from pydantic import TypeAdapter, ValidationError
 from .glossary import GlossaryEntry, applicable_terms
+from .lexical_ranking import choose_matches
 from .translation.options import TranslationOptions, validate_options, capabilities
 from .translation.structured import PageTranslationRequest, TranslationSegment, CONTRACT_VERSION, StructuredTranslationError
 from .translation.base import TranslationContext
@@ -85,7 +86,7 @@ class TextAnalyzer:
         results: list[TextAnalysisResult | Exception] = []
         for text in texts:
             try:
-                lexical_key = cache.key("lexical", text, lexical_identity, algorithm("analysis.py")) if cache and all(
+                lexical_key = cache.key("lexical", text, lexical_identity, algorithm("analysis.py", "lexical_ranking.py")) if cache and all(
                     item is not None for item in lexical_identity) else None
                 payload = cache.get("lexical", lexical_key) if cache else None
                 lexical = None
@@ -220,16 +221,12 @@ class TextAnalyzer:
         tokens = []
         entries: dict[int, DictionaryEntry] = {}
         cache: dict[str, tuple[DictionaryEntry, ...]] = {}
+        def lookup(form: str) -> tuple[DictionaryEntry, ...]:
+            if form not in cache:
+                cache[form] = self._dictionary.lookup(form)
+            return cache[form]
         for token in self._tokenizer.tokenize(text):
-            matches: tuple[DictionaryEntry, ...] = ()
-            matched_form = None
-            for candidate in lookup_candidates(token):
-                if candidate not in cache:
-                    cache[candidate] = self._dictionary.lookup(candidate)
-                matches = cache[candidate]
-                if matches:
-                    matched_form = candidate
-                    break
+            matched_form, matches = choose_matches(token, lookup_candidates(token), lookup)
             entries.update((entry.entry_id, entry) for entry in matches)
             tokens.append(AnalyzedToken(token, matched_form, tuple(e.entry_id for e in matches)))
         return TextAnalysisResult(

@@ -11,8 +11,8 @@ def jmdict_source(tmp_path):
     source.write_text('''<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE JMdict [<!ENTITY noun "noun"><!ENTITY verb "verb">]>
 <JMdict>
-<entry><ent_seq>1</ent_seq><k_ele><keb>猫</keb></k_ele>
-<r_ele><reb>ねこ</reb></r_ele>
+<entry><ent_seq>1</ent_seq><k_ele><keb>猫</keb><ke_pri>ichi1</ke_pri></k_ele>
+<r_ele><reb>ねこ</reb><re_pri>ichi1</re_pri><re_pri>nf10</re_pri></r_ele>
 <sense><pos>&noun;</pos><gloss>cat</gloss><gloss xml:lang="fre">chat</gloss></sense>
 <sense><gloss>test inherited sense</gloss></sense></entry>
 <entry><ent_seq>2</ent_seq><k_ele><keb>食べる</keb></k_ele>

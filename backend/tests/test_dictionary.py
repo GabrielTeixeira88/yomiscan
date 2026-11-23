@@ -1,4 +1,5 @@
 import gzip
+import json
 import sqlite3
 
 import pytest
@@ -83,3 +84,24 @@ def test_same_path_is_rejected(jmdict_source):
     with pytest.raises(DictionaryError, match="different"):
         import_jmdict(jmdict_source, jmdict_source)
     assert jmdict_source.read_bytes() == before
+
+
+def test_priority_tags_are_imported_per_form(dictionary_path):
+    with SQLiteDictionary(dictionary_path) as dictionary:
+        assert dictionary.schema_version == 2
+        assert dictionary.lookup("猫")[0].form_priority == {"猫": ("ichi1",), "ねこ": ("ichi1", "nf10")}
+        assert dictionary.lookup("食べる")[0].form_priority == {}
+
+
+def test_schema_1_database_stays_readable_without_priorities(dictionary_path, caplog):
+    with sqlite3.connect(dictionary_path) as connection:
+        payload = connection.execute("SELECT payload FROM entries WHERE entry_id = 1").fetchone()[0]
+        legacy = json.loads(payload)
+        del legacy["form_priority"]
+        connection.execute("UPDATE entries SET payload = ? WHERE entry_id = 1", (json.dumps(legacy, ensure_ascii=False),))
+        connection.execute("PRAGMA user_version = 1")
+    connection.close()
+    with caplog.at_level("WARNING"), SQLiteDictionary(dictionary_path) as dictionary:
+        assert dictionary.schema_version == 1
+        assert dictionary.lookup("猫")[0].form_priority == {}
+    assert "re-import JMdict" in caplog.text

@@ -19,6 +19,18 @@ optional text-free `reason`. `YOMISCAN_STUDY_DETECTION=auto|off` (default `auto`
 by the composition root. An unprepared or failed detector is remembered, so Study
 does not retry its initialization on every request. Selection reads are not cached.
 
+**Ranked dictionary candidates.** JMdict schema 2 stores `ke_pri`/`re_pri` tags per
+exact form (`DictionaryEntry.form_priority`). Schema 1 databases remain readable, with
+empty priorities and a startup warning. `lexical_ranking.py` holds deterministic,
+data-driven rules. `choose_matches` keeps the first-matching-form lookup for content
+words. For particles/auxiliaries it may continue to a later form (ん → lemma の) when
+that form's entry is primarily the right part of speech. `rank_entries` orders by
+kanji-lemma agreement, then first-sense/later-sense POS agreement (UniDic `pos1` →
+JMdict labels), headword, reading, JMdict "common" tags, `nfXX` band, and entry ID.
+Particles and auxiliaries drop non-agreeing homophones when an agreeing entry exists.
+Sense order within an entry is unchanged. The lexical cache key includes the ranking
+module. Multi-token expressions (しょうがない) and grammar notes remain Stage 3 work.
+
 ## Post-MVP reader controls, readiness and distribution
 
 `rendering/settings.py` validates immutable font scale 0.75–1.5.

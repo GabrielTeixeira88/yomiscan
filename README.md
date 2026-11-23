@@ -394,6 +394,14 @@ source/license URLs, and transformation details. Initial setup needs network acc
 all subsequent tokenization and dictionary queries are fully local. No dictionary API
 or Jisho requests are used.
 
+**Candidate ranking (schema 2).** The importer now keeps JMdict's per-form priority tags
+(`news1`, `ichi1`, `nf12`, …). Each token's candidates are ordered by agreement with the
+morphological analysis: kanji lemma, part of speech, headword, reading, then commonness.
+Particles and auxiliaries drop unrelated homophones, so は shows the topic particle,
+not 歯 "tooth". Databases built before this change (schema 1) still work, but without
+commonness ranking; stop the backend and re-run the import command above to upgrade.
+The backend logs a warning while a schema-1 database is in use.
+
 ## Analyze text or images
 
 ```powershell

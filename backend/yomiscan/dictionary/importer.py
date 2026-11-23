@@ -42,8 +42,16 @@ def _entry(element: ET.Element) -> DictionaryEntry:
     ) for r in element.findall("r_ele"))
     if not readings or any(not r.text for r in readings):
         raise ValueError("JMdict entry has no valid reading")
+    # Priority tags (news1, ichi1, nf12, …) are per spelling/reading, not per entry.
+    priority: dict[str, tuple[str, ...]] = {}
+    forms = [(k, "keb", "ke_pri") for k in element.findall("k_ele")] + [
+        (r, "reb", "re_pri") for r in element.findall("r_ele")]
+    for form_element, text_tag, priority_tag in forms:
+        text, tags = form_element.findtext(text_tag, ""), _texts(form_element, priority_tag)
+        if text and tags:
+            priority[text] = priority.get(text, ()) + tags
     return DictionaryEntry(int(element.findtext("ent_seq", "")),
-                           _texts(element, "k_ele/keb"), readings, tuple(senses))
+                           _texts(element, "k_ele/keb"), readings, tuple(senses), priority)
 
 
 def import_jmdict(source: Path, destination: Path) -> int:
@@ -93,7 +101,7 @@ def import_jmdict(source: Path, destination: Path) -> int:
                     "imported_at": datetime.now(timezone.utc).isoformat(), "entries": str(count),
                     "attribution": "JMdict: JMdict contributors / EDRDG; CC BY-SA 4.0",
                     "license_url": LICENSE_URL,
-                    "transformation": "English senses and normalized exact lookup forms in SQLite",
+                    "transformation": "English senses, form priority tags and normalized exact lookup forms in SQLite",
                 }
                 connection.executemany("INSERT INTO metadata VALUES (?, ?)", metadata.items())
                 connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
