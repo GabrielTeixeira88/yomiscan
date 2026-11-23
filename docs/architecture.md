@@ -39,6 +39,19 @@ no storage access, so the content-side transport sends the origin in its `begin`
 message and the offscreen document accepts only a parsed loopback origin.
 `yomiscan-server --port` defaults to the same 47615 (`cli.DEFAULT_PORT`).
 
+**Study selection document identity (audit AU-01).** `navigation.documentKey` (origin,
+path and query; hash ignored) is recorded at capture. Screenshot verification rejects
+a changed document. A reply that arrives after a document change is discarded with an
+explanation, and Chrome's Navigation API `navigate` event closes a pending selection or
+discards a processing one. The browser fixture reproduces a `pushState` chapter change
+during processing.
+
+**Study popup.** Senses of the best-ranked entry are shown first. Other entries are
+folded under "N other dictionary entries" with dividers, so another word's senses never
+appear as this word's. The footer states how a selection was read
+(`provenance.study_ocr`). Text actions (`button.action`) no longer inherit the 30×30
+close-button size (audit AU-04).
+
 ## Post-MVP reader controls, readiness and distribution
 
 `rendering/settings.py` validates immutable font scale 0.75–1.5.

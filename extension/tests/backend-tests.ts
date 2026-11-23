@@ -31,3 +31,11 @@ test("offscreen accepts only a loopback origin with a valid port",()=>{
     "http://evil.example:8790","http://127.0.0.1:99999",undefined,42])
     assert.throws(()=>parseBackendOrigin(value));
 });
+
+import {documentKey} from "../src/navigation";
+test("Study document identity ignores hash changes but not chapter navigation",()=>{
+  const at=(href:string)=>{const url=new URL(href);return documentKey({origin:url.origin,pathname:url.pathname,search:url.search});};
+  assert.equal(at("https://reader.example/ch/1?p=2#page-3"),at("https://reader.example/ch/1?p=2#page-9"));
+  assert.notEqual(at("https://reader.example/ch/1"),at("https://reader.example/ch/2"));
+  assert.notEqual(at("https://reader.example/read?ch=1"),at("https://reader.example/read?ch=2"));
+});

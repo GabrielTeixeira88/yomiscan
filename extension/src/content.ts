@@ -2,6 +2,7 @@ import { parseAnalysis } from "./api";
 import { sameViewport, selectionRect, validSelection, type Point, type Rect, type Viewport } from "./geometry";
 import { element, StudyPopup, styles } from "./popup";
 import {ChapterControls} from "./chapter/controls";
+import {documentKey, STALE_SELECTION_MESSAGE} from "./navigation";
 
 const globalState = globalThis as typeof globalThis & { __yomiscanInstalled?: boolean };
 if (!globalState.__yomiscanInstalled) {
@@ -24,6 +25,7 @@ function install(): void {
   let selection = new AbortController();
   let mode: "selecting" | "capturing" | "processing" | "result" = "result";
   let captureViewport = viewport();
+  let captureDocument = documentKey(location);
   let anchor: Rect = {x: 16, y: 16, width: 0, height: 0};
   let previousFocus: HTMLElement | null = null;
 
@@ -35,6 +37,13 @@ function install(): void {
     host?.remove(); host = null; root = null; popup = null;
     if (previousFocus?.isConnected) previousFocus.focus({preventScroll: true});
     previousFocus = null;
+  }
+
+  /** Cancel a selection whose page changed underneath it and say why nothing is shown. */
+  function discardStale(): void {
+    if (id) void chrome.runtime.sendMessage({type: "cancel", id}).catch(() => {});
+    id = null; mode = "result";
+    openPopup().status(STALE_SELECTION_MESSAGE, true);
   }
 
   function openPopup(): StudyPopup {
@@ -85,6 +94,12 @@ function install(): void {
     }, {signal: lifecycle.signal});
     document.addEventListener("visibilitychange", () => { if (document.hidden) close(); }, {signal: lifecycle.signal});
     window.addEventListener("pagehide", close, {signal: lifecycle.signal});
+    // pushState chapter changes do not fire pagehide; Chrome's Navigation API reports them.
+    (globalThis as {navigation?: EventTarget}).navigation?.addEventListener("navigate", event => {
+      if ((event as Event & {hashChange?: boolean}).hashChange) return;
+      if (mode === "selecting" || mode === "capturing") close();
+      else if (mode === "processing") discardStale();
+    }, {signal: lifecycle.signal});
     layer.addEventListener("wheel", event => event.preventDefault(), {passive: false, signal: selection.signal});
     layer.addEventListener("contextmenu", event => event.preventDefault(), {signal: selection.signal});
     let startPoint: Point | null = null;
@@ -106,6 +121,7 @@ function install(): void {
       if (!startPoint || event.button !== 0) return;
       move(event); startPoint = null;
       captureViewport = viewport();
+      captureDocument = documentKey(location);
       if (!validSelection(anchor, captureViewport)) { box.hidden = true; hint.textContent = "Select a larger region · Esc to cancel"; return; }
       selection.abort(); layer.remove();
       const requestId = id;
@@ -117,6 +133,7 @@ function install(): void {
       try {
         const reply = await chrome.runtime.sendMessage({type: "capture", id, rect: anchor, viewport: captureViewport});
         if (id !== requestId) return;
+        if (documentKey(location) !== captureDocument) { discardStale(); return; }
         mode = "result";
         if (!reply?.ok) throw new Error(reply?.error || "Screenshot analysis failed. Please try again.");
         openPopup().show(parseAnalysis(reply.data));
@@ -138,7 +155,8 @@ function install(): void {
     if (message?.type === "verify-page-capture") respond(chapter.verifyCapture(message.id));
     if (message?.type === "resolve-page-source") respond(chapter.resolveSource(message.id));
     if (message?.type === "chapter-access-resolved") {chapter.resumeAfterPermission(message.version,message.retry);respond(true);}
-    if (message?.type === "verify-capture") respond(id === message.id && mode === "capturing" && sameViewport(captureViewport, viewport()) && !document.hidden);
+    if (message?.type === "verify-capture") respond(id === message.id && mode === "capturing" && sameViewport(captureViewport, viewport()) && !document.hidden
+      && documentKey(location) === captureDocument);
     if (message?.type === "captured" && id === message.id) {
       mode = "processing";
       openPopup().status("Reading and translating locally…");
