@@ -1,0 +1,1679 @@
+{
+  "baseline": "178e506f8bc03ef541f4c4f8d60ecb44476f023a",
+  "device": "cpu",
+  "network": "offline",
+  "measurement": "single run; fresh server process, OS disk cache not flushed",
+  "operations": [
+    {
+      "operation": "startup_1",
+      "first_readiness_ms": 884.99,
+      "ready_ms": 10693.72,
+      "resources": {
+        "working_set_bytes": 1173671936,
+        "peak_working_set_bytes": 1173671936,
+        "cpu_seconds": 18.109375,
+        "source": "Windows GetProcessMemoryInfo/GetProcessTimes; VRAM not measured"
+      },
+      "readiness": {
+        "initialization": "ready",
+        "selected": {
+          "ocr": "ocr-current",
+          "detection": "detector-current",
+          "translation": "current"
+        }
+      }
+    },
+    {
+      "operation": "first_study",
+      "http_wall_ms": 539.62,
+      "response_bytes": 11437,
+      "resources_before": {
+        "working_set_bytes": 1173835776,
+        "peak_working_set_bytes": 1173835776,
+        "cpu_seconds": 18.125,
+        "source": "Windows GetProcessMemoryInfo/GetProcessTimes; VRAM not measured"
+      },
+      "resources_after": {
+        "working_set_bytes": 1179099136,
+        "peak_working_set_bytes": 1181802496,
+        "cpu_seconds": 22.515625,
+        "source": "Windows GetProcessMemoryInfo/GetProcessTimes; VRAM not measured"
+      },
+      "processing": {
+        "ocr_ms": 273.0568000006315,
+        "translation_ms": 226.74239999832935,
+        "analysis_ms": 3.2906999986153096,
+        "total_ms": 513.8952999986941
+      },
+      "original_nonempty": true,
+      "tokens": 6,
+      "tokens_with_readings": 6,
+      "dictionary_matches": 6,
+      "target": "en"
+    },
+    {
+      "operation": "repeat_study",
+      "http_wall_ms": 551.49,
+      "response_bytes": 11437,
+      "resources_before": {
+        "working_set_bytes": 1179099136,
+        "peak_working_set_bytes": 1181802496,
+        "cpu_seconds": 22.515625,
+        "source": "Windows GetProcessMemoryInfo/GetProcessTimes; VRAM not measured"
+      },
+      "resources_after": {
+        "working_set_bytes": 1178963968,
+        "peak_working_set_bytes": 1183846400,
+        "cpu_seconds": 26.53125,
+        "source": "Windows GetProcessMemoryInfo/GetProcessTimes; VRAM not measured"
+      },
+      "processing": {
+        "ocr_ms": 284.6236000004865,
+        "translation_ms": 238.54140000184998,
+        "analysis_ms": 2.7488000014272984,
+        "total_ms": 526.5483999974094
+      },
+      "original_nonempty": true,
+      "tokens": 6,
+      "tokens_with_readings": 6,
+      "dictionary_matches": 6,
+      "target": "en"
+    },
+    {
+      "operation": "first_page",
+      "http_wall_ms": 8134.51,
+      "response_bytes": 1114691,
+      "resources_before": {
+        "working_set_bytes": 1178963968,
+        "peak_working_set_bytes": 1183846400,
+        "cpu_seconds": 26.53125,
+        "source": "Windows GetProcessMemoryInfo/GetProcessTimes; VRAM not measured"
+      },
+      "resources_after": {
+        "working_set_bytes": 1470320640,
+        "peak_working_set_bytes": 1499791360,
+        "cpu_seconds": 94.296875,
+        "source": "Windows GetProcessMemoryInfo/GetProcessTimes; VRAM not measured"
+      },
+      "counts": {
+        "rendered": 9,
+        "preserved": 4,
+        "undetected": null
+      },
+      "timings": {
+        "analysis": {
+          "detection_ms": 750.5263999992167,
+          "ocr_ms": 3360.892900000181,
+          "translation_ms": 2036.6815000015777,
+          "analysis_ms": 22.38420000867336,
+          "total_ms": 6644.36079999723,
+          "pipeline_total_ms": 7979.89840000082
+        },
+        "rendering": {
+          "mask_ms": 78.01199999812525,
+          "inpainting_ms": 12.823300006857608,
+          "typesetting_ms": 423.6235999960627,
+          "total_ms": 522.4541000025056
+        },
+        "backend_before_pack_ms": 7997.2202999997535
+      },
+      "cache_stages": [
+        {
+          "stage": "detection",
+          "source": "miss",
+          "restored": false,
+          "lookup_ms": 0.20139999833190814
+        },
+        {
+          "stage": "ocr",
+          "source": "miss",
+          "restored": false,
+          "lookup_ms": 0.20620000213966705
+        },
+        {
+          "stage": "ocr",
+          "source": "miss",
+          "restored": false,
+          "lookup_ms": 0.1391000005241949
+        },
+        {
+          "stage": "ocr",
+          "source": "miss",
+          "restored": false,
+          "lookup_ms": 0.1598999988345895
+        },
+        {
+          "stage": "ocr",
+          "source": "miss",
+          "restored": false,
+          "lookup_ms": 0.15329999951063655
+        },
+        {
+          "stage": "ocr",
+          "source": "miss",
+          "restored": false,
+          "lookup_ms": 0.14860000010230578
+        },
+        {
+          "stage": "ocr",
+          "source": "miss",
+          "restored": false,
+          "lookup_ms": 0.14560000272467732
+        },
+        {
+          "stage": "ocr",
+          "source": "miss",
+          "restored": false,
+          "lookup_ms": 0.13469999976223335
+        },
+        {
+          "stage": "ocr",
+          "source": "miss",
+          "restored": false,
+          "lookup_ms": 0.13530000069295056
+        },
+        {
+          "stage": "ocr",
+          "source": "miss",
+          "restored": false,
+          "lookup_ms": 0.1660999987507239
+        },
+        {
+          "stage": "ocr",
+          "source": "miss",
+          "restored": false,
+          "lookup_ms": 0.1384999995934777
+        },
+        {
+          "stage": "ocr",
+          "source": "miss",
+          "restored": false,
+          "lookup_ms": 0.12299999798415229
+        },
+        {
+          "stage": "ocr",
+          "source": "miss",
+          "restored": false,
+          "lookup_ms": 0.13980000221636146
+        },
+        {
+          "stage": "ocr",
+          "source": "miss",
+          "restored": false,
+          "lookup_ms": 0.12589999823831022
+        },
+        {
+          "stage": "ordering",
+          "source": "miss",
+          "restored": false,
+          "lookup_ms": 0.16569999934290536
+        },
+        {
+          "stage": "lexical",
+          "source": "miss",
+          "restored": false,
+          "lookup_ms": 0.13169999874662608
+        },
+        {
+          "stage": "lexical",
+          "source": "miss",
+          "restored": false,
+          "lookup_ms": 0.1267000006919261
+        },
+        {
+          "stage": "lexical",
+          "source": "miss",
+          "restored": false,
+          "lookup_ms": 0.12169999899924733
+        },
+        {
+          "stage": "lexical",
+          "source": "miss",
+          "restored": false,
+          "lookup_ms": 0.11989999984507449
+        },
+        {
+          "stage": "lexical",
+          "source": "miss",
+          "restored": false,
+          "lookup_ms": 0.1176999976451043
+        },
+        {
+          "stage": "lexical",
+          "source": "miss",
+          "restored": false,
+          "lookup_ms": 0.1187999987450894
+        },
+        {
+          "stage": "lexical",
+          "source": "miss",
+          "restored": false,
+          "lookup_ms": 0.14569999984814785
+        },
+        {
+          "stage": "lexical",
+          "source": "miss",
+          "restored": false,
+          "lookup_ms": 0.1680999994277954
+        },
+        {
+          "stage": "lexical",
+          "source": "miss",
+          "restored": false,
+          "lookup_ms": 0.19699999756994657
+        },
+        {
+          "stage": "lexical",
+          "source": "miss",
+          "restored": false,
+          "lookup_ms": 0.13270000272314064
+        },
+        {
+          "stage": "lexical",
+          "source": "miss",
+          "restored": false,
+          "lookup_ms": 0.14139999984763563
+        },
+        {
+          "stage": "lexical",
+          "source": "miss",
+          "restored": false,
+          "lookup_ms": 0.13159999798517674
+        },
+        {
+          "stage": "lexical",
+          "source": "miss",
+          "restored": false,
+          "lookup_ms": 0.12240000069141388
+        },
+        {
+          "stage": "translation",
+          "source": "miss",
+          "restored": false,
+          "lookup_ms": 0.1602000011189375,
+          "compute_ms": 2036.6815000015777
+        },
+        {
+          "stage": "render",
+          "source": "miss",
+          "restored": false,
+          "lookup_ms": 0.29279999944265,
+          "compute_ms": 522.8932000027271
+        }
+      ],
+      "models": {
+        "translation": {
+          "engine": "current",
+          "model": "Helsinki-NLP/opus-mt-ja-en",
+          "revision": "0770961a39ba6bd66305b149c3f4110bcafca2e6",
+          "device": "cpu",
+          "batch_size": 8.0,
+          "num_beams": 4.0,
+          "target_language": "en",
+          "regional_variant_verified": true
+        },
+        "detection": {
+          "engine": "current",
+          "model": "ogkalu/comic-text-and-bubble-detector",
+          "revision": "16e8a622f91fabc6b5b65c96d32d1183f8843546",
+          "device": "cpu",
+          "artifact": "model.safetensors",
+          "threshold": 0.5,
+          "bubble_threshold": 0.5,
+          "free_threshold": 0.5
+        },
+        "ocr": {
+          "engine": "manga-ocr",
+          "revision": null
+        },
+        "settings": {
+          "analysis_device": "cpu",
+          "target_language": "en",
+          "padding": 4,
+          "minimum_side": 3,
+          "minimum_font_size": 14,
+          "maximum_font_size": 30,
+          "preferred_font_size": 26,
+          "font_margin": 3,
+          "translation_mode": "sentences",
+          "context_policy": "none",
+          "ordering": "bands",
+          "glossary_enabled": false,
+          "glossary_application": "none"
+        }
+      },
+      "stage_observations": [
+        [
+          "processing",
+          "processing"
+        ],
+        [
+          "detection",
+          "processing"
+        ],
+        [
+          "ocr",
+          "processing"
+        ],
+        [
+          "translation",
+          "processing"
+        ],
+        [
+          "finalizing",
+          "processing"
+        ]
+      ],
+      "status_latency": {
+        "samples": 11,
+        "median_ms": 2.05,
+        "max_ms": 38.93
+      },
+      "bubble_reuse_valid": true
+    },
+    {
+      "operation": "repeat_page",
+      "http_wall_ms": 295.36,
+      "response_bytes": 1122322,
+      "resources_before": {
+        "working_set_bytes": 1470320640,
+        "peak_working_set_bytes": 1499791360,
+        "cpu_seconds": 94.296875,
+        "source": "Windows GetProcessMemoryInfo/GetProcessTimes; VRAM not measured"
+      },
+      "resources_after": {
+        "working_set_bytes": 1470509056,
+        "peak_working_set_bytes": 1499791360,
+        "cpu_seconds": 94.5625,
+        "source": "Windows GetProcessMemoryInfo/GetProcessTimes; VRAM not measured"
+      },
+      "counts": {
+        "rendered": 9,
+        "preserved": 4,
+        "undetected": null
+      },
+      "timings": {
+        "analysis": {
+          "detection_ms": 0.0,
+          "ocr_ms": 0.0,
+          "translation_ms": 0.0,
+          "analysis_ms": 0.0,
+          "total_ms": 123.24060000173631,
+          "pipeline_total_ms": 160.16490000038175
+        },
+        "rendering": {
+          "mask_ms": 0,
+          "inpainting_ms": 0,
+          "typesetting_ms": 0,
+          "total_ms": 0
+        },
+        "backend_before_pack_ms": 179.95979999977862
+      },
+      "cache_stages": [
+        {
+          "stage": "detection",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.008600000001024455
+        },
+        {
+          "stage": "ocr",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.007899998308857903
+        },
+        {
+          "stage": "ocr",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0029000002541579306
+        },
+        {
+          "stage": "ocr",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0031000017770566046
+        },
+        {
+          "stage": "ocr",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0027999994927085936
+        },
+        {
+          "stage": "ocr",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0031999989005271345
+        },
+        {
+          "stage": "ocr",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0028000031306874007
+        },
+        {
+          "stage": "ocr",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0025999979698099196
+        },
+        {
+          "stage": "ocr",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0025999979698099196
+        },
+        {
+          "stage": "ocr",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0026000016077887267
+        },
+        {
+          "stage": "ocr",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0028000031306874007
+        },
+        {
+          "stage": "ocr",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0028000031306874007
+        },
+        {
+          "stage": "ocr",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0030000010156072676
+        },
+        {
+          "stage": "ocr",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0031000017770566046
+        },
+        {
+          "stage": "ordering",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.005199999577598646
+        },
+        {
+          "stage": "lexical",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.004300000000512227
+        },
+        {
+          "stage": "lexical",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0034000004234258085
+        },
+        {
+          "stage": "lexical",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0034999975468963385
+        },
+        {
+          "stage": "lexical",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0032999996619764715
+        },
+        {
+          "stage": "lexical",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.004400000761961564
+        },
+        {
+          "stage": "lexical",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0034000004234258085
+        },
+        {
+          "stage": "lexical",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0032000025385059416
+        },
+        {
+          "stage": "lexical",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0031999989005271345
+        },
+        {
+          "stage": "lexical",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0038999969547148794
+        },
+        {
+          "stage": "lexical",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0033999967854470015
+        },
+        {
+          "stage": "lexical",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.004099998477613553
+        },
+        {
+          "stage": "lexical",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0032000025385059416
+        },
+        {
+          "stage": "lexical",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.003999997716164216
+        },
+        {
+          "stage": "translation",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0038000034692231566
+        },
+        {
+          "stage": "render",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.006800000846851617
+        }
+      ],
+      "models": {
+        "translation": {
+          "engine": "current",
+          "model": "Helsinki-NLP/opus-mt-ja-en",
+          "revision": "0770961a39ba6bd66305b149c3f4110bcafca2e6",
+          "device": "cpu",
+          "batch_size": 8.0,
+          "num_beams": 4.0,
+          "target_language": "en",
+          "regional_variant_verified": true
+        },
+        "detection": {
+          "engine": "current",
+          "model": "ogkalu/comic-text-and-bubble-detector",
+          "revision": "16e8a622f91fabc6b5b65c96d32d1183f8843546",
+          "device": "cpu",
+          "artifact": "model.safetensors",
+          "threshold": 0.5,
+          "bubble_threshold": 0.5,
+          "free_threshold": 0.5
+        },
+        "ocr": {
+          "engine": "manga-ocr",
+          "revision": null
+        },
+        "settings": {
+          "analysis_device": "cpu",
+          "target_language": "en",
+          "padding": 4,
+          "minimum_side": 3,
+          "minimum_font_size": 14,
+          "maximum_font_size": 30,
+          "preferred_font_size": 26,
+          "font_margin": 3,
+          "translation_mode": "sentences",
+          "context_policy": "none",
+          "ordering": "bands",
+          "glossary_enabled": false,
+          "glossary_application": "none"
+        }
+      },
+      "stage_observations": [],
+      "status_latency": {
+        "samples": 1,
+        "median_ms": 2.6,
+        "max_ms": 2.6
+      },
+      "bubble_reuse_valid": true
+    },
+    {
+      "operation": "new_page",
+      "http_wall_ms": 2041.48,
+      "response_bytes": 855137,
+      "resources_before": {
+        "working_set_bytes": 1470509056,
+        "peak_working_set_bytes": 1499791360,
+        "cpu_seconds": 94.5625,
+        "source": "Windows GetProcessMemoryInfo/GetProcessTimes; VRAM not measured"
+      },
+      "resources_after": {
+        "working_set_bytes": 1434001408,
+        "peak_working_set_bytes": 1571590144,
+        "cpu_seconds": 110.65625,
+        "source": "Windows GetProcessMemoryInfo/GetProcessTimes; VRAM not measured"
+      },
+      "counts": {
+        "rendered": 1,
+        "preserved": 1,
+        "undetected": null
+      },
+      "timings": {
+        "analysis": {
+          "detection_ms": 814.8149999979069,
+          "ocr_ms": 523.6832000009599,
+          "translation_ms": 279.83630000017,
+          "analysis_ms": 3.40400000277441,
+          "total_ms": 1734.7115999982634,
+          "pipeline_total_ms": 1952.0454999983485
+        },
+        "rendering": {
+          "mask_ms": 54.07530000229599,
+          "inpainting_ms": 7.707099997787736,
+          "typesetting_ms": 63.693600000988226,
+          "total_ms": 128.21299999995972
+        },
+        "backend_before_pack_ms": 1971.1807000021508
+      },
+      "cache_stages": [
+        {
+          "stage": "detection",
+          "source": "miss",
+          "restored": false,
+          "lookup_ms": 0.1781999999366235
+        },
+        {
+          "stage": "ocr",
+          "source": "miss",
+          "restored": false,
+          "lookup_ms": 0.17270000171265565
+        },
+        {
+          "stage": "ocr",
+          "source": "miss",
+          "restored": false,
+          "lookup_ms": 0.1426999988325406
+        },
+        {
+          "stage": "ordering",
+          "source": "miss",
+          "restored": false,
+          "lookup_ms": 0.14210000153980218
+        },
+        {
+          "stage": "lexical",
+          "source": "miss",
+          "restored": false,
+          "lookup_ms": 0.1205000007757917
+        },
+        {
+          "stage": "lexical",
+          "source": "miss",
+          "restored": false,
+          "lookup_ms": 0.11979999908362515
+        },
+        {
+          "stage": "translation",
+          "source": "miss",
+          "restored": false,
+          "lookup_ms": 0.15139999959501438,
+          "compute_ms": 279.83630000017
+        },
+        {
+          "stage": "render",
+          "source": "miss",
+          "restored": false,
+          "lookup_ms": 0.22620000163442455,
+          "compute_ms": 128.46669999998994
+        }
+      ],
+      "models": {
+        "translation": {
+          "engine": "current",
+          "model": "Helsinki-NLP/opus-mt-ja-en",
+          "revision": "0770961a39ba6bd66305b149c3f4110bcafca2e6",
+          "device": "cpu",
+          "batch_size": 8.0,
+          "num_beams": 4.0,
+          "target_language": "en",
+          "regional_variant_verified": true
+        },
+        "detection": {
+          "engine": "current",
+          "model": "ogkalu/comic-text-and-bubble-detector",
+          "revision": "16e8a622f91fabc6b5b65c96d32d1183f8843546",
+          "device": "cpu",
+          "artifact": "model.safetensors",
+          "threshold": 0.5,
+          "bubble_threshold": 0.5,
+          "free_threshold": 0.5
+        },
+        "ocr": {
+          "engine": "manga-ocr",
+          "revision": null
+        },
+        "settings": {
+          "analysis_device": "cpu",
+          "target_language": "en",
+          "padding": 4,
+          "minimum_side": 3,
+          "minimum_font_size": 14,
+          "maximum_font_size": 30,
+          "preferred_font_size": 26,
+          "font_margin": 3,
+          "translation_mode": "sentences",
+          "context_policy": "none",
+          "ordering": "bands",
+          "glossary_enabled": false,
+          "glossary_application": "none"
+        }
+      },
+      "stage_observations": [
+        [
+          "detection",
+          "processing"
+        ],
+        [
+          "translation",
+          "processing"
+        ]
+      ],
+      "status_latency": {
+        "samples": 3,
+        "median_ms": 2.03,
+        "max_ms": 2.64
+      },
+      "bubble_reuse_valid": true
+    },
+    {
+      "operation": "translation_refresh",
+      "http_wall_ms": 2862.7,
+      "response_bytes": 1117842,
+      "resources_before": {
+        "working_set_bytes": 1434001408,
+        "peak_working_set_bytes": 1571590144,
+        "cpu_seconds": 110.65625,
+        "source": "Windows GetProcessMemoryInfo/GetProcessTimes; VRAM not measured"
+      },
+      "resources_after": {
+        "working_set_bytes": 1470160896,
+        "peak_working_set_bytes": 1571590144,
+        "cpu_seconds": 130.484375,
+        "source": "Windows GetProcessMemoryInfo/GetProcessTimes; VRAM not measured"
+      },
+      "counts": {
+        "rendered": 9,
+        "preserved": 4,
+        "undetected": null
+      },
+      "timings": {
+        "analysis": {
+          "detection_ms": 0.0,
+          "ocr_ms": 0.0,
+          "translation_ms": 2005.28789999953,
+          "analysis_ms": 0.0,
+          "total_ms": 2135.343299996748,
+          "pipeline_total_ms": 2723.1319999991683
+        },
+        "rendering": {
+          "mask_ms": 56.21830000745831,
+          "inpainting_ms": 12.072599998646183,
+          "typesetting_ms": 388.76550000713905,
+          "total_ms": 463.8243000008515
+        },
+        "backend_before_pack_ms": 2740.745600000082
+      },
+      "cache_stages": [
+        {
+          "stage": "detection",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.006499998562503606
+        },
+        {
+          "stage": "ocr",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.006499998562503606
+        },
+        {
+          "stage": "ocr",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.005100002454128116
+        },
+        {
+          "stage": "ocr",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0028000031306874007
+        },
+        {
+          "stage": "ocr",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0030000010156072676
+        },
+        {
+          "stage": "ocr",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0029000002541579306
+        },
+        {
+          "stage": "ocr",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0032999996619764715
+        },
+        {
+          "stage": "ocr",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0027999994927085936
+        },
+        {
+          "stage": "ocr",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0025999979698099196
+        },
+        {
+          "stage": "ocr",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0029000002541579306
+        },
+        {
+          "stage": "ocr",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0027999994927085936
+        },
+        {
+          "stage": "ocr",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0027999994927085936
+        },
+        {
+          "stage": "ocr",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0026999987312592566
+        },
+        {
+          "stage": "ocr",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0041000021155923605
+        },
+        {
+          "stage": "ordering",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.004800000169780105
+        },
+        {
+          "stage": "lexical",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0047000030463095754
+        },
+        {
+          "stage": "lexical",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.00419999923906289
+        },
+        {
+          "stage": "lexical",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0030999981390777975
+        },
+        {
+          "stage": "lexical",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0035000011848751456
+        },
+        {
+          "stage": "lexical",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0035000011848751456
+        },
+        {
+          "stage": "lexical",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.004099998477613553
+        },
+        {
+          "stage": "lexical",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0032999996619764715
+        },
+        {
+          "stage": "lexical",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0031000017770566046
+        },
+        {
+          "stage": "lexical",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0034999975468963385
+        },
+        {
+          "stage": "lexical",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.005300000339047983
+        },
+        {
+          "stage": "lexical",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.004699999408330768
+        },
+        {
+          "stage": "lexical",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0035000011848751456
+        },
+        {
+          "stage": "lexical",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0032999996619764715
+        },
+        {
+          "stage": "translation",
+          "source": "refresh",
+          "restored": false,
+          "lookup_ms": 0.0013999997463542968,
+          "compute_ms": 2005.28789999953
+        },
+        {
+          "stage": "render",
+          "source": "refresh",
+          "restored": false,
+          "lookup_ms": 0.0021000014385208488,
+          "compute_ms": 464.1485000029206
+        }
+      ],
+      "models": {
+        "translation": {
+          "engine": "current",
+          "model": "Helsinki-NLP/opus-mt-ja-en",
+          "revision": "0770961a39ba6bd66305b149c3f4110bcafca2e6",
+          "device": "cpu",
+          "batch_size": 8.0,
+          "num_beams": 4.0,
+          "target_language": "en",
+          "regional_variant_verified": true
+        },
+        "detection": {
+          "engine": "current",
+          "model": "ogkalu/comic-text-and-bubble-detector",
+          "revision": "16e8a622f91fabc6b5b65c96d32d1183f8843546",
+          "device": "cpu",
+          "artifact": "model.safetensors",
+          "threshold": 0.5,
+          "bubble_threshold": 0.5,
+          "free_threshold": 0.5
+        },
+        "ocr": {
+          "engine": "manga-ocr",
+          "revision": null
+        },
+        "settings": {
+          "analysis_device": "cpu",
+          "target_language": "en",
+          "padding": 4,
+          "minimum_side": 3,
+          "minimum_font_size": 14,
+          "maximum_font_size": 30,
+          "preferred_font_size": 26,
+          "font_margin": 3,
+          "translation_mode": "sentences",
+          "context_policy": "none",
+          "ordering": "bands",
+          "glossary_enabled": false,
+          "glossary_application": "none"
+        }
+      },
+      "stage_observations": [
+        [
+          "translation",
+          "processing"
+        ],
+        [
+          "render",
+          "processing"
+        ]
+      ],
+      "status_latency": {
+        "samples": 4,
+        "median_ms": 1.99,
+        "max_ms": 22.17
+      },
+      "bubble_reuse_valid": true
+    },
+    {
+      "operation": "font_refresh",
+      "http_wall_ms": 844.77,
+      "response_bytes": 1127303,
+      "resources_before": {
+        "working_set_bytes": 1470160896,
+        "peak_working_set_bytes": 1571590144,
+        "cpu_seconds": 130.484375,
+        "source": "Windows GetProcessMemoryInfo/GetProcessTimes; VRAM not measured"
+      },
+      "resources_after": {
+        "working_set_bytes": 1472827392,
+        "peak_working_set_bytes": 1571590144,
+        "cpu_seconds": 131.578125,
+        "source": "Windows GetProcessMemoryInfo/GetProcessTimes; VRAM not measured"
+      },
+      "counts": {
+        "rendered": 8,
+        "preserved": 5,
+        "undetected": null
+      },
+      "timings": {
+        "analysis": {
+          "detection_ms": 0.0,
+          "ocr_ms": 0.0,
+          "translation_ms": 0.0,
+          "analysis_ms": 0.0,
+          "total_ms": 135.1312999977381,
+          "pipeline_total_ms": 697.0319000029122
+        },
+        "rendering": {
+          "mask_ms": 53.22659999364987,
+          "inpainting_ms": 10.283700001309626,
+          "typesetting_ms": 369.3944999940868,
+          "total_ms": 438.79110000125365
+        },
+        "backend_before_pack_ms": 718.4119999983523
+      },
+      "cache_stages": [
+        {
+          "stage": "detection",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.007200000254670158
+        },
+        {
+          "stage": "ocr",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.006099999154685065
+        },
+        {
+          "stage": "ocr",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0037999998312443495
+        },
+        {
+          "stage": "ocr",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0032000025385059416
+        },
+        {
+          "stage": "ocr",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0030999981390777975
+        },
+        {
+          "stage": "ocr",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0032999996619764715
+        },
+        {
+          "stage": "ocr",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0029999973776284605
+        },
+        {
+          "stage": "ocr",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.004699999408330768
+        },
+        {
+          "stage": "ocr",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0030999981390777975
+        },
+        {
+          "stage": "ocr",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0030999981390777975
+        },
+        {
+          "stage": "ocr",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0030000010156072676
+        },
+        {
+          "stage": "ocr",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0029000002541579306
+        },
+        {
+          "stage": "ocr",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0030000010156072676
+        },
+        {
+          "stage": "ocr",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0040000013541430235
+        },
+        {
+          "stage": "ordering",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.006499998562503606
+        },
+        {
+          "stage": "lexical",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.005199999577598646
+        },
+        {
+          "stage": "lexical",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.00419999923906289
+        },
+        {
+          "stage": "lexical",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0034000004234258085
+        },
+        {
+          "stage": "lexical",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.004800000169780105
+        },
+        {
+          "stage": "lexical",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.016000001778593287
+        },
+        {
+          "stage": "lexical",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.00419999923906289
+        },
+        {
+          "stage": "lexical",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.003999997716164216
+        },
+        {
+          "stage": "lexical",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0037000027077738196
+        },
+        {
+          "stage": "lexical",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.004699999408330768
+        },
+        {
+          "stage": "lexical",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.005300000339047983
+        },
+        {
+          "stage": "lexical",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0040000013541430235
+        },
+        {
+          "stage": "lexical",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.005700003384845331
+        },
+        {
+          "stage": "lexical",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.0036999990697950125
+        },
+        {
+          "stage": "translation",
+          "source": "memory",
+          "restored": true,
+          "lookup_ms": 0.006199999916134402
+        },
+        {
+          "stage": "render",
+          "source": "refresh",
+          "restored": false,
+          "lookup_ms": 0.0014999968698248267,
+          "compute_ms": 439.0681000004406
+        }
+      ],
+      "models": {
+        "translation": {
+          "engine": "current",
+          "model": "Helsinki-NLP/opus-mt-ja-en",
+          "revision": "0770961a39ba6bd66305b149c3f4110bcafca2e6",
+          "device": "cpu",
+          "batch_size": 8.0,
+          "num_beams": 4.0,
+          "target_language": "en",
+          "regional_variant_verified": true
+        },
+        "detection": {
+          "engine": "current",
+          "model": "ogkalu/comic-text-and-bubble-detector",
+          "revision": "16e8a622f91fabc6b5b65c96d32d1183f8843546",
+          "device": "cpu",
+          "artifact": "model.safetensors",
+          "threshold": 0.5,
+          "bubble_threshold": 0.5,
+          "free_threshold": 0.5
+        },
+        "ocr": {
+          "engine": "manga-ocr",
+          "revision": null
+        },
+        "settings": {
+          "analysis_device": "cpu",
+          "target_language": "en",
+          "padding": 4,
+          "minimum_side": 3,
+          "minimum_font_size": 14,
+          "maximum_font_size": 30,
+          "preferred_font_size": 26,
+          "font_margin": 3,
+          "translation_mode": "sentences",
+          "context_policy": "none",
+          "ordering": "bands",
+          "glossary_enabled": false,
+          "glossary_application": "none"
+        }
+      },
+      "stage_observations": [
+        [
+          "finalizing",
+          "processing"
+        ]
+      ],
+      "status_latency": {
+        "samples": 2,
+        "median_ms": 2.49,
+        "max_ms": 3.17
+      },
+      "bubble_reuse_valid": true
+    },
+    {
+      "operation": "startup_2",
+      "first_readiness_ms": 814.52,
+      "ready_ms": 9750.75,
+      "resources": {
+        "working_set_bytes": 1174806528,
+        "peak_working_set_bytes": 1174806528,
+        "cpu_seconds": 17.75,
+        "source": "Windows GetProcessMemoryInfo/GetProcessTimes; VRAM not measured"
+      },
+      "readiness": {
+        "initialization": "ready",
+        "selected": {
+          "ocr": "ocr-current",
+          "detection": "detector-current",
+          "translation": "current"
+        }
+      }
+    },
+    {
+      "operation": "disk_restore_after_restart",
+      "http_wall_ms": 1144.7,
+      "response_bytes": 1122148,
+      "resources_before": {
+        "working_set_bytes": 1174855680,
+        "peak_working_set_bytes": 1174855680,
+        "cpu_seconds": 17.75,
+        "source": "Windows GetProcessMemoryInfo/GetProcessTimes; VRAM not measured"
+      },
+      "resources_after": {
+        "working_set_bytes": 1363116032,
+        "peak_working_set_bytes": 1379684352,
+        "cpu_seconds": 20.34375,
+        "source": "Windows GetProcessMemoryInfo/GetProcessTimes; VRAM not measured"
+      },
+      "counts": {
+        "rendered": 9,
+        "preserved": 4,
+        "undetected": null
+      },
+      "timings": {
+        "analysis": {
+          "detection_ms": 0.0,
+          "ocr_ms": 0.0,
+          "translation_ms": 0.0,
+          "analysis_ms": 0.0,
+          "total_ms": 397.48510000208626,
+          "pipeline_total_ms": 1002.3247999997693
+        },
+        "rendering": {
+          "mask_ms": 0,
+          "inpainting_ms": 0,
+          "typesetting_ms": 0,
+          "total_ms": 0
+        },
+        "backend_before_pack_ms": 1036.2712999994983
+      },
+      "cache_stages": [
+        {
+          "stage": "detection",
+          "source": "disk",
+          "restored": true,
+          "lookup_ms": 7.2012999989965465
+        },
+        {
+          "stage": "ocr",
+          "source": "disk",
+          "restored": true,
+          "lookup_ms": 6.861400001071161
+        },
+        {
+          "stage": "ocr",
+          "source": "disk",
+          "restored": true,
+          "lookup_ms": 6.711300000461051
+        },
+        {
+          "stage": "ocr",
+          "source": "disk",
+          "restored": true,
+          "lookup_ms": 6.737099996826146
+        },
+        {
+          "stage": "ocr",
+          "source": "disk",
+          "restored": true,
+          "lookup_ms": 6.6882999999506865
+        },
+        {
+          "stage": "ocr",
+          "source": "disk",
+          "restored": true,
+          "lookup_ms": 7.0382999983849
+        },
+        {
+          "stage": "ocr",
+          "source": "disk",
+          "restored": true,
+          "lookup_ms": 7.216099998913705
+        },
+        {
+          "stage": "ocr",
+          "source": "disk",
+          "restored": true,
+          "lookup_ms": 7.84380000186502
+        },
+        {
+          "stage": "ocr",
+          "source": "disk",
+          "restored": true,
+          "lookup_ms": 7.264699997904245
+        },
+        {
+          "stage": "ocr",
+          "source": "disk",
+          "restored": true,
+          "lookup_ms": 6.7235000024084
+        },
+        {
+          "stage": "ocr",
+          "source": "disk",
+          "restored": true,
+          "lookup_ms": 6.872900001326343
+        },
+        {
+          "stage": "ocr",
+          "source": "disk",
+          "restored": true,
+          "lookup_ms": 7.241399998747511
+        },
+        {
+          "stage": "ocr",
+          "source": "disk",
+          "restored": true,
+          "lookup_ms": 7.058899998810375
+        },
+        {
+          "stage": "ocr",
+          "source": "disk",
+          "restored": true,
+          "lookup_ms": 7.178399999247631
+        },
+        {
+          "stage": "ordering",
+          "source": "disk",
+          "restored": true,
+          "lookup_ms": 7.345499998336891
+        },
+        {
+          "stage": "lexical",
+          "source": "disk",
+          "restored": true,
+          "lookup_ms": 8.748900003411109
+        },
+        {
+          "stage": "lexical",
+          "source": "disk",
+          "restored": true,
+          "lookup_ms": 6.572199999936856
+        },
+        {
+          "stage": "lexical",
+          "source": "disk",
+          "restored": true,
+          "lookup_ms": 7.440800000040326
+        },
+        {
+          "stage": "lexical",
+          "source": "disk",
+          "restored": true,
+          "lookup_ms": 6.213900000147987
+        },
+        {
+          "stage": "lexical",
+          "source": "disk",
+          "restored": true,
+          "lookup_ms": 6.4122000003408175
+        },
+        {
+          "stage": "lexical",
+          "source": "disk",
+          "restored": true,
+          "lookup_ms": 6.726700001308927
+        },
+        {
+          "stage": "lexical",
+          "source": "disk",
+          "restored": true,
+          "lookup_ms": 6.907700000738259
+        },
+        {
+          "stage": "lexical",
+          "source": "disk",
+          "restored": true,
+          "lookup_ms": 7.205699999758508
+        },
+        {
+          "stage": "lexical",
+          "source": "disk",
+          "restored": true,
+          "lookup_ms": 7.112899998901412
+        },
+        {
+          "stage": "lexical",
+          "source": "disk",
+          "restored": true,
+          "lookup_ms": 6.200400002853712
+        },
+        {
+          "stage": "lexical",
+          "source": "disk",
+          "restored": true,
+          "lookup_ms": 6.520099999761442
+        },
+        {
+          "stage": "lexical",
+          "source": "disk",
+          "restored": true,
+          "lookup_ms": 12.856999997893581
+        },
+        {
+          "stage": "lexical",
+          "source": "disk",
+          "restored": true,
+          "lookup_ms": 8.112299998174421
+        },
+        {
+          "stage": "translation",
+          "source": "disk",
+          "restored": true,
+          "lookup_ms": 7.772199998726137
+        },
+        {
+          "stage": "render",
+          "source": "disk",
+          "restored": true,
+          "lookup_ms": 8.361200001672842
+        }
+      ],
+      "models": {
+        "translation": {
+          "engine": "current",
+          "model": "Helsinki-NLP/opus-mt-ja-en",
+          "revision": "0770961a39ba6bd66305b149c3f4110bcafca2e6",
+          "device": "cpu",
+          "batch_size": 8.0,
+          "num_beams": 4.0,
+          "target_language": "en",
+          "regional_variant_verified": true
+        },
+        "detection": {
+          "engine": "current",
+          "model": "ogkalu/comic-text-and-bubble-detector",
+          "revision": "16e8a622f91fabc6b5b65c96d32d1183f8843546",
+          "device": "cpu",
+          "artifact": "model.safetensors",
+          "threshold": 0.5,
+          "bubble_threshold": 0.5,
+          "free_threshold": 0.5
+        },
+        "ocr": {
+          "engine": "manga-ocr",
+          "revision": null
+        },
+        "settings": {
+          "analysis_device": "cpu",
+          "target_language": "en",
+          "padding": 4,
+          "minimum_side": 3,
+          "minimum_font_size": 14,
+          "maximum_font_size": 30,
+          "preferred_font_size": 26,
+          "font_margin": 3,
+          "translation_mode": "sentences",
+          "context_policy": "none",
+          "ordering": "bands",
+          "glossary_enabled": false,
+          "glossary_application": "none"
+        }
+      },
+      "stage_observations": [
+        [
+          "processing",
+          "processing"
+        ],
+        [
+          "ordering",
+          "processing"
+        ]
+      ],
+      "status_latency": {
+        "samples": 2,
+        "median_ms": 22.77,
+        "max_ms": 43.67
+      },
+      "bubble_reuse_valid": true
+    }
+  ],
+  "restart_changes_browser_generation": true,
+  "environment": {
+    "python": "3.13.9",
+    "node": "22.19.0",
+    "os": "Windows 11 build 26300 AMD64",
+    "cpu": "Intel Core i7-14700K",
+    "physical_cores": 20,
+    "logical_processors": 28,
+    "torch": "2.14.0",
+    "transformers": "5.17.0",
+    "torch_threads": "application defaults; affinity/frequency/OS disk caches not controlled",
+    "vrMemory": "not measured"
+  },
+  "first_trial_startup_ms": 26602.87,
+  "first_trial_note": "Wall time only retained; first-trial launcher-PID memory measurements were invalid and discarded.",
+  "inputs": [
+    {
+      "alias": "A",
+      "dimensions": [
+        870,
+        1270
+      ],
+      "bytes": 297821,
+      "sha256": "60b0b03857b771a41fda1f7b6b23e940fef0bfd2767ac3a9ef78b29b7891ecf3"
+    },
+    {
+      "alias": "B",
+      "dimensions": [
+        870,
+        1270
+      ],
+      "bytes": 229371,
+      "sha256": "43de8cf96262612c892d7b5ffe88953b1793ba3f54e91fb41145f6fee6267540"
+    }
+  ]
+}
