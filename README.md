@@ -243,8 +243,12 @@ policy error; changing execution policy is unnecessary.
 
 1. Open `chrome://extensions`, enable **Developer mode**, and choose **Load unpacked**.
 2. Select `extension/dist` (here **`C:\Users\T-GAMER\yomiscan\extension\dist`**).
-3. Open a normal manga webpage, click YomiScan's extension action → **Select Text**, and drag around a
-   Japanese speech bubble. Only that viewport crop is sent to the local backend.
+3. Open a normal manga webpage, click YomiScan's extension action → **Select Text**, and drag around
+   one or more Japanese speech bubbles. Only that viewport crop is sent to the local backend.
+   When the page detector is prepared, every detected text block in the selection is read
+   separately, in reading order, one line per block. Set `$env:YOMISCAN_STUDY_DETECTION = "off"`
+   before startup to read the whole selection as a single block (the previous behavior; faster,
+   but it can drop text when a selection holds several blocks).
 4. Read the original, translation, readings, lemmas, POS, conjugations, and dictionary
    meanings in one scrollable popup. Extra senses expand inside it. Use **Copy Japanese**
    or **Copy English** for explicit clipboard actions; if the browser refuses access,
@@ -531,7 +535,10 @@ model fine-tuning, and cloud deployment are not implemented.
 
 ## Limitations and licensing
 
-Study Mode accepts one selected crop. Page analysis accepts a complete page and returns
+Study Mode accepts one selected crop. With the detector prepared, it reads each detected
+block separately; the first Study request then also loads the detector, and each request
+spends roughly 0.8 s on CPU detecting blocks. Text the detector misses (often large SFX)
+is not read when other blocks are found; select it on its own. Page analysis accepts a complete page and returns
 text boxes and detector scores; the OCR engine itself has no confidence score. Small, stylized, obscured, or long
 text can be misread. The generative OCR model can invent text on images without text.
 Furigana is not exposed as separate readings. Punctuation and spacing may be normalized

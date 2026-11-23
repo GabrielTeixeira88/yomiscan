@@ -44,7 +44,12 @@ class ImageAnalysisResponse(BaseModel):
 
     @classmethod
     def from_result(cls, result: ImageAnalysisResult, total_ms: float) -> "ImageAnalysisResponse":
-        return cls.from_analysis(result.analysis, ocr_ms=result.ocr.processing_time_ms, total_ms=total_ms)
+        response = cls.from_analysis(result.analysis, ocr_ms=result.ocr.processing_time_ms, total_ms=total_ms)
+        study = result.ocr.metadata.get("study_ocr")
+        if isinstance(study, dict):
+            # Allowlisted, text-free fields only: how the selection was read.
+            response.provenance["study_ocr"] = {key: study[key] for key in ("mode", "blocks", "reason") if key in study}
+        return response
 
     @classmethod
     def from_analysis(cls, analysis: TextAnalysisResult, *, ocr_ms: float = 0, total_ms: float = 0, origin: str = "study") -> "ImageAnalysisResponse":

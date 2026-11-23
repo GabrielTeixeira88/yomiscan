@@ -3,6 +3,22 @@
 Phases 1–7 below describe the existing MVP boundaries and retain their historical names.
 Post-MVP increments use descriptive feature branches, not a new numbered phase.
 
+## Stage 1 foundation (independent-assessment Option C)
+
+Strategy and gate: [independent assessment](independent-assessment/README.md),
+[Stage 2 gate](decisions/stage-2-feasibility-gate.md).
+
+**Study selections read every block.** `ImageAnalysisService.analyze_image` runs the
+page detector on the selection (`PageAnalysisService.detect_blocks`). With two or more
+blocks, each padded block is OCR'd separately in reading order (`recognize_blocks`),
+translated as one ordered batch, and tokenized per block. `analysis.analyze_recognized_blocks`
+joins texts and translations with newlines, keeping the existing Study response contract.
+With zero or one block, or with detection off/unavailable/failed, the whole selection is
+read as before. The response's `provenance.study_ocr` records `mode`, `blocks` and an
+optional text-free `reason`. `YOMISCAN_STUDY_DETECTION=auto|off` (default `auto`) is read
+by the composition root. An unprepared or failed detector is remembered, so Study
+does not retry its initialization on every request. Selection reads are not cached.
+
 ## Post-MVP reader controls, readiness and distribution
 
 `rendering/settings.py` validates immutable font scale 0.75–1.5.

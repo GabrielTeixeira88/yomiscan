@@ -122,15 +122,15 @@ class PageAnalysisService:
         ocr_ms = 0.0
         ocr_identity = component_identity(self.ocr) if cache else None
         for block in detection.blocks:
-            box = block.bbox.clipped(*image.size, padding=self.config.padding)
+            box = self._crop_box(image, block)
             ocr_start = perf_counter()
+            recognized = None
             try:
                 with image.crop(box.coordinates()) as crop:
                     ocr_key = cache.key("ocr", key, block.id, box.coordinates(), self.config.padding,
                                         pixel_identity(crop), ocr_identity) if cache and key is not None and ocr_identity is not None else None
                     lineage.append(ocr_key)
                     payload = cache.get("ocr", ocr_key) if cache else None
-                    recognized = None
                     if payload is not None:
                         try:
                             recognized = replace(TypeAdapter(OCRResult).validate_json(payload), processing_time_ms=0.0)
@@ -141,17 +141,46 @@ class PageAnalysisService:
                         ocr_ms += (perf_counter()-ocr_start)*1000
                         if cache:
                             cache.put("ocr", ocr_key, TypeAdapter(OCRResult).dump_json(replace(recognized, metadata=result_metadata(recognized.metadata))))
-                block = replace(block, original_text=recognized.text, ocr_engine=recognized.engine,
-                                ocr_metadata=recognized.metadata, ocr_ms=recognized.processing_time_ms)
             except OCRRecognitionError:
                 if cache: cache.notify("ocr", "failed")
                 logger.exception("Page block %s OCR failed", block.id)
                 ocr_ms += (perf_counter()-ocr_start)*1000
-                block = replace(block, status="error", error_message="OCR failed for this block.", failure_stage="ocr")
-            if block.status != "error" and not contains_japanese(block.original_text):
-                block = replace(block, status="filtered", error_message="No Japanese script in OCR output.")
-            blocks.append(block)
+            blocks.append(self._with_ocr(block, recognized))
         return PageExtraction(image.width, image.height, detection, tuple(blocks), detection_ms, ocr_ms, tuple(lineage))
+
+    def detect_blocks(self, image: Image.Image) -> tuple[TextBlock, ...]:
+        """Detect, filter, group and order text blocks without OCR or caching."""
+        return self._detect(image).blocks
+
+    def recognize_blocks(self, image: Image.Image, blocks: tuple[TextBlock, ...]) -> tuple[TextBlock, ...]:
+        """OCR each padded block crop in the given order, without caching.
+
+        A known OCR failure is bound to its own block, as in page extraction.
+        """
+        recognized_blocks = []
+        for block in blocks:
+            recognized = None
+            try:
+                with image.crop(self._crop_box(image, block).coordinates()) as crop:
+                    recognized = self.ocr.recognize(crop)
+            except OCRRecognitionError:
+                logger.exception("Selection block %s OCR failed", block.id)
+            recognized_blocks.append(self._with_ocr(block, recognized))
+        return tuple(recognized_blocks)
+
+    def _crop_box(self, image: Image.Image, block: TextBlock) -> BoundingBox:
+        return block.bbox.clipped(*image.size, padding=self.config.padding)
+
+    @staticmethod
+    def _with_ocr(block: TextBlock, recognized: OCRResult | None) -> TextBlock:
+        """Attach OCR output, or a safe per-block error, and filter non-Japanese text."""
+        if recognized is None:
+            return replace(block, status="error", error_message="OCR failed for this block.", failure_stage="ocr")
+        block = replace(block, original_text=recognized.text, ocr_engine=recognized.engine,
+                        ocr_metadata=recognized.metadata, ocr_ms=recognized.processing_time_ms)
+        if not contains_japanese(block.original_text):
+            block = replace(block, status="filtered", error_message="No Japanese script in OCR output.")
+        return block
 
     def _detect(self, image: Image.Image) -> DetectionResult:
         raw = self.detector.detect(image)

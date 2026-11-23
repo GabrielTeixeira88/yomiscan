@@ -9,19 +9,21 @@ from time import perf_counter
 
 from PIL import Image
 
-from .analysis import ImageAnalysisResult, TextAnalyzer, analyze_image
+from .analysis import ImageAnalysisResult, TextAnalyzer, analyze_image, analyze_recognized_blocks
 from .dictionary import SQLiteDictionary
 from .nlp import FugashiTokenizer
-from .ocr import MangaOCREngine, OCREngine
+from .ocr import MangaOCREngine, OCREngine, OCRResult
 from .translation.factory import create_translation_engine
 from .translation.base import Device
-from .detection import TextDetector
-from .page import PageAnalysisService, PageAnalysisResult
+from .detection import TextDetector, DetectionError, DetectionInitializationError
+from .page import PageAnalysisService, PageAnalysisResult, TextBlock
+import logging
+from typing import Literal
 from .cache import ProcessingCache, CacheRequest, Refresh, digest
 from .cache_identity import component_identity
 from typing import TYPE_CHECKING
 from threading import Event
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from .glossary import GlossaryStore, GlossaryEntry
 from .translation.options import TranslationOptions, capabilities, validate_options, TARGET_NAMES
 from .rendering.settings import RenderSettings
@@ -30,6 +32,17 @@ from .progress import Progress
 if TYPE_CHECKING:
     from .rendering.base import PageRenderResult
     from .rendering.service import PageTranslationRenderService
+
+
+logger = logging.getLogger(__name__)
+StudyDetection = Literal["auto", "off"]
+
+
+def study_detection_setting(environment: dict[str, str]) -> StudyDetection:
+    value = environment.get("YOMISCAN_STUDY_DETECTION", "auto")
+    if value not in ("auto", "off"):
+        raise ValueError("YOMISCAN_STUDY_DETECTION must be auto or off")
+    return value  # type: ignore[return-value]
 
 
 class PageRefreshError(RuntimeError):
@@ -43,7 +56,14 @@ class TranslationConfigurationChanged(ValueError):
 class ImageAnalysisService:
     def __init__(self, ocr: OCREngine, analyzer: TextAnalyzer, *,
                  detector: TextDetector | None = None, device: Device = "auto",
-                 cache: ProcessingCache | None = None, glossaries: GlossaryStore | None = None) -> None:
+                 cache: ProcessingCache | None = None, glossaries: GlossaryStore | None = None,
+                 study_detection: StudyDetection = "off") -> None:
+        if study_detection not in ("auto", "off"):
+            raise ValueError("study_detection must be auto or off")
+        # "auto" reads each detected block of a Study selection separately when the
+        # detector is available. The production composition root enables it.
+        self._study_detection = study_detection
+        self._study_detection_unavailable: str | None = None
         self._ocr = ocr
         self._analyzer = analyzer
         self._detector = detector
@@ -142,7 +162,60 @@ class ImageAnalysisService:
             "processing_cache": {"persistent_enabled": self.cache.enabled}, "glossary_open": self._glossaries is not None}
 
     def analyze_image(self, image: Image.Image) -> ImageAnalysisResult:
-        return analyze_image(image, self._ocr, self._analyzer)
+        """Study a selection: read every detected text block, or the whole selection.
+
+        With two or more detected blocks, each block is OCR'd separately in reading
+        order, because the OCR model reads one text block per image. Otherwise, or
+        when detection is off or unavailable, the whole selection is read as before.
+        """
+        detected, reason = self._study_blocks(image)
+        if len(detected) >= 2 and self._page_service is not None:
+            recognized = [block for block in self._page_service.recognize_blocks(image, detected)
+                          if block.status == "success"]
+            if recognized:
+                return analyze_recognized_blocks([
+                    OCRResult(block.original_text, block.ocr_engine or "unknown", block.ocr_ms or 0.0, block.ocr_metadata)
+                    for block in recognized], self._analyzer)
+            reason = "no_japanese_blocks"
+        result = analyze_image(image, self._ocr, self._analyzer)
+        study = {"mode": "selection", "blocks": len(detected)} | ({"reason": reason} if reason else {})
+        return replace(result, ocr=replace(result.ocr, metadata={**result.ocr.metadata, "study_ocr": study}))
+
+    def _study_blocks(self, image: Image.Image) -> tuple[tuple[TextBlock, ...], str | None]:
+        """Detected blocks of a Study selection, or () with the reason detection was skipped."""
+        if self._study_detection == "off":
+            return (), "disabled"
+        if self._study_detection_unavailable is not None:
+            return (), self._study_detection_unavailable
+        from .readiness import SetupUnavailable
+        try:
+            page = self._page()
+        except SetupUnavailable:
+            logger.warning("Study selections are read as one block: detector artifacts are not prepared.")
+            self._study_detection_unavailable = "detector_unavailable"
+            return (), self._study_detection_unavailable
+        except DetectionInitializationError:
+            logger.exception("Study selections are read as one block: the detector failed to initialize.")
+            self._study_detection_unavailable = "detector_failed"
+            return (), self._study_detection_unavailable
+        try:
+            return page.detect_blocks(image), None
+        except DetectionError:
+            logger.exception("Study selection detection failed; reading the whole selection.")
+            return (), "detection_failed"
+
+    def _page(self, request: CacheRequest | None = None) -> PageAnalysisService:
+        """Lazily create the page service on the owning worker; Study may never need it."""
+        if self._page_service is None:
+            if request is not None:
+                request.notify("initializing", "running")
+            from .detection.factory import create_detector
+            if self._detector is None:
+                from .readiness import require_local_models
+                require_local_models(dict(os.environ), kinds=("detection",))
+            detector = self._detector if self._detector is not None else create_detector(device=self._device)
+            self._page_service = PageAnalysisService(detector, self._ocr, self._analyzer)
+        return self._page_service
 
     def close(self) -> None:
         detector = self._page_service.detector if self._page_service is not None else self._detector
@@ -161,16 +234,7 @@ class ImageAnalysisService:
     def _analyze_page(self, image: Image.Image, request: CacheRequest, *, options: TranslationOptions | None = None,
                       cancel: Event | None = None) -> PageAnalysisResult:
         effective, entries = self._prepare_translation(options)
-        # Lazy initialization on the same owning worker: Study Mode never needs this model.
-        if self._page_service is None:
-            request.notify("initializing", "running")
-            from .detection.factory import create_detector
-            if self._detector is None:
-                from .readiness import require_local_models
-                require_local_models(dict(os.environ), kinds=("detection",))
-            detector = self._detector if self._detector is not None else create_detector(device=self._device)
-            self._page_service = PageAnalysisService(detector, self._ocr, self._analyzer)
-        return self._page_service.analyze_page(image, cache=request, options=effective, entries=entries, cancel=cancel)
+        return self._page(request).analyze_page(image, cache=request, options=effective, entries=entries, cancel=cancel)
 
     def translate_and_render_page(self, image: Image.Image, analysis: PageAnalysisResult | None = None,
                                   *, debug: bool = False, refresh: Refresh = "none",
@@ -221,6 +285,7 @@ def open_local_service(
         if callable(close):
             cleanup.callback(close)
         cache = ProcessingCache(Path(os.getenv("YOMISCAN_CACHE_DIRECTORY", ".cache/processing")))
-        service = ImageAnalysisService(ocr, TextAnalyzer(tokenizer, dictionary, translator), device=device, cache=cache)
+        service = ImageAnalysisService(ocr, TextAnalyzer(tokenizer, dictionary, translator), device=device, cache=cache,
+                                       study_detection=study_detection_setting(dict(os.environ)))
         cleanup.callback(service.close)
         yield service
