@@ -1,3 +1,4 @@
+import {backendBase} from './backend';
 import { analyzeCrop } from "./api";
 import {installSourceFetch} from './chapter/source-fetch';
 import {CaptureThrottle} from './chapter/capture-throttle';
@@ -153,7 +154,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if(message?.type === "chapter-health" || message?.type === "chapter-prepare" || message?.type === "chapter-capture") {
     const work=message.type==="chapter-prepare" ? prepareTransport() : message.type==="chapter-capture" ? pageCapture(message,sender.tab) :
-      fetch("http://127.0.0.1:8765/health",{signal:AbortSignal.timeout(5000),credentials:"omit",redirect:"error",cache:"no-store"}).then(async response=>{
+      backendBase().then(base=>fetch(base+"/health",{signal:AbortSignal.timeout(5000),credentials:"omit",redirect:"error",cache:"no-store"})).then(async response=>{
         if(!response.ok || (await response.json()).status!=="ok")throw new Error("YomiScan backend resources are unavailable. Check the server terminal.");
         const configuration=response.headers.get('X-YomiScan-Configuration');
         if(configuration && /^[a-f0-9]{64}$/.test(configuration))return {configuration_id:configuration};
@@ -162,7 +163,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       });
     work.then(data=>sendResponse({ok:true,...(data as object??{})}),error=>sendResponse({ok:false,error:message.type==="chapter-health" &&
       (error instanceof TypeError || error?.name==="TimeoutError") ?
-      "YomiScan local backend is not running or did not respond.":error instanceof Error?error.message:"Local page request failed"}));
+      "YomiScan local backend is not running or did not respond. Start yomiscan-server with the port set in Setup & readiness.":error instanceof Error?error.message:"Local page request failed"}));
     return true;
   }
   if (message?.type === "cancel") {

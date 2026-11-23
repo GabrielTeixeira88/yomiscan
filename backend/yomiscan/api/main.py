@@ -1,4 +1,4 @@
-"""Run with uvicorn yomiscan.api.main:app --host 127.0.0.1 --port 8765."""
+"""Run with uvicorn yomiscan.api.main:app --host 127.0.0.1 --port 47615 (the default port of yomiscan-server)."""
 
 import asyncio
 from collections.abc import Callable

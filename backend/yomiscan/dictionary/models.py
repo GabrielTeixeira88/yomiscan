@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -24,6 +24,8 @@ class DictionaryEntry:
     spellings: tuple[str, ...]
     readings: tuple[DictionaryReading, ...]
     senses: tuple[DictionarySense, ...]
+    # JMdict ke_pri/re_pri tags per exact spelling or reading (schema 2+; empty for schema 1).
+    form_priority: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
 
 class DictionaryError(RuntimeError):

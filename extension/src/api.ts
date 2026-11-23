@@ -1,3 +1,4 @@
+import { backendBase } from "./backend";
 export interface Meaning {
   entry_id: number; glosses: string[]; parts_of_speech: string[];
   spellings: string[]; readings: string[]; notes: string[]; labels: string[];
@@ -56,15 +57,16 @@ export function httpError(status: number): string {
 export async function analyzeCrop(blob: Blob, signal: AbortSignal): Promise<Analysis> {
   const form = new FormData();
   form.append("file", blob, "selection.png");
+  const base = await backendBase();
   let response: Response;
   try {
-    response = await fetch("http://127.0.0.1:8765/api/v1/analyze-image", {
+    response = await fetch(`${base}/api/v1/analyze-image`, {
       method: "POST", headers: {"X-YomiScan-Client": "study-extension-v1"}, body: form,
       signal, credentials: "omit", redirect: "error", cache: "no-store",
     });
   } catch (error) {
     if (signal.aborted) throw new Error("Analysis was cancelled or timed out. Try a smaller crop; the backend may still be finishing.");
-    throw new Error("Cannot reach YomiScan. Start the local server at 127.0.0.1:8765 and try again.", {cause: error});
+    throw new Error(`Cannot reach YomiScan. Start the local server at ${base.replace("http://", "")} and try again.`, {cause: error});
   }
   if (!response.ok) throw new Error(httpError(response.status));
   let value: unknown;

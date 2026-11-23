@@ -129,7 +129,7 @@ Start the configured backend and build the extension:
 
 ```powershell
 # Terminal 1, repository root (after model/JMdict setup)
-uv run uvicorn yomiscan.api.main:app --host 127.0.0.1 --port 8765 --reload
+uv run uvicorn yomiscan.api.main:app --host 127.0.0.1 --port 47615 --reload
 # Terminal 2
 cd extension
 npm.cmd ci
@@ -218,7 +218,7 @@ Terminal 1, from the repository root:
 ```powershell
 uv sync --frozen
 uv run yomiscan-prepare-defaults
-uv run uvicorn yomiscan.api.main:app --host 127.0.0.1 --port 8765 --reload
+uv run uvicorn yomiscan.api.main:app --host 127.0.0.1 --port 47615 --reload
 ```
 
 The API starts while required resources initialize. Open **Setup & readiness** to
@@ -243,8 +243,12 @@ policy error; changing execution policy is unnecessary.
 
 1. Open `chrome://extensions`, enable **Developer mode**, and choose **Load unpacked**.
 2. Select `extension/dist` (here **`C:\Users\T-GAMER\yomiscan\extension\dist`**).
-3. Open a normal manga webpage, click YomiScan's extension action → **Select Text**, and drag around a
-   Japanese speech bubble. Only that viewport crop is sent to the local backend.
+3. Open a normal manga webpage, click YomiScan's extension action → **Select Text**, and drag around
+   one or more Japanese speech bubbles. Only that viewport crop is sent to the local backend.
+   When the page detector is prepared, every detected text block in the selection is read
+   separately, in reading order, one line per block. Set `$env:YOMISCAN_STUDY_DETECTION = "off"`
+   before startup to read the whole selection as a single block (the previous behavior; faster,
+   but it can drop text when a selection holds several blocks).
 4. Read the original, translation, readings, lemmas, POS, conjugations, and dictionary
    meanings in one scrollable popup. Extra senses expand inside it. Use **Copy Japanese**
    or **Copy English** for explicit clipboard actions; if the browser refuses access,
@@ -256,7 +260,7 @@ can leave it unassigned; change the binding at `chrome://extensions/shortcuts`.
 Reload the extension and refresh the manga tab after rebuilding. Watch rebuilds code
 but does not reload Chrome or type-check changes; run `npm.cmd run typecheck` separately.
 
-Selected screenshots are sent only to the local YomiScan backend at `127.0.0.1:8765`.
+Selected screenshots are sent only to the local YomiScan backend at `127.0.0.1:47615` (or your configured port).
 Initial model/dictionary/dependency downloads are separate from local image analysis.
 The full visible-tab screenshot is transient in extension memory; only the selected
 crop is uploaded. Images/results are not automatically saved to disk. A diagnostic
@@ -270,12 +274,12 @@ only if clicked.
   failure. Fix setup and restart; see terminal diagnostics.
 - `POST /api/v1/analyze-image`: multipart upload named **`file`**, plus header
   **`X-YomiScan-Client: study-extension-v1`**. Supports still PNG, JPEG and WebP.
-- API schema: `http://127.0.0.1:8765/docs`. POST clients must supply the client header;
+- API schema: `http://127.0.0.1:47615/docs`. POST clients must supply the client header;
   the curl example is the simplest manual request.
 
 ```powershell
-curl.exe http://127.0.0.1:8765/health
-curl.exe -H "X-YomiScan-Client: study-extension-v1" -F "file=@samples/test.png" http://127.0.0.1:8765/api/v1/analyze-image
+curl.exe http://127.0.0.1:47615/health
+curl.exe -H "X-YomiScan-Client: study-extension-v1" -F "file=@samples/test.png" http://127.0.0.1:47615/api/v1/analyze-image
 ```
 
 JSON contains `original_text`, separate `translation`, `processing` times, and ordered
@@ -295,9 +299,14 @@ $env:YOMISCAN_EXTENSION_ORIGINS = "chrome-extension://YOUR_EXTENSION_ID"
 
 The custom header requires preflight for webpage requests; unapproved Origin/Host
 headers are rejected. This is a local development boundary, not authentication against
-other programs on your machine. The extension's fixed backend request URL sends analysis
-to loopback port 8765; optional source-image host access is separate. Keep that port unless you
-rebuild the extension with matching changes. Use one Uvicorn worker to avoid duplicating
+other programs on your machine. The extension sends analysis only to loopback
+(`127.0.0.1`) on its configured port; optional source-image host access is separate.
+
+**Backend port.** The default is **47615** (`yomiscan-server` and the extension). It is
+deliberately not 8765, AnkiConnect's default port, which earlier YomiScan versions used.
+To use another port, start `uv run yomiscan-server --port 8790` and enter the same number
+in **Setup & readiness → Backend port → Save Port**. Ports below 1024 are rejected.
+Use one Uvicorn worker to avoid duplicating
 model memory. See [extension instructions](extension/README.md) and
 [Phase 4 validation/checklist](docs/phase-4-validation.md).
 
@@ -389,6 +398,14 @@ database on Windows. The database records source filename, SHA-256, import times
 source/license URLs, and transformation details. Initial setup needs network access;
 all subsequent tokenization and dictionary queries are fully local. No dictionary API
 or Jisho requests are used.
+
+**Candidate ranking (schema 2).** The importer now keeps JMdict's per-form priority tags
+(`news1`, `ichi1`, `nf12`, …). Each token's candidates are ordered by agreement with the
+morphological analysis: kanji lemma, part of speech, headword, reading, then commonness.
+Particles and auxiliaries drop unrelated homophones, so は shows the topic particle,
+not 歯 "tooth". Databases built before this change (schema 1) still work, but without
+commonness ranking; stop the backend and re-run the import command above to upgrade.
+The backend logs a warning while a schema-1 database is in use.
 
 ## Analyze text or images
 
@@ -506,6 +523,11 @@ mocked OCR/translation-to-analysis pipeline. Tests need no network or neural wei
 downloaded JMdict database is not required for tests. See
 [Phase 2 validation](docs/phase-2-validation.md) for actual execution results.
 
+`uv run python scripts/evaluate_lexical.py` scores dictionary ranking against the
+hand-written golden set in `benchmarks/lexical-golden.jsonl` using your local JMdict
+(no models). See [evaluation sets](docs/evaluation/README.md) for the format, recorded
+results (76.1% → 99.3% on its 138 expectations) and the owner-supplied page corpus specification.
+
 See [sample testing instructions](samples/README.md) for a manual evaluation matrix.
 Do not commit copyrighted screenshots. Compare actual OCR with a manually verified
 transcription before describing recognition as reliable.
@@ -531,7 +553,10 @@ model fine-tuning, and cloud deployment are not implemented.
 
 ## Limitations and licensing
 
-Study Mode accepts one selected crop. Page analysis accepts a complete page and returns
+Study Mode accepts one selected crop. With the detector prepared, it reads each detected
+block separately; the first Study request then also loads the detector, and each request
+spends roughly 0.8 s on CPU detecting blocks. Text the detector misses (often large SFX)
+is not read when other blocks are found; select it on its own. Page analysis accepts a complete page and returns
 text boxes and detector scores; the OCR engine itself has no confidence score. Small, stylized, obscured, or long
 text can be misread. The generative OCR model can invent text on images without text.
 Furigana is not exposed as separate readings. Punctuation and spacing may be normalized

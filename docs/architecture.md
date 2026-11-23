@@ -3,6 +3,69 @@
 Phases 1–7 below describe the existing MVP boundaries and retain their historical names.
 Post-MVP increments use descriptive feature branches, not a new numbered phase.
 
+## Stage 1 foundation (independent-assessment Option C)
+
+Strategy and gate: [independent assessment](independent-assessment/README.md),
+[Stage 2 gate](decisions/stage-2-feasibility-gate.md).
+
+**Study selections read every block.** `ImageAnalysisService.analyze_image` runs the
+page detector on the selection (`PageAnalysisService.detect_blocks`). With two or more
+blocks, each padded block is OCR'd separately in reading order (`recognize_blocks`),
+translated as one ordered batch, and tokenized per block. `analysis.analyze_recognized_blocks`
+joins texts and translations with newlines, keeping the existing Study response contract.
+With zero or one block, or with detection off/unavailable/failed, the whole selection is
+read as before. The response's `provenance.study_ocr` records `mode`, `blocks` and an
+optional text-free `reason`. `YOMISCAN_STUDY_DETECTION=auto|off` (default `auto`) is read
+by the composition root. An unprepared or failed detector is remembered, so Study
+does not retry its initialization on every request. Selection reads are not cached.
+
+**Ranked dictionary candidates.** JMdict schema 2 stores `ke_pri`/`re_pri` tags per
+exact form (`DictionaryEntry.form_priority`). Schema 1 databases remain readable, with
+empty priorities and a startup warning. `lexical_ranking.py` holds deterministic,
+data-driven rules. `choose_matches` keeps the first-matching-form lookup for content
+words. For particles/auxiliaries it may continue to a later form (ん → lemma の) when
+that form's entry is primarily the right part of speech. `rank_entries` orders by
+kanji-lemma agreement, then first-sense/later-sense POS agreement (UniDic `pos1` →
+JMdict labels), headword, reading, JMdict "common" tags, `nfXX` band, and entry ID.
+Particles and auxiliaries drop non-agreeing homophones when an agreeing entry exists.
+Sense order within an entry is unchanged. The lexical cache key includes the ranking
+module. Multi-token expressions (しょうがない) and grammar notes remain Stage 3 work.
+
+**Configurable loopback port.** `extension/src/backend.ts` owns the backend address:
+`http://127.0.0.1:<port>`, default 47615 (not AnkiConnect's 8765), with an optional
+`backendPort` in `chrome.storage.local` (1024–65535), edited in Setup & readiness.
+The service worker and content scripts read it from storage. The offscreen document has
+no storage access, so the content-side transport sends the origin in its `begin`
+message and the offscreen document accepts only a parsed loopback origin.
+`yomiscan-server --port` defaults to the same 47615 (`cli.DEFAULT_PORT`).
+
+**Study selection document identity (audit AU-01).** `navigation.documentKey` (origin,
+path and query; hash ignored) is recorded at capture. Screenshot verification rejects
+a changed document. A reply that arrives after a document change is discarded with an
+explanation, and Chrome's Navigation API `navigate` event closes a pending selection or
+discards a processing one. The browser fixture reproduces a `pushState` chapter change
+during processing.
+
+**Study popup.** Senses of the best-ranked entry are shown first. Other entries are
+folded under "N other dictionary entries" with dividers, so another word's senses never
+appear as this word's. The footer states how a selection was read
+(`provenance.study_ocr`). Text actions (`button.action`) no longer inherit the 30×30
+close-button size (audit AU-04).
+
+**Evaluation.** `lexical_evaluation.py` (`scripts/evaluate_lexical.py`) scores ranking
+against `benchmarks/lexical-golden.jsonl` without models. See
+[evaluation sets](evaluation/README.md). The page-corpus manifest reuses `vision_benchmark`.
+
+**Deferred from Stage 1, with reasons.**
+- *ONNX INT8 detector as default:* its adoption rule (recall within 1 block per 100 of
+  PyTorch) needs the owner-supplied page corpus. The existing 3-page result is not enough.
+  It would also cut Study's added ~0.8 s detection time to about 0.1 s (Repo-reported).
+- *CUDA-enabled PyTorch for the owner's GPU:* resolving CUDA wheels in `uv.lock` affects
+  every platform and CI download size. Stage 2 may make PyTorch optional (ONNX/browser
+  runtimes), so this waits for that decision. A CUDA build installed into the local
+  `.venv` with `uv pip` works for experiments, but the next `uv sync` restores the locked CPU build.
+- *Expanded translation set:* waits for real lines from the page corpus.
+
 ## Post-MVP reader controls, readiness and distribution
 
 `rendering/settings.py` validates immutable font scale 0.75–1.5.

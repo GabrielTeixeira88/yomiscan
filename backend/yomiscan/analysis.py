@@ -21,6 +21,7 @@ from .cache import CacheRequest
 from .cache_identity import component_identity, algorithm, result_metadata
 from pydantic import TypeAdapter, ValidationError
 from .glossary import GlossaryEntry, applicable_terms
+from .lexical_ranking import choose_matches
 from .translation.options import TranslationOptions, validate_options, capabilities
 from .translation.structured import PageTranslationRequest, TranslationSegment, CONTRACT_VERSION, StructuredTranslationError
 from .translation.base import TranslationContext
@@ -85,7 +86,7 @@ class TextAnalyzer:
         results: list[TextAnalysisResult | Exception] = []
         for text in texts:
             try:
-                lexical_key = cache.key("lexical", text, lexical_identity, algorithm("analysis.py")) if cache and all(
+                lexical_key = cache.key("lexical", text, lexical_identity, algorithm("analysis.py", "lexical_ranking.py")) if cache and all(
                     item is not None for item in lexical_identity) else None
                 payload = cache.get("lexical", lexical_key) if cache else None
                 lexical = None
@@ -220,16 +221,12 @@ class TextAnalyzer:
         tokens = []
         entries: dict[int, DictionaryEntry] = {}
         cache: dict[str, tuple[DictionaryEntry, ...]] = {}
+        def lookup(form: str) -> tuple[DictionaryEntry, ...]:
+            if form not in cache:
+                cache[form] = self._dictionary.lookup(form)
+            return cache[form]
         for token in self._tokenizer.tokenize(text):
-            matches: tuple[DictionaryEntry, ...] = ()
-            matched_form = None
-            for candidate in lookup_candidates(token):
-                if candidate not in cache:
-                    cache[candidate] = self._dictionary.lookup(candidate)
-                matches = cache[candidate]
-                if matches:
-                    matched_form = candidate
-                    break
+            matched_form, matches = choose_matches(token, lookup_candidates(token), lookup)
             entries.update((entry.entry_id, entry) for entry in matches)
             tokens.append(AnalyzedToken(token, matched_form, tuple(e.entry_id for e in matches)))
         return TextAnalysisResult(
@@ -240,3 +237,40 @@ class TextAnalyzer:
 def analyze_image(image: Image.Image, ocr: OCREngine, analyzer: TextAnalyzer) -> ImageAnalysisResult:
     result = ocr.recognize(image)
     return ImageAnalysisResult(result, analyzer.analyze(result.text))
+
+
+def analyze_recognized_blocks(blocks: Sequence[OCRResult], analyzer: TextAnalyzer) -> ImageAnalysisResult:
+    """Analyze separately recognized blocks of one selection, in reading order.
+
+    Each block is translated as its own sentence (one native batch) and tokenized on
+    its own. The combined result keeps the single-selection contract: texts and
+    translations are joined with newlines, and tokens follow block order.
+    """
+    if not blocks:
+        raise ValueError("At least one recognized block is required")
+    texts = [block.text for block in blocks]
+    analyses = analyzer.analyze_many(texts)
+    for analysis in analyses:
+        if isinstance(analysis, Exception):
+            raise analysis
+    results = [analysis for analysis in analyses if not isinstance(analysis, Exception)]
+    entries: dict[int, DictionaryEntry] = {}
+    for analysis in results:
+        entries.update(analysis.dictionary_entries)
+    translations = [analysis.translation for analysis in results]
+    translation = None
+    if all(item is not None for item in translations):
+        first = translations[0]
+        translation = TranslationResult(
+            "\n".join(texts), "\n".join(item.translated_text for item in translations),
+            first.engine, first.model,
+            # One batch: every item reports the same whole-batch elapsed time.
+            max(item.processing_time_ms for item in translations),
+            {**first.metadata, "segments": len(translations)},
+        )
+    combined_text = "\n".join(texts)
+    ocr = OCRResult(combined_text, blocks[0].engine, sum(block.processing_time_ms for block in blocks),
+                    {"study_ocr": {"mode": "blocks", "blocks": len(blocks)}})
+    analysis = TextAnalysisResult(combined_text, tuple(token for item in results for token in item.tokens),
+                                  entries, translation, sum(item.processing_time_ms for item in results))
+    return ImageAnalysisResult(ocr, analysis)

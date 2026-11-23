@@ -1,0 +1,60 @@
+{"id": "L001", "text": "俺は行かなきゃいけないんだ", "expect": [{"surface": "は", "pos": "particle", "gloss": "topic"}, {"surface": "行か", "spelling": "行く"}, {"surface": "なきゃ", "pos": "auxiliary", "gloss": "not"}, {"surface": "いけ", "spelling": "行ける"}, {"surface": "ない", "pos": "auxiliary"}], "units": [{"text": "なきゃいけない", "gloss": "must"}]}
+{"id": "L002", "text": "食べてしまった", "expect": [{"surface": "食べ", "spelling": "食べる"}, {"surface": "て", "pos": "particle"}, {"surface": "た", "pos": "auxiliary"}], "units": [{"text": "てしまう", "gloss": "completely"}]}
+{"id": "L003", "text": "なんでそんなこと言うのよ！", "expect": [{"surface": "なん", "spelling": "何"}, {"surface": "こと", "spelling": "事"}, {"surface": "言う", "spelling": "言う"}, {"surface": "よ", "pos": "particle"}]}
+{"id": "L004", "text": "しょうがねえな", "expect": [{"surface": "な", "pos": "particle"}], "units": [{"text": "しょうがねえ", "gloss": "no"}]}
+{"id": "L005", "text": "今年は年をとった", "expect": [{"surface": "今年", "gloss": "this year"}, {"surface": "を", "pos": "particle", "gloss": "object"}, {"surface": "た", "pos": "auxiliary"}]}
+{"id": "L006", "text": "猫が好きです", "expect": [{"surface": "猫", "gloss": "cat"}, {"surface": "が", "pos": "particle", "gloss": "subject"}, {"surface": "好き", "spelling": "好き"}, {"surface": "です", "pos": "copula"}]}
+{"id": "L007", "text": "学校に行きます", "expect": [{"surface": "学校", "gloss": "school"}, {"surface": "に", "pos": "particle"}, {"surface": "行き", "spelling": "行く"}, {"surface": "ます", "pos": "auxiliary"}]}
+{"id": "L008", "text": "図書館で本を読んだ", "expect": [{"surface": "で", "pos": "particle"}, {"surface": "本", "gloss": "book"}, {"surface": "読ん", "spelling": "読む"}, {"surface": "だ", "pos": "auxiliary"}]}
+{"id": "L009", "text": "友達と映画を見た", "expect": [{"surface": "友達", "gloss": "friend"}, {"surface": "と", "pos": "particle"}, {"surface": "見", "spelling": "見る"}]}
+{"id": "L010", "text": "これは私の傘だ", "expect": [{"surface": "これ", "gloss": "this"}, {"surface": "私", "gloss": "I"}, {"surface": "の", "pos": "particle", "gloss": "possessive"}, {"surface": "傘", "gloss": "umbrella"}, {"surface": "だ", "pos": "copula"}]}
+{"id": "L011", "text": "お前もか", "expect": [{"surface": "お前", "gloss": "you"}, {"surface": "も", "pos": "particle"}, {"surface": "か", "pos": "particle"}]}
+{"id": "L012", "text": "いい天気だね", "expect": [{"surface": "いい", "gloss": "good"}, {"surface": "天気", "gloss": "weather"}, {"surface": "ね", "pos": "particle"}]}
+{"id": "L013", "text": "行くぞ！", "expect": [{"surface": "行く", "spelling": "行く"}, {"surface": "ぞ", "pos": "particle"}]}
+{"id": "L014", "text": "東京から大阪まで歩いた", "expect": [{"surface": "から", "pos": "particle", "gloss": "from"}, {"surface": "まで", "pos": "particle"}, {"surface": "歩い", "spelling": "歩く"}]}
+{"id": "L015", "text": "彼より背が高い", "expect": [{"surface": "彼", "gloss": "he"}, {"surface": "より", "pos": "particle"}, {"surface": "背", "spelling": "背"}, {"surface": "高い", "spelling": "高い"}]}
+{"id": "L016", "text": "もう寝たい", "expect": [{"surface": "もう", "pos": "adverb"}, {"surface": "寝", "spelling": "寝る"}, {"surface": "たい", "pos": "auxiliary"}]}
+{"id": "L017", "text": "先生に褒められた", "expect": [{"surface": "先生", "gloss": "teacher"}, {"surface": "褒め", "spelling": "褒める"}]}
+{"id": "L018", "text": "子供に野菜を食べさせる", "expect": [{"surface": "子供", "gloss": "child"}, {"surface": "野菜", "gloss": "vegetable"}, {"surface": "食べ", "spelling": "食べる"}]}
+{"id": "L019", "text": "明日は雨が降るだろう", "expect": [{"surface": "明日", "gloss": "tomorrow"}, {"surface": "雨", "gloss": "rain"}, {"surface": "降る", "spelling": "降る"}], "units": [{"text": "だろう", "gloss": "probably"}]}
+{"id": "L020", "text": "ここにいるよ", "expect": [{"surface": "ここ", "gloss": "here"}, {"surface": "いる", "pos": "verb"}, {"surface": "よ", "pos": "particle"}]}
+{"id": "L021", "text": "金がある", "expect": [{"surface": "金", "gloss": "money"}, {"surface": "ある", "pos": "verb"}]}
+{"id": "L022", "text": "大人になった", "expect": [{"surface": "大人", "gloss": "adult"}, {"surface": "なっ", "pos": "verb"}]}
+{"id": "L023", "text": "宿題をする", "expect": [{"surface": "宿題", "gloss": "homework"}, {"surface": "する", "pos": "verb"}]}
+{"id": "L024", "text": "泳ぐことができる", "expect": [{"surface": "泳ぐ", "spelling": "泳ぐ"}, {"surface": "こと", "spelling": "事"}], "units": [{"text": "ことができる", "gloss": "can"}]}
+{"id": "L025", "text": "時間がない", "expect": [{"surface": "時間", "gloss": "time"}, {"surface": "ない", "spelling": "無い"}]}
+{"id": "L026", "text": "その時、雷が鳴った", "expect": [{"surface": "時", "spelling": "時"}, {"surface": "雷", "gloss": "thunder"}, {"surface": "鳴っ", "spelling": "鳴る"}]}
+{"id": "L027", "text": "この方法がいい", "expect": [{"surface": "方法", "gloss": "method"}]}
+{"id": "L028", "text": "あの人は誰？", "expect": [{"surface": "人", "spelling": "人"}, {"surface": "誰", "gloss": "who"}]}
+{"id": "L029", "text": "気をつけて", "expect": [{"surface": "気", "spelling": "気"}], "units": [{"text": "気をつけて", "gloss": "careful"}]}
+{"id": "L030", "text": "目が覚めた", "expect": [{"surface": "目", "gloss": "eye"}, {"surface": "覚め", "spelling": "覚める"}]}
+{"id": "L031", "text": "手を貸して", "expect": [{"surface": "手", "gloss": "hand"}, {"surface": "貸し", "spelling": "貸す"}]}
+{"id": "L032", "text": "早く逃げろ！", "expect": [{"surface": "早く", "spelling": "早い"}, {"surface": "逃げろ", "spelling": "逃げる"}]}
+{"id": "L033", "text": "絶対に許さない", "expect": [{"surface": "絶対", "spelling": "絶対"}, {"surface": "許さ", "spelling": "許す"}, {"surface": "ない", "pos": "auxiliary"}]}
+{"id": "L034", "text": "知らなかった", "expect": [{"surface": "知ら", "spelling": "知る"}, {"surface": "なかっ", "pos": "auxiliary"}]}
+{"id": "L035", "text": "静かな部屋", "expect": [{"surface": "静か", "spelling": "静か"}, {"surface": "部屋", "gloss": "room"}]}
+{"id": "L036", "text": "とても強いね", "expect": [{"surface": "とても", "pos": "adverb"}, {"surface": "強い", "spelling": "強い"}, {"surface": "ね", "pos": "particle"}]}
+{"id": "L037", "text": "でも大丈夫", "expect": [{"surface": "大丈夫", "spelling": "大丈夫"}]}
+{"id": "L038", "text": "ありがとう", "expect": [{"surface": "ありがとう", "gloss": "thank"}]}
+{"id": "L039", "text": "すみません", "units": [{"text": "すみません", "gloss": "sorry"}]}
+{"id": "L040", "text": "何もしない", "expect": [{"surface": "何", "spelling": "何"}, {"surface": "も", "pos": "particle"}, {"surface": "し", "pos": "verb"}, {"surface": "ない", "pos": "auxiliary"}]}
+{"id": "L041", "text": "誰か助けて", "expect": [{"surface": "助け", "spelling": "助ける"}], "units": [{"text": "誰か", "gloss": "someone"}]}
+{"id": "L042", "text": "そうかもしれない", "units": [{"text": "かもしれない", "gloss": "maybe"}]}
+{"id": "L043", "text": "そんなわけないだろ", "units": [{"text": "わけない", "gloss": "no way"}]}
+{"id": "L044", "text": "じゃあね", "expect": [{"surface": "ね", "pos": "particle"}], "units": [{"text": "じゃあね", "gloss": "see you"}]}
+{"id": "L045", "text": "俺の勝ちだ", "expect": [{"surface": "俺", "gloss": "I"}, {"surface": "の", "pos": "particle"}, {"surface": "勝ち", "spelling": "勝ち"}]}
+{"id": "L046", "text": "負けるわけにはいかない", "expect": [{"surface": "負ける", "spelling": "負ける"}], "units": [{"text": "わけにはいかない", "gloss": "cannot"}]}
+{"id": "L047", "text": "やっと会えたね", "expect": [{"surface": "やっと", "pos": "adverb"}, {"surface": "会え", "spelling": "会う"}]}
+{"id": "L048", "text": "待ってくれ", "expect": [{"surface": "待っ", "spelling": "待つ"}, {"surface": "くれ", "pos": "verb"}]}
+{"id": "L049", "text": "見てみる", "expect": [{"surface": "見", "spelling": "見る"}]}
+{"id": "L050", "text": "本当にごめん", "expect": [{"surface": "本当", "spelling": "本当"}, {"surface": "ごめん", "gloss": "sorry"}]}
+{"id": "L051", "text": "四級の呪術師", "expect": [{"surface": "級", "spelling": "級"}, {"surface": "の", "pos": "particle"}, {"surface": "呪術", "spelling": "呪術"}]}
+{"id": "L052", "text": "万年四級", "units": [{"text": "万年", "gloss": "perpetual"}]}
+{"id": "L053", "text": "彼女は来ないと思う", "expect": [{"surface": "彼女", "gloss": "she"}, {"surface": "来", "spelling": "来る"}, {"surface": "と", "pos": "particle"}, {"surface": "思う", "spelling": "思う"}]}
+{"id": "L054", "text": "雨なのに出かけた", "expect": [{"surface": "雨", "gloss": "rain"}, {"surface": "出かけ", "spelling": "出かける"}], "units": [{"text": "のに", "gloss": "although"}]}
+{"id": "L055", "text": "何してんだよ", "expect": [{"surface": "何", "spelling": "何"}, {"surface": "よ", "pos": "particle"}]}
+{"id": "L056", "text": "うるさいな", "expect": [{"surface": "うるさい", "gloss": "noisy"}, {"surface": "な", "pos": "particle"}]}
+{"id": "L057", "text": "腹が減った", "expect": [{"surface": "腹", "spelling": "腹"}, {"surface": "減っ", "spelling": "減る"}]}
+{"id": "L058", "text": "顔を洗う", "expect": [{"surface": "顔", "gloss": "face"}, {"surface": "洗う", "spelling": "洗う"}]}
+{"id": "L059", "text": "力を貸してくれ", "expect": [{"surface": "力", "gloss": "strength"}, {"surface": "貸し", "spelling": "貸す"}]}
+{"id": "L060", "text": "まだ終わってない", "expect": [{"surface": "まだ", "pos": "adverb"}, {"surface": "終わっ", "spelling": "終わる"}]}

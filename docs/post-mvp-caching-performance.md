@@ -84,10 +84,10 @@ The localhost controls are available without the extension:
 
 ```powershell
 $headers = @{ 'X-YomiScan-Client' = 'study-extension-v1' }
-Invoke-RestMethod http://127.0.0.1:8765/api/v1/cache
-Invoke-RestMethod http://127.0.0.1:8765/api/v1/cache/settings -Method Post -Headers $headers `
+Invoke-RestMethod http://127.0.0.1:47615/api/v1/cache
+Invoke-RestMethod http://127.0.0.1:47615/api/v1/cache/settings -Method Post -Headers $headers `
   -ContentType application/json -Body '{"enabled":true,"disk_bytes":536870912}'
-Invoke-RestMethod http://127.0.0.1:8765/api/v1/cache/clear -Method Post -Headers $headers
+Invoke-RestMethod http://127.0.0.1:47615/api/v1/cache/clear -Method Post -Headers $headers
 ```
 
 Settings reject unknown fields, coercions, invalid quotas and bodies over 1 KiB.

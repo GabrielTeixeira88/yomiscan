@@ -25,7 +25,7 @@ test('terminology client uses fixed protected localhost endpoints and bounded re
   try{
     globalThis.fetch=async(input,options)=>{calls.push({url:String(input),options:options!});return Response.json(profile());};
     await translationRequest('profile',{scope:'global',target:'en'});
-    assert.equal(calls[0].url,'http://127.0.0.1:8765/api/v1/translation-profile?scope=global&target=en');
+    assert.equal(calls[0].url,'http://127.0.0.1:47615/api/v1/translation-profile?scope=global&target=en');
     assert.equal(calls[0].options.method,'GET');assert.equal(calls[0].options.credentials,'omit');
     assert.equal((calls[0].options.headers as Record<string,string>)['X-YomiScan-Client'],'study-extension-v1');
     await translationRequest('save-term',{scope:'global',source:'猫',preferred:'cat'});

@@ -23,7 +23,9 @@ export const styles = `
   button { font: inherit; cursor: pointer; background: #fff; border: 1px solid #b8c7bc;
     border-radius: 7px; width: 30px; height: 30px; color: #263d2b; }
   button:focus-visible, summary:focus-visible, a:focus-visible { outline: 2px solid #287946; outline-offset: 2px; }
-  button.copy { width:auto;height:auto;padding:4px 8px;margin-top:6px;font-size:12px; }
+  button.copy, button.action { width:auto;height:auto;padding:4px 8px;margin-top:6px;font-size:12px; }
+  button.action { margin:0 16px 12px; }
+  .entry-divider { list-style:none;margin:8px 0 2px -20px;font-size:11px;color:#637366; }
   .copy-feedback { font-size:12px;color:#637366; }
   section { padding: 12px 16px; border-bottom: 1px solid #e8e9e2; }
   h2 { margin: 0 0 6px; font-size: 10px; letter-spacing: .13em; color: #637366; text-transform: uppercase; }
@@ -220,14 +222,25 @@ export class StudyPopup {
       row.append(element("p", `POS: ${token.part_of_speech ?? "unavailable"}`, "metadata"));
       if (token.conjugation_type || token.conjugation_form) row.append(element("p", `Conjugation: ${[token.conjugation_type, token.conjugation_form].filter(Boolean).join(" / ")}`, "metadata"));
       if (!token.meanings.length) row.append(element("p", "No dictionary match", "metadata"));
+      // Candidates arrive ranked best-first. Show the best entry's first senses; fold the
+      // rest so another word's senses never appear as if they belonged to this one.
+      const best = token.meanings.filter(meaning => meaning.entry_id === token.meanings[0]?.entry_id);
+      const others = token.meanings.slice(best.length);
       const list = element("ul");
-      token.meanings.slice(0, 3).forEach(meaning => appendMeaning(list, meaning));
+      best.slice(0, 3).forEach(meaning => appendMeaning(list, meaning));
       row.append(list);
-      if (token.meanings.length > 3) {
+      const folded = best.slice(3).length, otherEntries = new Set(others.map(meaning => meaning.entry_id)).size;
+      if (folded || otherEntries) {
         const details = element("details");
-        details.append(element("summary", `${token.meanings.length - 3} more dictionary senses`));
+        details.append(element("summary", [folded ? `${folded} more senses` : "",
+          otherEntries ? `${otherEntries} other dictionary ${otherEntries === 1 ? "entry" : "entries"}` : ""].filter(Boolean).join(" · ")));
         const more = element("ul");
-        token.meanings.slice(3).forEach(meaning => appendMeaning(more, meaning));
+        best.slice(3).forEach(meaning => appendMeaning(more, meaning));
+        let entry: number | null = null;
+        for (const meaning of others) {
+          if (meaning.entry_id !== entry) { entry = meaning.entry_id; more.append(element("li", "Other entry", "entry-divider")); }
+          appendMeaning(more, meaning);
+        }
         details.append(more);
         details.addEventListener("toggle", () => this.position());
         row.append(details);
@@ -236,7 +249,12 @@ export class StudyPopup {
     }
     this.body.append(breakdown);
     const footer = element("footer");
-    footer.append(element("p", "Dictionary candidates; meanings are not selected for this context."));
+    footer.append(element("p", "Dictionary candidates ranked by the word's form and grammar; the context-specific meaning is not checked."));
+    const study = data.provenance?.study_ocr as {mode?: unknown; blocks?: unknown; reason?: unknown} | undefined;
+    if (study?.mode === "blocks" && typeof study.blocks === "number")
+      footer.append(element("p", `Read ${study.blocks} text blocks separately, in reading order (one line each).`));
+    else if (study?.reason === "detector_unavailable" || study?.reason === "detector_failed")
+      footer.append(element("p", "Text detector unavailable: the selection was read as one block, so text from several bubbles may be missing."));
     const attribution = element("a", "JMdict © EDRDG — CC BY-SA 4.0");
     attribution.href = "https://www.edrdg.org/edrdg/licence.html";
     attribution.target = "_blank"; attribution.rel = "noopener noreferrer";
@@ -245,7 +263,7 @@ export class StudyPopup {
     if(data.provenance?.analysis_origin==='page')footer.append(element('p','Reused completed page analysis; no new screenshot or OCR.'));
     footer.append(element("p", `Local processing · OCR ${Math.round(time.ocr_ms)} ms · Translation ${Math.round(time.translation_ms)} ms · Analysis ${Math.round(time.analysis_ms)} ms`));
     this.body.append(footer);
-    const save=element('button','Save to History'),saved=element('p','','copy-feedback');saved.setAttribute('role','status');
+    const save=element('button','Save to History','action'),saved=element('p','','copy-feedback');saved.setAttribute('role','status');
     save.addEventListener('click',()=>{save.disabled=true;void chrome.runtime.sendMessage({type:'study-history',operation:'save',payload:{analysis:data}}).then(reply=>{
       if(!this.listeners.signal.aborted)saved.textContent=reply?.ok?'Saved locally.':reply?.error??'History unavailable.';
     },()=>{if(!this.listeners.signal.aborted)saved.textContent='History unavailable. Reload the extension.';}).finally(()=>{save.disabled=false;});});

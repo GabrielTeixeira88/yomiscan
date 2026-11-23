@@ -4,16 +4,20 @@ import argparse
 from importlib.metadata import version
 import os
 
+# Not 8765: that is AnkiConnect's default port, often running beside YomiScan.
+DEFAULT_PORT = 47615
+
 
 def server_main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Serve YomiScan on 127.0.0.1; inspect /api/v1/readiness for setup")
     parser.add_argument("--version", action="version", version=version("yomiscan"))
-    parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument("--port", type=int, default=DEFAULT_PORT,
+                        help=f"Loopback port (default {DEFAULT_PORT}; must match the extension's Setup & readiness port)")
     parser.add_argument("--dictionary", default=os.getenv("YOMISCAN_DICTIONARY", "data/jmdict.sqlite3"))
     parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default=os.getenv("YOMISCAN_DEVICE", "auto"))
     args = parser.parse_args(argv)
-    if not 1 <= args.port <= 65535:
-        parser.error("Port must be between 1 and 65535")
+    if not 1024 <= args.port <= 65535:
+        parser.error("Port must be between 1024 and 65535")
     os.environ["YOMISCAN_DICTIONARY"], os.environ["YOMISCAN_DEVICE"] = args.dictionary, args.device
     import uvicorn
     uvicorn.run("yomiscan.api.main:app", host="127.0.0.1", port=args.port)

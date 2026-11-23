@@ -6,7 +6,7 @@ import {createHash,randomUUID} from 'node:crypto';
 import assert from "node:assert/strict";
 import path from "node:path";
 
-const mocked=process.argv.includes('--mock-backend'),backend=`http://127.0.0.1:${mocked?8774:8765}`;
+const mocked=process.argv.includes('--mock-backend'),backend=`http://127.0.0.1:${mocked?8774:47615}`;
 const {packZip,unpackZip}=await import('../.test/browser-support.mjs');
 const reportDir=path.resolve('.cache/stage1-reports-'+Date.now());
 let mockServer,mockRenders=0,mockRefreshes=0,persistentCache=false,mockConfiguration='f'.repeat(64),extensionPath=path.resolve('extension/dist');
@@ -17,10 +17,16 @@ const mockFontScales=[],mockJobs=new Map();
 if(mocked) {
   extensionPath=path.resolve('.cache/stage1-browser-extension');
   await mkdir(extensionPath,{recursive:true});
+  // Point the built bundles' default backend port at the mock server; fail if nothing matched.
+  // (The offscreen document receives the address from the content script.)
+  const redirected=[];
   for(const name of await readdir('extension/dist')) {
     const source=await readFile(path.join('extension/dist',name),'utf8');
-    await writeFile(path.join(extensionPath,name),source.replaceAll('127.0.0.1:8765','127.0.0.1:8774'));
+    const rewritten=source.replaceAll('DEFAULT_BACKEND_PORT = 47615','DEFAULT_BACKEND_PORT = 8774');
+    if(rewritten!==source&&name.endsWith('.js'))redirected.push(name);
+    await writeFile(path.join(extensionPath,name),rewritten);
   }
+  assert.deepEqual(redirected.sort(),['background.js','content.js'],'Mock backend port substitution did not match the built bundles');
   mockServer=http.createServer(async(req,res)=>{
     try {
       if(req.url==='/health'){res.setHeader('Content-Type','application/json');res.setHeader('X-YomiScan-Configuration',mockConfiguration);res.end('{"status":"ok"}');return;}
@@ -493,6 +499,9 @@ try {
     await until(()=>find(byClass('panel')));
     assert.ok((await invoke(await find(byClass('panel')),'function(){return this.innerText}')).includes('ねこ'));
     assert.equal(mockStudyCalls,beforeBubble);
+    // AU-04: the text action must not inherit the 30x30 close-button size and overflow.
+    const saveSize=await invoke(await find(byClass('panel')),"function(){const b=[...this.querySelectorAll('button')].find(x=>x.textContent==='Save to History');return {w:b.offsetWidth,client:b.clientHeight,scroll:b.scrollHeight}}");
+    assert.ok(saveSize.w>60&&saveSize.scroll<=saveSize.client+1,'Save to History fits its label: '+JSON.stringify(saveSize));
     await click('Save to History');await until(async()=>(await invoke(await find(byClass('panel')),'function(){return this.innerText}')).includes('History is off'));
     await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27},session);
     const historySummary=await find(n=>n.nodeName==='SUMMARY'&&n.children?.some(c=>c.nodeValue==='Study history'));
@@ -542,6 +551,24 @@ try {
     await click('Inspect Regions');await evaluate(session,"document.querySelector('main img').src='data:image/png;base64,'+document.querySelector('main img').src.split(',')[1]+'#changed'");
     await until(async()=>!await find(byClass('inspect-panel')));await click('Clear Session');
     report.checks.push('Source replacement invalidates inspected page identity and releases the pinned result');
+    // AU-01: an SPA chapter change (pushState) during Study processing must discard the result.
+    await activate();await click('Select Text');await until(()=>find(byClass('selection')));
+    const target=await evaluate(session,"(()=>{const r=document.querySelector('main img').getBoundingClientRect();return {x:r.x+r.width*.3,y:r.y+r.height*.2,width:r.width*.3,height:r.height*.2}})()");
+    const studyCallsBefore=mockStudyCalls;nextSlow=2500;
+    await call('Input.dispatchMouseEvent',{type:'mousePressed',x:target.x,y:target.y,button:'left',clickCount:1},session);
+    await call('Input.dispatchMouseEvent',{type:'mouseMoved',x:target.x+target.width,y:target.y+target.height,button:'left',buttons:1},session);
+    await call('Input.dispatchMouseEvent',{type:'mouseReleased',x:target.x+target.width,y:target.y+target.height,button:'left',clickCount:1},session);
+    await until(async()=>{const p=await find(byClass('panel'));return p&&(await invoke(p,'function(){return this.innerText}')).includes('Reading and translating locally');},30000);
+    const studyUrl=await evaluate(session,'location.href');
+    await evaluate(session,"history.pushState({},'',location.pathname+'?chapter=b')");
+    await until(async()=>{const p=await find(byClass('panel'));return p&&(await invoke(p,'function(){return this.innerText}')).includes('The page changed while this selection');},30000);
+    await wait(3000); // Let the slow mock response arrive; it must not replace the message.
+    const staleText=await invoke(await find(byClass('panel')),'function(){return this.innerText}');
+    assert.ok(staleText.includes('The page changed while this selection')&&!staleText.includes('WORD BREAKDOWN'),staleText);
+    assert.ok(mockStudyCalls<=studyCallsBefore+1);
+    await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27},session);
+    await evaluate(session,`history.replaceState({},'',${JSON.stringify(studyUrl)})`);
+    report.checks.push('Study result is discarded with an explanation when an SPA navigation (pushState) happens during processing');
   }
   report.status=await panel();report.requestOrder=await evaluate(offscreen,"testCalls");
   await mkdir(".cache",{recursive:true});await writeFile(mocked?".cache/stage1-browser.json":".cache/phase-7-browser.json",JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
