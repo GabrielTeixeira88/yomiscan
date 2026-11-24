@@ -8,7 +8,7 @@ needs model downloads in CI. Copyrighted pages and their text never enter Git.
 | Set | Location | Status |
 |---|---|---|
 | Lexical golden set | `benchmarks/lexical-golden.jsonl` (committed) | **60 sentences, 138 token expectations, 14 multi-token units** |
-| Page corpus (detection/OCR/rendering) | `samples/vision/` (ignored) + manifest | **Specified below; needs owner-supplied pages** |
+| Page corpus (detection/OCR/rendering) | `samples/vision/` (ignored) + manifest | **23 pages, 10 series, 253 regions; draft annotations, owner review pending** |
 | Translation set | `benchmarks/manga-dialogue.jsonl` (53 lines, committed) | Expansion with real lines waits for the page corpus |
 
 ## Lexical golden set
@@ -70,8 +70,8 @@ For each page, annotate every text region:
 
 Reading order is not in the manifest schema yet; extend it when ordering is measured.
 Set `annotations_complete` only when every region is annotated. Assign each page's
-`split` (`tuning` or `held_out`) before measuring, so thresholds are not tuned on
-held-out pages.
+`split` (`tune` or `held_out`, the values the benchmark `--split` option accepts) before
+measuring, so thresholds are not tuned on held-out pages. Split by series, never by page.
 
 Once pages exist, record the baseline (production PyTorch detector, original manga-ocr):
 detection recall, normalized CER, and per-page CPU time. The same manifest then feeds:
@@ -80,6 +80,63 @@ detection recall, normalized CER, and per-page CPU time. The same manifest then 
   block per 100 (the Stage 2 G7 rule applied early);
 - Stage 2 G1–G8;
 - furigana leakage and long-block truncation counts (assessment open questions Q17/Q18).
+
+### Recorded baseline (2026-11-24, draft annotations)
+
+**Corpus.** 23 owner-supplied pages from 10 series (action/SFX-heavy shōnen, seinen,
+shōjo, slice-of-life, isekai and narration-heavy titles; 4 in colour). The `held_out` split is 9 pages
+from 4 whole series; `tune` is 14 pages from 6 series. 253 regions: 179 dialogue,
+32 narration, 9 artwork, 33 SFX. 18 regions have `text: null` (unreadable stylised SFX,
+oval "dot" glyphs, a Latin logo); they count for detection only.
+
+**How the annotations were made.** Reference text was transcribed visually from the
+page images by the AI assistant, never from OCR output. Candidate boxes were the union of both
+detectors' proposals at a 0.25 threshold, below the production 0.5. Each page was
+then reviewed. 13 false positives were dropped (ornaments, page numbers,
+bubble outlines), 5 split bubbles were merged and 22 missed regions (mostly SFX) were
+drawn by hand. `annotations_complete` stays `false` until the owner checks the text and
+boxes, so these numbers are a **draft baseline**. The box source is biased towards what
+the detectors already find, so recall is an upper bound. Measured on an i7-14700K desktop
+(CPU, 4 threads), which is faster than the reference laptop. Latencies are not gate evidence.
+
+**Detection** (production thresholds 0.5; a region counts as found when one raw
+prediction covers ≥50% of it):
+
+| Detector | All | Dialogue | Narration | Artwork | SFX | Held-out | Load | Median page | p95 page |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| PyTorch RT-DETR-v2 (`current`) | 85.8% | 95.0% | 100% | 8/9 | 21.2% | 87.6% | 7.7 s | 940 ms | 972 ms |
+| ONNX INT8 (`onnx-int8`) | 83.4% | 93.9% | 100% | 7/9 | 12.1% | 81.9% | 1.0 s | 228 ms | 242 ms |
+
+**ONNX default decision: not adopted.** The pre-agreed rule (recall ≥ PyTorch −1 region
+per 100) fails. Overall the gap is −2.4 per 100, dialogue −1.1 and held-out −5.7. ONNX is
+about 4× faster per page and loads about 8× faster, so it stays the selectable experimental
+engine. Revisit when the corpus is reviewed and reaches 40 pages, or test a lower ONNX threshold
+on the `tune` split only.
+
+**OCR** (original manga-ocr, `current`, crops from the annotated boxes, NFKC/whitespace
+normalised CER):
+
+| Subset | Crops | CER | Exact |
+|---|---:|---:|---:|
+| All | 235 | 4.05% | 74.5% |
+| Dialogue | 177 | 3.38% | 78.0% |
+| Narration | 32 | 3.25% | 68.8% |
+| Artwork | 8 | 6.38% | 62.5% |
+| SFX | 18 | 44.2% | 55.6% |
+| Ruby-tagged | 143 | 2.83% | 77.6% |
+| Held-out | 101 | 4.15% | 71.3% |
+
+Median 371 ms per crop, p95 557 ms. Much of the non-SFX error is ellipsis length (`…` read as
+`．．．` with a different dot count) and dash versus long-vowel mark. Ignoring punctuation and
+dashes, non-SFX character error is 1.77%. The remaining errors are mostly single-character
+substitutions between similar-looking glyphs.
+
+- **Q17 furigana leakage:** none observed. 3 of 143 ruby crops produced longer output, all
+  from punctuation or a misread character, not ruby text.
+- **Q18 long-block truncation:** none. 0 of 22 blocks of ≥25 characters lost more than 2
+  characters.
+- **SFX** are the weakest class for both detection and OCR. The product does not translate
+  SFX today, so this is a known gap, not a regression.
 
 ## Translation set
 

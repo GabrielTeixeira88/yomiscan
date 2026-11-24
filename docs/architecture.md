@@ -57,9 +57,11 @@ against `benchmarks/lexical-golden.jsonl` without models. See
 [evaluation sets](evaluation/README.md). The page-corpus manifest reuses `vision_benchmark`.
 
 **Deferred from Stage 1, with reasons.**
-- *ONNX INT8 detector as default:* its adoption rule (recall within 1 block per 100 of
-  PyTorch) needs the owner-supplied page corpus. The existing 3-page result is not enough.
-  It would also cut Study's added ~0.8 s detection time to about 0.1 s (Repo-reported).
+- *ONNX INT8 detector as default:* **evaluated and not adopted** (2026-11-24). On the
+  23-page draft corpus its recall was 2.4 regions per 100 below PyTorch (dialogue 1.1;
+  held-out 5.7), which fails the adoption rule of 1 per 100. It is about 4× faster per page,
+  so it stays selectable, and the rule will be rerun on the reviewed 40-page corpus. See
+  [evaluation sets](evaluation/README.md#recorded-baseline-2026-11-24-draft-annotations).
 - *CUDA-enabled PyTorch for the owner's GPU:* resolving CUDA wheels in `uv.lock` affects
   every platform and CI download size. Stage 2 may make PyTorch optional (ONNX/browser
   runtimes), so this waits for that decision. A CUDA build installed into the local
