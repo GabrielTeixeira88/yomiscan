@@ -28,7 +28,7 @@ export class EngineControls {
   constructor() {
     const summary = document.createElement('summary');summary.textContent = 'Browser engine (preview)';
     const help = document.createElement('small');
-    help.textContent = 'Runs text detection and OCR inside Chrome, without the Python backend. Lexical analysis and translation still use the backend in this preview. Each file is checked against a SHA-256 pinned in the extension.';
+    help.textContent = 'Runs text detection, OCR and word analysis (JMdict, grammar notes) inside Chrome, without the Python backend. Translation still uses the backend in this preview. Each file is checked against a SHA-256 pinned in the extension.';
     const label = document.createElement('label');label.textContent = 'Model source ';
     Object.assign(this.source, {type: 'url', value: DEFAULT_ENGINE_SOURCE});this.source.setAttribute('aria-label', 'Browser engine model source URL');
     label.append(this.source);

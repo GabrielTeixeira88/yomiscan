@@ -179,7 +179,11 @@ production grouping and band order, and greedy manga-ocr, plus pinned, SHA-256-v
 model installation into Cache Storage from an explicit Setup action (**Advanced → Browser
 engine (preview)**). The extension pages are cross-origin isolated (COEP `require-corp`,
 COOP `same-origin`) so WASM runs multi-threaded; the CSP adds only `'wasm-unsafe-eval'`.
-Lexical analysis, translation and the engine switch follow. See the
+Increment 2 adds lexical analysis. `engine/lexical.ts` ports the analyzer, ranking, units,
+grammar and inflection over the backend's own rule JSON. `engine/lexicon.ts` adds JMdict
+SQLite (sqlite-wasm), the lindera UniDic tokenizer and the Study response. On the golden
+set it matches Python token for token and scores the same 96.7%. Translation and the
+engine switch follow. See the
 [Stage 5a record](decisions/stage-5a-browser-engine.md) for increments, measurements and
 the open hosting decision.
 

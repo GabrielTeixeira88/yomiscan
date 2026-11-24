@@ -22,6 +22,9 @@ ROOT = Path(__file__).resolve().parents[1]
 PINNED = ROOT / "extension" / "src" / "engine" / "artifact-manifest.json"
 BUNDLE = "yomiscan-browser-2026.11.1"
 MANGA_OCR = "kha-white/manga-ocr-base (Apache-2.0); ONNX export, research/stage-2"
+LINDERA = "lindera-wasm-unidic@2.1.0 (npm, pinned in extension/package-lock.json)"
+LINDERA_WASM = ROOT / "extension" / "node_modules" / "lindera-wasm-unidic" / "lindera_wasm_unidic_bg.wasm"
+JMDICT = "JMdict (EDRDG), imported by scripts/import_jmdict.py; attribution required"
 DETECTOR = "ogkalu/comic-text-and-bubble-detector@16e8a622f91fabc6b5b65c96d32d1183f8843546 (Apache-2.0); ONNX export"
 
 
@@ -32,18 +35,23 @@ class Component:
     variant: str
     license: str
     source: str
-    files: tuple[tuple[str, str], ...]  # (path inside the stage-2 cache, published path)
+    files: tuple[tuple[Path, str], ...]  # (source file, published path)
 
 
-def components(stage2: Path) -> tuple[Component, ...]:
+def components(stage2: Path, dictionary: Path = ROOT / "data" / "jmdict.sqlite3", tokenizer: Path = LINDERA_WASM) -> tuple[Component, ...]:
     ocr = lambda variant: Component(f"ocr-{variant}", "ocr", variant, "Apache-2.0", MANGA_OCR, tuple(
-        (f"manga-ocr-onnx-{variant}/{name}", f"ocr-{variant}/{name}")
+        (stage2 / f"manga-ocr-onnx-{variant}" / name, f"ocr-{variant}/{name}")
         for name in ("encoder.onnx", "decoder.onnx", "vocab.txt", "generation.json")))
     return (
         Component("detector", "detector", "fp16", "Apache-2.0", DETECTOR,
-                  (("detector-onnx/detector-fp16.onnx", "detector/detector-fp16.onnx"),)),
+                  ((stage2 / "detector-onnx" / "detector-fp16.onnx", "detector/detector-fp16.onnx"),)),
         ocr("q4"),    # WebGPU (Stage 2: 85 ms median per block)
         ocr("int8"),  # CPU / WASM (Stage 2: 194 ms median per block, 8 threads)
+        # The WASM must match the JS glue bundled in the extension: the same pinned npm package.
+        Component("tokenizer", "tokenizer", "unidic", "MIT (lindera); UniDic BSD-3-Clause", LINDERA,
+                  ((tokenizer, "tokenizer/lindera_wasm_unidic_bg.wasm"),)),
+        Component("dictionary", "dictionary", "jmdict-schema2", "CC-BY-SA-4.0 (EDRDG)", JMDICT,
+                  ((dictionary, "dictionary/jmdict.sqlite3"),)),
     )
 
 
@@ -55,18 +63,19 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def build(stage2: Path, output: Path, pinned: Path = PINNED) -> dict:
+def build(stage2: Path, output: Path, pinned: Path = PINNED, dictionary: Path = ROOT / "data" / "jmdict.sqlite3",
+          tokenizer: Path = LINDERA_WASM) -> dict:
     manifest: dict = {"schema": 1, "bundle": BUNDLE, "components": []}
-    missing = [stage2 / source for c in components(stage2) for source, _ in c.files if not (stage2 / source).is_file()]
+    missing = [source for c in components(stage2, dictionary, tokenizer) for source, _ in c.files if not source.is_file()]
     if missing:
-        raise FileNotFoundError("Missing Stage 2 exports (run the research/stage-2 export commands first): "
+        raise FileNotFoundError("Missing inputs (research/stage-2 exports, npm ci in extension/, scripts/import_jmdict.py): "
                                 + ", ".join(str(p) for p in missing))
-    for component in components(stage2):
+    for component in components(stage2, dictionary, tokenizer):
         files = []
         for source, published in component.files:
             target = output / published
             target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(stage2 / source, target)
+            shutil.copyfile(source, target)
             files.append({"path": published, "bytes": target.stat().st_size, "sha256": sha256(target)})
         manifest["components"].append({"id": component.id, "kind": component.kind, "variant": component.variant,
                                        "license": component.license, "source": component.source, "files": files})

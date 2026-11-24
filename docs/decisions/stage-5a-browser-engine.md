@@ -1,6 +1,6 @@
 # Stage 5a: browser-first engine
 
-Status: **in progress**. Increment 1 of 5 is done. Follows the [Stage 2 results](stage-2-results.md),
+Status: **in progress**. Increments 1 and 2 of 5 are done. Follows the [Stage 2 results](stage-2-results.md),
 where every hard gate passed and the owner chose browser-first even when it is slower or
 CPU-only. The Python backend stays available as the optional "local engine" (GPU, Hy-MT2).
 
@@ -17,7 +17,7 @@ Each increment is merged only with its tests and a real-model measurement.
 | # | Scope | Status |
 |---|---|---|
 | 1 | **Engine foundation and vision.** Cross-origin isolated offscreen document running ONNX Runtime Web 1.31.1. Pinned artifact manifest, verified install into Cache Storage, a Setup section. Detector, production grouping/ordering and greedy manga-ocr ported to TypeScript, plus a parity harness against the backend. | Done (see measurements) |
-| 2 | **Lexical engine.** lindera-wasm-unidic tokenizer and JMdict SQLite (sqlite-wasm, OPFS). TypeScript ports of the ranking rules plus the Stage 3 data files (`units.json`, `grammar.json`, `inflections.json`). The lexical golden set is run against the browser engine (target: the Python 96.7%). | Next |
+| 2 | **Lexical engine.** lindera-wasm-unidic tokenizer and JMdict SQLite (sqlite-wasm). TypeScript ports of the ranking rules plus the Stage 3 data files (`units.json`, `grammar.json`, `inflections.json`). The lexical golden set is run against the browser engine (target: the Python 96.7%). | Done (see measurements) |
 | 3 | **Translation.** OPUS-MT fp16 with transformers-exact beam search (Stage 2: 99/100 lines identical to Python). The Chrome Translator stays optional and experimental. | Planned |
 | 4 | **Integration.** An engine setting (Browser / Local backend). Study selection, Read Chapter and the edit-text re-analysis run through the browser engine. English in browser mode is HTML text boxes over the page; the pixel renderer stays in the local engine. | Planned |
 | 5 | **Release readiness.** First-run onboarding with sizes and consent, storage-pressure handling, laptop measurements (integrated GPU, 4-core CPU, 8 GB), and docs. | Planned |
@@ -69,6 +69,43 @@ are in report downloads and also occur on `main`.
 
 The real run also caught one bug that the unit tests could not: the default `fetch` was
 stored as a method, which Chrome rejects ("Illegal invocation").
+
+## Increment 2: lexical engine
+
+**Design.** `engine/lexical.ts` is a direct port of `analysis.py` (lookup candidates and
+`_analyze_lexical`), `lexical_ranking.py`, `lexical_units.py`, `grammar_patterns.py` and
+`inflection.py`. The rule data is not copied: the bundle imports the backend's own JSON from
+`backend/yomiscan/resources/lexical/`, so the two engines cannot drift apart.
+`engine/lexicon.ts` contains three adapters:
+- JMdict: the backend's own SQLite file, opened in memory and read-only with sqlite-wasm
+  3.54.1 (`sqlite3_deserialize`), with the same query and `hiragana` key.
+- lindera-wasm-unidic 2.1.0: its tokens are mapped to `JapaneseToken` as validated in Stage 2.
+- The Study `Analysis` response, which the popup already renders.
+
+Two new artifact components join the verified store: the tokenizer WASM (51.6 MiB, UniDic
+embedded; it must match the bundled JS glue from the same pinned npm package) and JMdict
+(119.3 MiB, CC BY-SA 4.0, attribution in the popup). sqlite-wasm itself is 0.9 MB and
+ships in `dist/sqlite/`. A device downloads about 340–365 MiB uncompressed in total. The
+1 GB budget still holds, and Stage 2 measured about 235–245 MB gzip without translation.
+
+**Port parity, golden set (Node, `extension/tests/lexical-parity.ts` +
+`scripts/compare_browser_lexical.py`).** The browser's lindera tokens were replayed through
+the unchanged Python `TextAnalyzer` on the same database. **60 / 60 golden sentences were
+identical**: lookup forms, ranked entry IDs, inflection labels, units and grammar notes.
+Golden-set score with the browser stack: **147 / 152 (96.7%)**, the same as the backend
+with fugashi + UniDic-lite. All 60 sentences took 123 ms in Node.
+
+**Real browser (WebGPU run, 10 sample pages).** For the 86 blocks that both engines read
+identically, browser analysis was compared with the backend's `analyze-page` analysis.
+Token segmentation was identical on 86 / 86, units on 86 / 86 and grammar notes on 86 / 86.
+Dictionary form plus first entry matched on 81 / 86. All 5 differences come from the
+tokenizer data, not the port: lindera's full UniDic and UniDic-lite give different lemma
+data for 何 (なに / なん) and full-width digits. The first analysis took 1.4 s, while the
+tokenizer and dictionary loaded; after that the median was 6 ms per block.
+
+**Not yet measured:** memory with the dictionary and tokenizer loaded alongside the vision
+models (G8 was measured for vision only). An OPFS-backed database would avoid holding the
+119 MiB copy in the WASM heap if memory turns out to be tight.
 
 ## Owner decision needed (not blocking development)
 

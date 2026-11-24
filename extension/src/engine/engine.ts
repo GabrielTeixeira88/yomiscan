@@ -5,6 +5,11 @@ import pinned from './artifact-manifest.json';
 import {ArtifactStore, cacheStorage, componentBytes, parseManifest, type ArtifactComponent, type InstallProgress} from './artifacts';
 import {MangaOcr, type OcrGeneration} from './vision-models';
 import {recognizePage, type PageVision} from './vision';
+import initLindera, {TokenizerBuilder} from 'lindera-wasm-unidic';
+import sqlite3InitModule from '@sqlite.org/sqlite-wasm';
+import {analyzeLexical, type JapaneseToken} from './lexical';
+import {JmdictDatabase, fromLindera, toAnalysis, type LinderaToken, type Sqlite3} from './lexicon';
+import type {Analysis} from '../api';
 
 export type Backend = 'webgpu' | 'wasm';
 export interface ComponentStatus {id: string; kind: string; variant: string; bytes: number; license: string; source: string; installed: boolean}
@@ -23,8 +28,10 @@ export async function chooseBackend(): Promise<Backend> {
 /** The components one backend needs. int8 OCR must not run on WebGPU (no fast int8 path; 10x slower). */
 export function requiredComponents(backend: Backend, components: readonly ArtifactComponent[] = manifest.components): ArtifactComponent[] {
   const ocr = backend === 'webgpu' ? 'q4' : 'int8';
-  return components.filter(c => c.kind === 'detector' || (c.kind === 'ocr' && c.variant === ocr));
+  return components.filter(c => ['detector', 'tokenizer', 'dictionary'].includes(c.kind) || (c.kind === 'ocr' && c.variant === ocr));
 }
+
+interface LexicalEngine {tokenize(text: string): JapaneseToken[]; dictionary: JmdictDatabase}
 
 export class BrowserEngine {
   private store = new ArtifactStore(cacheStorage);
@@ -38,7 +45,7 @@ export class BrowserEngine {
     const required = await Promise.all(requiredComponents(backend).map(async c => ({id: c.id, kind: c.kind, variant: c.variant,
       bytes: componentBytes(c), license: c.license, source: c.source, installed: await this.store.installed(c)})));
     return {backend, isolated: crossOriginIsolated, threads: this.threads(), bundle: manifest.bundle, required,
-      install: this.install, loaded: this.vision !== null};
+      install: this.install, loaded: this.vision !== null || this.lexical !== null};
   }
 
   /** Start downloading the missing required components from `base` (explicit user action only). */
@@ -59,6 +66,8 @@ export class BrowserEngine {
   async remove(): Promise<void> {
     if (this.install.state === 'running') throw new Error('Cancel the installation first');
     this.vision = null;
+    const lexical = this.lexical;this.lexical = null;
+    (await lexical?.catch(() => null))?.dictionary.close();
     for (const component of manifest.components) await this.store.remove(component);
     this.install = {state: 'idle'};
   }
@@ -89,6 +98,40 @@ export class BrowserEngine {
       return {ort, detector, ocr};
     })().catch(error => {this.vision = null; throw error;});
     return this.vision;
+  }
+
+  private lexical: Promise<LexicalEngine> | null = null;
+
+  private loadLexical(): Promise<LexicalEngine> {
+    this.lexical ??= (async () => {
+      const components = requiredComponents(await this.backend);
+      const component = (kind: string) => {
+        const found = components.find(c => c.kind === kind);
+        if (!found) throw new Error(`Manifest lacks the ${kind} component`);
+        return found;
+      };
+      for (const kind of ['tokenizer', 'dictionary']) if (!await this.store.installed(component(kind)))
+        throw new Error('Browser engine dictionary is not installed. Open Setup → Browser engine.');
+      // lindera's JS glue is bundled; its WASM (with UniDic inside) is the pinned artifact.
+      await initLindera({module_or_path: await this.store.read(component('tokenizer').files[0])});
+      const builder = new TokenizerBuilder();
+      builder.setDictionary('embedded://unidic'); builder.setMode('normal');
+      const tokenizer = builder.build();
+      const sqlite3 = await (sqlite3InitModule as unknown as (options: object) => Promise<Sqlite3>)({
+        locateFile: () => chrome.runtime.getURL('sqlite/sqlite3.wasm'), print: () => {}, printErr: (m: string) => console.warn('sqlite3', m)});
+      const dictionary = JmdictDatabase.open(sqlite3, await this.store.read(component('dictionary').files[0]));
+      return {dictionary, tokenize: (text: string) => text.trim() ? (tokenizer.tokenize(text) as LinderaToken[]).map(fromLindera) : []};
+    })().catch(error => {this.lexical = null; throw error;});
+    return this.lexical;
+  }
+
+  /** Tokens, ranked JMdict entries, units, grammar notes and inflection labels, in the Study shape. */
+  async analyzeText(text: string): Promise<Analysis> {
+    const started = performance.now(), lexical = await this.loadLexical();
+    const result = analyzeLexical(text, lexical.tokenize(text), form => lexical.dictionary.lookup(form));
+    const analysis = toAnalysis(result, null, {analysis_origin: 'browser'});
+    analysis.processing.analysis_ms = analysis.processing.total_ms = performance.now() - started;
+    return analysis;
   }
 
   /** Detect, group, order and OCR one page image entirely in the browser. */
