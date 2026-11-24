@@ -1,6 +1,6 @@
 # Stage 5a: browser-first engine
 
-Status: **in progress**. Increments 1–3 of 5 are done. Follows the [Stage 2 results](stage-2-results.md),
+Status: **in progress**. Increments 1–4 of 5 are done. Follows the [Stage 2 results](stage-2-results.md),
 where every hard gate passed and the owner chose browser-first even when it is slower or
 CPU-only. The Python backend stays available as the optional "local engine" (GPU, Hy-MT2).
 
@@ -19,7 +19,7 @@ Each increment is merged only with its tests and a real-model measurement.
 | 1 | **Engine foundation and vision.** Cross-origin isolated offscreen document running ONNX Runtime Web 1.31.1. Pinned artifact manifest, verified install into Cache Storage, a Setup section. Detector, production grouping/ordering and greedy manga-ocr ported to TypeScript, plus a parity harness against the backend. | Done (see measurements) |
 | 2 | **Lexical engine.** lindera-wasm-unidic tokenizer and JMdict SQLite (sqlite-wasm). TypeScript ports of the ranking rules plus the Stage 3 data files (`units.json`, `grammar.json`, `inflections.json`). The lexical golden set is run against the browser engine (target: the Python 96.7%). | Done (see measurements) |
 | 3 | **Translation.** OPUS-MT fp16 with transformers-exact beam search (Stage 2: 99/100 lines identical to Python). The Chrome Translator stays optional and experimental. | Done (see measurements) |
-| 4 | **Integration.** An engine setting (Browser / Local backend). Study selection, Read Chapter and the edit-text re-analysis run through the browser engine. English in browser mode is HTML text boxes over the page; the pixel renderer stays in the local engine. | Planned |
+| 4 | **Integration.** An engine setting (Browser / Local backend). Study selection, Read Chapter and the edit-text re-analysis run through the browser engine. English in browser mode is HTML text boxes over the page; the pixel renderer stays in the local engine. | Done (see measurements) |
 | 5 | **Release readiness.** First-run onboarding with sizes and consent, storage-pressure handling, laptop measurements (integrated GPU, 4-core CPU, 8 GB), and docs. | Planned |
 
 ## Architecture (increment 1)
@@ -139,6 +139,48 @@ differ because the backend runs fp32 in a padded page batch while the browser ru
 line at a time. Neither engine's version is clearly better. This matches Stage 2's 99/100.
 OPUS remains the default because its quality limits are known. The engine choice and the
 optional Chrome Translator are unchanged.
+
+## Increment 4: integration
+
+**Setting.** Advanced → Browser engine (preview) → "Engine for Study and reading", either
+Local backend or Browser engine, stored as `engineMode` in `chrome.storage.local`. **Local
+stays the default** until increment 5 adds first-run model download; a fresh install has no
+browser models. Changing it clears the running chapter session.
+
+**With the browser engine selected:**
+- **Select Text:** the service worker sends the crop to the engine (`study`). That ports
+  `ImageAnalysisService.analyze_image`: with two or more detected blocks, each padded
+  block is read in reading order and the results are combined as `analyze_recognized_blocks`
+  does; otherwise the whole selection is read.
+- **Edit text:** re-analysis uses the engine's `analyze-text` with translation.
+- **Read Chapter:** the page port gains a `browser` kind. The engine returns the same JSON as
+  `/api/v1/analyze-page`, so the reading layer, J/K and study cards are unchanged. The
+  backend health check, glossary profile and configuration identity are skipped; the engine's
+  installed models are checked instead.
+- **English:** each page's English button draws the block translations as HTML text boxes
+  over the bubbles. Each box is fitted to the largest font from 7 to 26 px and may widen to
+  2.5× the detected column (vertical Japanese columns are narrow) to stay readable.
+  Bubbles stay clickable through the boxes.
+- **Translate Chapter:** reads pages and shows their English at once. The pixel renderer
+  stays with the local backend.
+- **Popup:** shows "Processed by the browser engine in Chrome". Translation targets other
+  than English, glossaries and structured contracts remain backend features.
+
+**End to end, real Chrome, backend stopped.** `extension/tests/browser-engine-e2e.mjs`
+serves three sample pages as a reader and drives the real UI:
+
+| Check | Result |
+|---|---|
+| Read Chapter, 3 pages, including first model load | 14.4–14.8 s, 0 failed |
+| J → first study card (from retained analysis) | 49 ms |
+| English toggle | 5 text boxes, all fit, 15.6–23 px (median 21 px) |
+| Select Text over a page's top half | 5 blocks read separately, 5.5–5.6 s |
+| Translate Chapter (models warm) | English on every read page, 12 s for 3 pages |
+
+The local-backend paths are unchanged: the mocked reader fixture passed. A visual check of
+the overlay showed readable English inside the bubbles, after whole-word wrapping replaced
+mid-word breaks. One title block showed OPUS's literal `&gt;&gt;Hugo Barra…` hallucination,
+which the Python backend produces identically. It is a model limitation, not part of the port.
 
 ## Owner decision needed (not blocking development)
 

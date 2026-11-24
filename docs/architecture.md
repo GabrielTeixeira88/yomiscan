@@ -184,8 +184,13 @@ grammar and inflection over the backend's own rule JSON. `engine/lexicon.ts` add
 SQLite (sqlite-wasm), the lindera UniDic tokenizer and the Study response. On the golden
 set it matches Python token for token and scores the same 96.7%. Increment 3 adds OPUS-MT
 (`engine/translation.ts`): fp16 on WASM threads with the backend's exact beam search and the
-standalone `@huggingface/tokenizers`. It matched the backend on 175 of 178 real lines. The
-engine switch for Study and Read Chapter follows. See the
+standalone `@huggingface/tokenizers`. It matched the backend on 175 of 178 real lines.
+Increment 4 adds the `engineMode` setting (`engine-mode.ts`; Local by default).
+- Select Text and Edit text are routed to the engine by the service worker.
+- Read Chapter uses a `browser` page-port kind that returns analyze-page JSON.
+- English is drawn as fitted HTML text boxes by `chapter/reading-layer.ts`.
+
+See the
 [Stage 5a record](decisions/stage-5a-browser-engine.md) for increments, measurements and
 the open hosting decision.
 

@@ -27,6 +27,10 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
         const bytes = Uint8Array.from(atob(message.data), c => c.charCodeAt(0));
         return current.recognize(new Blob([bytes], {type: message.mime}));
       }
+      case 'study': {
+        if (typeof message.data !== 'string' || message.data.length > MAX_INPUT * 4 / 3 + 4 || message.mime !== 'image/png') throw new Error('Invalid selection image');
+        return current.study(new Blob([Uint8Array.from(atob(message.data), c => c.charCodeAt(0))], {type: 'image/png'}));
+      }
       case 'analyze-text':
         if (typeof message.text !== 'string' || !message.text.trim() || message.text.length > 1000) throw new Error('Text must be 1 to 1,000 characters');
         return current.analyzeText(message.text, {translate: message.translate === true});
@@ -86,7 +90,7 @@ chrome.runtime.onConnect.addListener(port => {
   let scale=1,renderOnly=false;
   let job:string|undefined;
   let translation:ReaderTranslationOptions|undefined;
-  let kind:'render'|'analyze'='render';
+  let kind:'render'|'analyze'|'browser'='render';
   const controller = new AbortController();
   const timer = setTimeout(()=>controller.abort(),300_000);
   const send = (message: unknown) => { if(connected) port.postMessage(message); };
@@ -109,7 +113,7 @@ chrome.runtime.onConnect.addListener(port => {
         renderOnly=message.renderOnly===true;
         if(message.job_id!==undefined){if(typeof message.job_id!=='string'||!/^[a-f0-9-]{36}$/.test(message.job_id))throw new Error('Invalid job identity');job=message.job_id;}
         if(message.translation!==undefined)translation=validateTranslationOptions(message.translation);
-        if(message.kind!==undefined&&message.kind!=='render'&&message.kind!=='analyze')throw new Error('Invalid page request kind');
+        if(message.kind!==undefined&&!['render','analyze','browser'].includes(message.kind))throw new Error('Invalid page request kind');
         kind=message.kind??'render';
       } else if(message.type === "chunk") {
         if(!expected) throw new Error("Missing image header");
@@ -126,6 +130,8 @@ chrome.runtime.onConnect.addListener(port => {
             controller.signal.throwIfAborted();
             const form=new FormData(); form.append("file",blob,mime==='image/jpeg'?'page.jpg':mime==='image/webp'?'page.webp':'page.png');
             if(translation)form.append('options_json',JSON.stringify(translation));
+            // Reading mode with the browser engine: same JSON as analyze-page, no backend involved.
+            if(kind==='browser'){engine??=new BrowserEngine();send({type:'analysis',data:await engine.readPage(blob,controller.signal)});return;}
             if(kind==='analyze'){send(await analyzeRequest(backend,form,job,configuration,refresh,controller.signal,send,()=>connected));return;}
             const inputHash=await imageHash(blob);
             const query=new URLSearchParams({diagnostics:'true'});

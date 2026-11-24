@@ -9,6 +9,7 @@ import {validSelection,type Rect} from '../geometry';
 import {renderPage,analyzePage,ConfigurationChanged} from "./transport";
 import {parseReadingPage,stepBubble,type ReadingPage} from './reading';
 import {ReadingLayer,bubbleRect,type ReadingLayerPage} from './reading-layer';
+import type {EngineMode} from '../engine-mode';
 import {createPageReport,type PageReportContext,type ReportOptions} from './reports';
 import {defaultTranslationOptions,validateProfile,type ReaderTranslationOptions} from './translation-options';
 import {fontScale as validateFontScale,retainsRenderedBlocks} from './font-settings';
@@ -71,7 +72,11 @@ export class ChapterTranslationSession {
   constructor(private changed:(status:ChapterSummary)=>void,private hideControls:(hidden:boolean)=>void,
               private discovery:PageDiscoveryStrategy=new GenericPageDiscovery(),
               private translation:ReaderTranslationOptions=defaultTranslationOptions(),private fontScale=1,
-              private showStudy:(data:Analysis,anchor:Rect)=>void=()=>{},readonly mode:SessionMode='translate') {
+              private showStudy:(data:Analysis,anchor:Rect)=>void=()=>{},readonly mode:SessionMode='translate',
+              /** "browser": pages are read by the in-browser engine; English is drawn as text over each bubble. */
+              readonly engine:EngineMode='local',
+              /** Translate Chapter with the browser engine: read pages and show their English at once. */
+              readonly autoEnglish=false) {
     this.queue=new ChapterQueue({process:(page,signal)=>this.process(page,signal),
       priority:page=>{const r=page.source.image.getBoundingClientRect();return viewportPriority(r.top,r.bottom,innerHeight);},
       cache:{budget:SESSION_BUDGET-FAILURE_REPORT_BUDGET,size:r=>r.bytes,protected:p=>{
@@ -128,8 +133,8 @@ export class ChapterTranslationSession {
       const reading=page.result?.reading;if(!reading)return [];
       const shown=this.englishShown.has(page.key),url=page.result?.url;
       const pending=this.englishRequests.has(page.key)||(shown&&!url&&(page.state==='queued'||page.state==='processing'));
-      const english=pending?'loading':shown&&url?'on':'off';
-      return [{key:page.key,id:page.id,image:page.source.image,source:page.source.source,reading,english}];
+      const english=this.engine==='browser'?(shown?'on':'off'):pending?'loading':shown&&url?'on':'off';
+      return [{key:page.key,id:page.id,image:page.source.image,source:page.source.source,reading,english,textOverlay:this.engine==='browser'}];
     });
   }
   private orderedPages():Page[] {
@@ -140,6 +145,11 @@ export class ChapterTranslationSession {
   toggleEnglish(key:object):void {
     const page=this.queue.pages.get(key);
     if(this.disposed||this.mode!=='read'||!page?.result?.reading)return;
+    if(this.engine==='browser'){
+      // Browser engine: the translations are already in the page analysis; drawing them is instant.
+      if(!this.englishShown.delete(key))this.englishShown.add(key);
+      this.update();return;
+    }
     if(this.englishShown.has(key)&&page.result.url){this.englishShown.delete(key);this.update();return;}
     this.englishShown.add(key);
     if(!page.result.url&&!this.englishRequests.has(key)){
@@ -187,8 +197,24 @@ export class ChapterTranslationSession {
     const data=page.reading.bubbles[bubble].analysis;
     this.showStudy({...data,provenance:{...data.provenance,reading:{page:page.id,bubble:bubble+1,bubbles:page.reading.bubbles.length}}},rect);
   }
+  /** Browser engine: no backend health, glossary profile or configuration identity. The models
+   * must be installed; English is the only target (OPUS ja-en). */
+  private async startBrowserEngine(version:number,retry:boolean):Promise<void> {
+    const reply=await chrome.runtime.sendMessage({type:'engine',operation:'status'});
+    if(!reply?.ok)throw new Error(reply?.error??'Browser engine unavailable. Reload the extension.');
+    const status=reply.data as {bundle:string;required:{installed:boolean}[]};
+    if(status.required.some(c=>!c.installed))throw new Error('Install the browser engine models first: Advanced → Browser engine (preview) → Install Models.');
+    if(this.disposed||version!==this.startVersion)return;
+    const generation='browser|'+status.bundle;
+    if(this.generation!==generation)this.queue.stop();
+    this.configuration=undefined;this.generation=generation;
+    this.notice=(this.autoEnglish?'Translating pages in the browser: English text appears over each bubble; click one to study it.':
+      'Reading pages in the browser: click an outlined bubble or press J to study it.')+' The first page also loads the models.';
+    this.reading?.suspend(false);this.observe();this.scan();
+    if(retry)this.queue.retry();else this.queue.start();
+  }
   async start(retry=false,permissionHandled=false):Promise<void> {
-    const version=++this.startVersion;this.notice="Checking local backend…";this.update();
+    const version=++this.startVersion;this.notice=this.engine==='browser'?'Checking the browser engine…':"Checking local backend…";this.update();
     try {
       const origins=[...new Set(this.discovery.discover(document).candidates.map(c=>imageHost(c.source)).filter((s):s is string=>s!==null))];
       if(origins.length && !permissionHandled) {
@@ -196,6 +222,7 @@ export class ChapterTranslationSession {
         if(permission?.pending){this.notice='Choose image-host access or capture fallbacks in the YomiScan access window.';this.update();return;}
         if(!permission?.ok)throw new Error(permission?.error??'Could not request image-host access');
       }
+      if(this.engine==='browser'){await this.startBrowserEngine(version,retry);return;}
       const reply=await chrome.runtime.sendMessage({type:"chapter-health"});
       if(!reply?.ok) throw new Error(reply?.error||"YomiScan local backend is not running.");
       if(this.disposed || version!==this.startVersion) return;
@@ -380,7 +407,9 @@ export class ChapterTranslationSession {
       const previous=page.result;
       if(this.mode==='read'){
         if(english&&previous?.reading&&previous.original)return await this.renderEnglish(previous,previous.reading,previous.original,signal,context,scale,progress);
-        return await this.readPage(candidate,signal,context,page.refreshing===true,progress);
+        const read=await this.readPage(candidate,signal,context,page.refreshing===true,progress);
+        if(this.autoEnglish)this.englishShown.add(page.key);
+        return read;
       }
       const result=await this.processImage(candidate,signal,context,page.refreshing===true,renderOnly,scale,progress);
       if(renderOnly&&previous&&!retainsRenderedBlocks(previous,result)){
@@ -409,8 +438,9 @@ export class ChapterTranslationSession {
     progress:(status:import('./progress').JobProgress)=>void):Promise<PageImageResult> {
     const pixels=await this.acquirePixels(candidate,signal,context);
     const start=performance.now();
-    this.stage='Reading page locally';this.update();
-    const data=await analyzePage(pixels.blob,signal,{refresh,configuration:this.configuration,translation:this.translation,progress}).finally(()=>{
+    this.stage=this.engine==='browser'?'Reading page in the browser':'Reading page locally';this.update();
+    const data=await analyzePage(pixels.blob,signal,this.engine==='browser'?{browser:true}:
+      {refresh,configuration:this.configuration,translation:this.translation,progress}).finally(()=>{
       context.timings.backend_roundtrip_ms=performance.now()-start;
     });signal.throwIfAborted();
     const reading=parseReadingPage(data,{width:pixels.width,height:pixels.height});

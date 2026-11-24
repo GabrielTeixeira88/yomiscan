@@ -1,6 +1,31 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {beamSearch, type NextLogits} from "../src/engine/translation";
+import {combineAnalyses} from "../src/engine/engine";
+import {parseEngineMode} from "../src/engine-mode";
+import type {Analysis} from "../src/api";
+
+test("Study blocks combine as analyze_recognized_blocks: joined text, shifted unit and grammar spans", () => {
+  const part = (text: string, translation: string | null, tokens: number): Analysis => ({original_text: text, translation,
+    processing: {ocr_ms: 0, translation_ms: 10, analysis_ms: 1, total_ms: 11},
+    tokens: Array.from({length: tokens}, (_, i) => ({surface: text[i] ?? 'x', reading: null, lemma: null, dictionary_form: null, part_of_speech: null,
+      conjugation_type: null, conjugation_form: null, meanings: []})),
+    units: [{surface: 'u', dictionary_form: 'u', start_token: 0, end_token: 2, meanings: []}],
+    grammar: [{id: 'g', name: 'g', meaning: 'm', start_token: 1, end_token: 2}], provenance: {engine_kind: 'browser'}});
+  const combined = combineAnalyses([part("あいう", "A", 3), part("えお", "B", 2)]);
+  assert.equal(combined.original_text, "あいう\nえお");
+  assert.equal(combined.translation, "A\nB");
+  assert.equal(combined.tokens.length, 5);
+  assert.deepEqual(combined.units!.map(u => [u.start_token, u.end_token]), [[0, 2], [3, 5]]);
+  assert.deepEqual(combined.grammar!.map(g => [g.start_token, g.end_token]), [[1, 2], [4, 5]]);
+  assert.equal(combined.processing.translation_ms, 20);
+  assert.equal(combineAnalyses([part("あ", "A", 1), part("い", null, 1)]).translation, null, "a missing translation is never invented");
+});
+
+test("engine mode defaults to the local backend for unknown stored values", () => {
+  assert.equal(parseEngineMode('browser'), 'browser');
+  for (const value of [undefined, null, 'gpu', 1]) assert.equal(parseEngineMode(value), 'local');
+});
 
 // Toy decoder: vocab 0 = pad, 1 = eos, 2..4 words. Logits depend only on the last token.
 const table: Record<number, number[]> = {0: [9, 0, 3, 2.9, 1], 2: [9, 0, 0, 0, 4], 3: [9, 5, 0, 0, 0], 4: [9, 6, 0, 0, 0]};
