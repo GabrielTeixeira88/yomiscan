@@ -47,7 +47,7 @@ class LocalRequestGuard:
             if message["type"] == "http.disconnect":
                 return
             body.extend(message.get("body", b""))
-            administration = scope.get("path", "").startswith(("/api/v1/cache", "/api/v1/glossaries"))
+            administration = scope.get("path", "").startswith(("/api/v1/cache", "/api/v1/glossaries", "/api/v1/translation-engine"))
             text = scope.get("path") == "/api/v1/analyze-text"
             limit = (1024 if scope.get("path", "").startswith("/api/v1/cache") else 2048 if administration
                      else MAX_TEXT_BODY_BYTES if text else MAX_BODY_BYTES)

@@ -277,6 +277,11 @@ only if clicked.
 - `POST /api/v1/analyze-text`: JSON `{"text": "..."}` (1–1,000 characters, same header).
   It returns the same JSON for text the user corrected in the Study popup ("Edit text"),
   without OCR. `provenance.analysis_origin` is `"edited"`.
+- `POST /api/v1/translation-engine`: JSON `{"engine": "<catalog id>"}`. Switches the sentence
+  translator to another *installed* translation engine until the backend restarts.
+  Unknown engines return 422; engines that are not installed return 409 with their setup command.
+  If the new engine fails to load, the previous one stays active (503). The extension's
+  Setup panel offers this as "Translation engine → Use".
 - API schema: `http://127.0.0.1:47615/docs`. POST clients must supply the client header;
   the curl example is the simplest manual request.
 

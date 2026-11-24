@@ -82,6 +82,11 @@ class TextAnalyzer:
         self._dictionary = dictionary
         self._translator = translator
 
+    def replace_translator(self, translator: TranslationEngine) -> TranslationEngine | None:
+        """Swap the sentence translator (owning worker only); returns the previous one to close."""
+        previous, self._translator = self._translator, translator
+        return previous
+
     def translation_metadata(self) -> dict[str, object]:
         describe = getattr(self._translator, "diagnostic_metadata", None)
         metadata = describe() if callable(describe) else {}

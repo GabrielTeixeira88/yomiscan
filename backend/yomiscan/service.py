@@ -161,6 +161,18 @@ class ImageAnalysisService:
             "device": translation.get("device")}, "detection": {"loaded": detector is not None},
             "processing_cache": {"persistent_enabled": self.cache.enabled}, "glossary_open": self._glossaries is not None}
 
+    def select_translation_engine(self, name: str) -> None:
+        """Load `name` and make it the sentence translator for Study and pages (owning worker only).
+
+        The new engine is created first, so a failure leaves the current one in place. The
+        configuration ID changes, so chapter sessions restart rather than mix engines.
+        """
+        translator = create_translation_engine(name, device=self._device)
+        previous = self._analyzer.replace_translator(translator)
+        close = getattr(previous, "close", None)
+        if callable(close):
+            close()
+
     def analyze_text(self, text: str) -> TextAnalysisResult:
         """Study text the user corrected after OCR: lexical analysis and sentence translation only."""
         return self._analyzer.analyze(text)

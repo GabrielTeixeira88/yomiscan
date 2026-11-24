@@ -45,6 +45,11 @@ class TextAnalysisRequest(BaseModel):
     text: str = Field(min_length=1, max_length=1000)
 
 
+class EngineSelection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    engine: str = Field(min_length=1, max_length=32, pattern=r"^[a-z0-9-]+$")
+
+
 class CacheSettings(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     enabled: StrictBool
@@ -332,6 +337,45 @@ def create_app(
             raise HTTPException(503, "Local glossary data unavailable. Preserve its database and check server logs.") from exc
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
+
+    @app.post("/api/v1/translation-engine")
+    async def translation_engine(request: Request, body: EngineSelection) -> dict[str, str]:
+        """Switch the sentence translator to another installed engine until the backend restarts."""
+        from ..readiness import local_artifacts, model_catalog
+        spec = next((item for item in model_catalog() if item.id == body.engine and item.kind == "translation"), None)
+        if spec is None:
+            raise HTTPException(422, "Unknown translation engine.")
+        state = request.app.state
+        if state.service is None:
+            raise HTTPException(503, "Analysis resources unavailable. Check server logs and restart after setup.")
+        if state.busy:
+            raise HTTPException(429, "Processing is active; switch engines after the current request finishes.")
+        environment = dict(state.readiness_environment or os.environ)
+        state.busy = True
+
+        def perform() -> None:
+            if not local_artifacts(spec, environment)[1]:
+                raise HTTPException(409, f"{spec.id} is not installed. Setup: {spec.setup_command}")
+            state.service.select_translation_engine(spec.id)
+            if isinstance(state.service, ImageAnalysisService):
+                state.configuration_id = state.service.configuration_id()
+                state.runtime_state = state.service.runtime_state()
+        future = asyncio.get_running_loop().run_in_executor(state.executor, perform)
+
+        def finished(task: asyncio.Future) -> None:
+            state.busy = False
+            if not task.cancelled() and (error := task.exception()) is not None and not isinstance(error, HTTPException):
+                logger.error("Translation engine switch failed", exc_info=(type(error), error, error.__traceback__))
+        future.add_done_callback(finished)
+        try:
+            await asyncio.shield(future)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(503, "The engine could not be loaded; the previous engine is still active. See server logs.") from exc
+        if state.readiness_environment is not None:
+            state.readiness_environment["YOMISCAN_TRANSLATION_ENGINE"] = spec.id
+        return {"selected": spec.id}
 
     @app.get("/api/v1/translation-profile")
     async def translation_profile(request: Request, scope: Annotated[str, Query(max_length=36)] = "global",

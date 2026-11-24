@@ -268,3 +268,24 @@ def test_cancelled_client_does_not_release_running_model():
                 assert (await http.get("/health")).json() == {"status": "ok"}
 
     asyncio.run(run())
+
+
+def test_translation_engine_switch_validates_and_swaps(api, monkeypatch):
+    client, _, translator, _ = api
+    from yomiscan import service as service_module
+    from yomiscan import readiness
+    replacement = Mock()
+    replacement.translate.return_value = TranslationResult("猫", "A cat (new engine)", "fake2", "fake2", 1)
+    created = []
+    monkeypatch.setattr(service_module, "create_translation_engine", lambda name, device: created.append(name) or replacement)
+    assert client.post("/api/v1/translation-engine", json={"engine": "nope"}).status_code == 422
+    assert client.post("/api/v1/translation-engine", json={"engine": "Bad Name"}).status_code == 422
+    monkeypatch.setattr(readiness, "local_artifacts", lambda spec, environment: ([], False))
+    missing = client.post("/api/v1/translation-engine", json={"engine": "nllb-600m"})
+    assert missing.status_code == 409 and "yomiscan-prepare-translation" in missing.json()["detail"]
+    monkeypatch.setattr(readiness, "local_artifacts", lambda spec, environment: ([], True))
+    assert client.post("/api/v1/translation-engine", json={"engine": "nllb-600m"}).json() == {"selected": "nllb-600m"}
+    assert created == ["nllb-600m"]
+    translator.close.assert_called_once()  # the previous engine is released
+    text = client.post("/api/v1/analyze-text", json={"text": "猫"}).json()
+    assert text["translation"] == "A cat (new engine)"

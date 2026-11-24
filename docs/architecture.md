@@ -80,6 +80,16 @@ does lexical analysis and sentence translation only, with no screenshot and no O
 security guard bounds its body to 8 KiB. The response is the usual Study JSON with
 `analysis_origin: "edited"`, and the popup re-renders in place.
 
+**Choosing the translation engine (Stage 3).** The Setup panel lists translation engines
+that readiness reports as installed with their runtime available, and offers "Use" for each.
+`POST /api/v1/translation-engine` validates the catalog ID and checks the artifacts on the
+model worker. `ImageAnalysisService.select_translation_engine` then creates the new engine
+before swapping it into the shared `TextAnalyzer`, so a load failure keeps the previous one,
+and the previous engine is closed. The configuration ID changes, so open chapter sessions
+restart instead of mixing engines. The cache identity already includes the engine. The
+choice lasts until restart; `YOMISCAN_TRANSLATION_ENGINE` remains the startup default.
+OPUS stays the default: the Stage 2 blind ratings that would choose another are not done yet.
+
 **Configurable loopback port.** `extension/src/backend.ts` owns the backend address:
 `http://127.0.0.1:<port>`, default 47615 (not AnkiConnect's 8765), with an optional
 `backendPort` in `chrome.storage.local` (1024–65535), edited in Setup & readiness.

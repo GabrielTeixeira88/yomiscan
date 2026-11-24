@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { analyzeCrop, analyzeText, httpError, parseAnalysis } from "../src/api";
 import { constrainPopup, resizePopup, popupPosition, sameViewport, screenshotRect, selectionRect, validSelection } from "../src/geometry";
 import {copyStudyText} from '../src/popup';
+import {selectTranslationEngine} from "../src/chapter/readiness-client";
 import "./chapter-tests";
 import "./acquisition-tests";
 import "./coverage-tests";
@@ -113,6 +114,18 @@ test("token inflection labels are optional string lists", () => {
   const token = response().tokens[0];
   assert.deepEqual(parseAnalysis({...response(), tokens: [{...token, inflection: ["negative", "past"]}]}).tokens[0].inflection, ["negative", "past"]);
   assert.throws(() => parseAnalysis({...response(), tokens: [{...token, inflection: [1]}]}), /token/);
+});
+
+test("translation engine switch posts the engine and surfaces backend guidance", async context => {
+  const mocked = context.mock.method(globalThis, "fetch", async (url: string, init: RequestInit) => {
+    assert.equal(url, "http://127.0.0.1:47615/api/v1/translation-engine");
+    assert.equal(init.body, JSON.stringify({engine: "nllb-600m"}));
+    return new Response(JSON.stringify({selected: "nllb-600m"}));
+  });
+  assert.deepEqual(await selectTranslationEngine("nllb-600m"), {selected: "nllb-600m"});
+  mocked.mock.mockImplementation(async () => new Response(JSON.stringify({detail: "nllb-600m is not installed. Setup: x"}), {status: 409}));
+  await assert.rejects(selectTranslationEngine("nllb-600m"), /not installed/);
+  await assert.rejects(selectTranslationEngine("../etc"), /Invalid engine/);
 });
 
 test("friendly HTTP messages never require raw server errors", () => {

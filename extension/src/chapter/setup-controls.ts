@@ -47,6 +47,29 @@ export class SetupControls {
     this.portStatus.textContent=`Saved. Start the backend with: yomiscan-server --port ${value}`+
       (value===DEFAULT_BACKEND_PORT?'':` (default ${DEFAULT_BACKEND_PORT})`)+'. Then Check Setup.';
   }
+  /** Installed translators the user can switch to; the backend loads them on its model worker. */
+  private appendEngineChoice(data:Readiness):void{
+    const engines=data.models.filter(m=>m.kind==='translation'&&m.installed&&m.dependency_available);
+    if(engines.length<2)return;
+    const box=document.createElement('fieldset'),legend=document.createElement('legend'),status=document.createElement('p');
+    legend.textContent='Translation engine';status.setAttribute('role','status');box.append(legend);
+    for(const engine of engines){
+      const row=document.createElement('p');
+      row.textContent=`${engine.id}${engine.experimental?' (experimental)':''} · targets ${engine.targets.join(', ')} `;
+      if(engine.selected){row.append('· in use');}
+      else{
+        const use=document.createElement('button');use.textContent='Use';use.setAttribute('aria-label','Use translation engine '+engine.id);
+        use.onclick=()=>{use.disabled=true;status.textContent=`Loading ${engine.id}… this can take a minute.`;
+          void chrome.runtime.sendMessage({type:'chapter-translation-engine',engine:engine.id}).then(reply=>{
+            if(!reply?.ok){status.textContent=reply?.error??'Engine switch failed.';use.disabled=false;return;}
+            status.textContent=`Now using ${engine.id}. Restart chapters to translate with it.`;void this.load();
+          },()=>{status.textContent='Engine switch unavailable. Reload the extension.';use.disabled=false;});};
+        row.append(use);
+      }
+      box.append(row);
+    }
+    box.append(status);this.output.append(box);
+  }
   private async load():Promise<void>{
     this.output.textContent='Checking local setup…';
     try{
@@ -61,6 +84,7 @@ export class SetupControls {
         (data.dictionary.loaded?'':'\n'+data.dictionary.setup_command));
       line('Japanese tokenizer: '+(data.tokenizer.loaded?'loaded':data.tokenizer.installed?'installed, not loaded':'missing')+
         (data.tokenizer.loaded?'':'\n'+data.tokenizer.setup_command));
+      this.appendEngineChoice(data);
       const optional=document.createElement('details'),title=document.createElement('summary');title.textContent='Optional model information';optional.append(title);
       for(const model of data.models){const p=document.createElement('p');p.textContent=`${model.selected?'Selected ':''}${model.id}${model.experimental?' (experimental)':''}\n`+
         `${model.loaded?'Loaded':model.installed?'Artifacts installed, not loaded':'Artifacts unavailable'} · integrity ${model.verification}\n`+
@@ -74,7 +98,7 @@ export class SetupControls {
       const cache=data.storage.processing_cache,glossary=data.storage.glossary;
       this.output.append(optional);line(`Storage: persistent processing cache ${cache.persistent_enabled===null?'state unknown':cache.persistent_enabled?'enabled':'disabled'}; disk parent ${cache.disk_parent}. `+
         `Glossary database ${glossary.accessibility}; disk parent ${glossary.disk_parent}. These observations are not database integrity checks.`);
-      line('Read-only checks do not load or download models. Model changes use environment settings and a backend restart. Local guide: docs/post-mvp-reader-experience-distribution.md');
+      line('Read-only checks do not load or download models. OCR and detector changes use environment settings and a backend restart; a translation engine chosen above lasts until the backend restarts (set YOMISCAN_TRANSLATION_ENGINE to keep it). Local guide: docs/post-mvp-reader-experience-distribution.md');
     }catch(error){this.output.textContent=error instanceof Error?error.message:'Readiness unavailable';}
   }
 }
