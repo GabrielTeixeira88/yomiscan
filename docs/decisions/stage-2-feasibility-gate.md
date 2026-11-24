@@ -69,6 +69,15 @@ measurement started. The criteria are applied as follows:
   Chrome built-in Translator stays optional and experimental. Hy-MT2 and other GPU-class
   models belong to the companion engine.
 
+## Owner decision: download budget raised to 1 GB (2026-11-24, after measurement)
+
+The owner raised the G6 budget from 600 MB to **1 GB** of YomiScan-managed first-run transfer,
+so that a size cap never forces a clearly worse model. This was decided after the measured
+configuration (about 430 MB with browser OPUS) had already passed 600 MB, so it changes no
+Stage 2 outcome; it is headroom for later models. Size is still reported, and smaller
+downloads remain preferred: models are fetched on first use of the feature that needs them
+(for example, translation only when it is first turned on), not all at install.
+
 ## Criteria
 
 | # | Criterion | Threshold | Measurement |

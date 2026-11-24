@@ -44,7 +44,7 @@ the outcome.
 | G3 | WebGPU median ≤ 0.5 s, p95 ≤ 1.0 s | target | q4 greedy **85 ms / 165 ms** on a discrete GPU; integrated GPU unmeasured | Met (dGPU) |
 | G4 | WASM median ≤ 2.0 s, p95 ≤ 4.0 s | target | int8 greedy **194 / 309 ms** (8 threads), **340 / 565 ms** (4 threads) | Met (desktop) |
 | G5 | Load + first block ≤ 30 s | target | **1.2–3.4 s** for a new document reading from Cache Storage. A cold browser restart was not measured | Met |
-| G6 | First-run transfer ≤ 600 MB | hard | **235–245 MB** gzip (OCR + detector + JMdict SQLite + UniDic tokenizer). About 425–435 MB with browser OPUS (fp16) | **Pass** |
+| G6 | First-run transfer ≤ 600 MB (raised to 1 GB by the owner) | hard | **235–245 MB** gzip (OCR + detector + JMdict SQLite + UniDic tokenizer). About 425–435 MB with browser OPUS (fp16) | **Pass** |
 | G7 | Recall ≥ PyTorch − 1/100 | hard | PyTorch 85.8%; browser fp32 **85.8%**, fp16 **86.2%**. Held-out 87.6% for both | **Pass** |
 | G8 | Offscreen peak ≤ 1.5 GB (10 pages) | hard | Detector + OCR pipeline, 10 pages: **785–933 MiB** (extension process) | **Pass** |
 
