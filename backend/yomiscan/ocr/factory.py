@@ -3,7 +3,8 @@
 import os
 from .base import OCREngine, OCRInitializationError
 
-OCR_NAMES = ("current", "original-rgb", "2025", "2025-greedy", "2025-onnx", "2025-onnx-no-cache")
+# "current" is manga-ocr with greedy decoding; "current-published" keeps the library's beam settings.
+OCR_NAMES = ("current", "current-published", "original-rgb", "2025", "2025-greedy", "2025-onnx", "2025-onnx-no-cache")
 
 
 def create_ocr_engine(name: str | None = None, *, device: str = "auto", threads: int | None = None,
@@ -13,7 +14,7 @@ def create_ocr_engine(name: str | None = None, *, device: str = "auto", threads:
         raise ValueError(f"Unknown OCR engine {name!r}; choose {OCR_NAMES}")
     if device not in ("auto", "cpu", "cuda"):
         raise ValueError("OCR device must be auto, cpu or cuda")
-    if name == "current" and device == "cuda":
+    if name in ("current", "current-published") and device == "cuda":
         import torch
         if not torch.cuda.is_available():
             raise OCRInitializationError("CUDA was explicitly requested but is unavailable; select CPU")
@@ -25,10 +26,11 @@ def create_ocr_engine(name: str | None = None, *, device: str = "auto", threads:
     if threads is not None:
         import torch
         torch.set_num_threads(threads)
-    if name == "current":
+    if name in ("current", "current-published"):
         from .manga_ocr import MangaOCREngine
         from ..vision_models import model_directory
-        return MangaOCREngine(force_cpu=device == "cpu", model_path=model_directory("ocr-original") if pinned else None)
+        return MangaOCREngine(force_cpu=device == "cpu", model_path=model_directory("ocr-original") if pinned else None,
+                              decoding="published" if name == "current-published" else "greedy")
     from .transformers import TransformersOCREngine
     return TransformersOCREngine(variant="ocr-original" if name == "original-rgb" else "ocr-2025", device=device,
                                  decoding="greedy" if name == "2025-greedy" else "published")

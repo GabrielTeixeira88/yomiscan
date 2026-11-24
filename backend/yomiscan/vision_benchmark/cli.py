@@ -21,7 +21,7 @@ def artifact_metadata(kind: str, engine: str) -> list[dict[str, Any]]:
         from ..detection.rtdetr import MODEL_ID, MODEL_REVISION
         files = [Path(hf_hub_download(MODEL_ID, "model.safetensors", revision=MODEL_REVISION, local_files_only=True))]
     else:
-        name = "detector" if kind == "detection" else "ocr-onnx" if "onnx" in engine else "ocr-original" if engine in ("current", "original-rgb") else "ocr-2025"
+        name = "detector" if kind == "detection" else "ocr-onnx" if "onnx" in engine else "ocr-original" if engine in ("current", "current-published", "original-rgb") else "ocr-2025"
         folder = model_directory(name)
         files = [folder / name for name in MODELS[name].files if name.endswith((".onnx", ".safetensors", ".bin"))]
     return [{"file": path.name, "bytes": path.stat().st_size, "sha256": file_hash(path)} for path in files]
@@ -67,10 +67,10 @@ def main(kind: str, argv: list[str] | None = None) -> int:
             report = evaluate_ocr(ocr_crops(cases, args.detector_results), lambda: create_ocr_engine(args.engine,
                 device=args.device, threads=args.threads, pinned=True), repeats=args.repeats, warmup=args.warmup)
             report["crop_source"] = "production_detector" if args.detector_results else "annotated_ground_truth"
-            if args.engine == "current":
+            if args.engine in ("current", "current-published"):
                 baseline = MODELS["ocr-original"]
                 report["model"].update(engine="manga-ocr", model=baseline.repository, revision=baseline.revision,
-                    preprocessing="grayscale", decoding="published", max_tokens=299)
+                    preprocessing="grayscale", decoding="greedy" if args.engine == "current" else "published", max_tokens=299)
         report["artifacts"] = artifact_metadata(kind, args.engine)
     except (DetectionInitializationError, OCRInitializationError, DetectionError) as exc:
         report = {"status": "unavailable", "error": str(exc)}

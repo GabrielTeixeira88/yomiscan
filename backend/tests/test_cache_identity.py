@@ -71,6 +71,10 @@ def test_original_ocr_uses_actual_local_artifact_and_generation(tmp_path):
     engine._cache_artifacts = first_hash
     first = component_identity(engine)
     assert first and first["artifacts"] == first_hash
+    engine.decoding = "published"
+    assert digest(first) != digest(component_identity(engine))  # cached greedy text is not reused for beams
+    engine.decoding = "greedy"
+    assert digest(first) == digest(component_identity(engine))
     model.generation_config.num_beams = 3
     assert digest(first) != digest(component_identity(engine))
     weights.write_bytes(b"fake-model-v2")
