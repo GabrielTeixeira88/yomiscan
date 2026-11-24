@@ -566,9 +566,10 @@ by the upstream engine. Each CLI invocation loads a new engine, so wall-clock ru
 includes startup even though the displayed inference time does not.
 
 UniDic-lite is an older dictionary and can split expressions differently from JMdict.
-Multi-token expressions are matched as units (かもしれない, しょうがない; see
-[architecture](docs/architecture.md)). There is no grammar explanation, word-sense
-disambiguation, or tokenizer comparison yet. Kana normalization can merge homophones;
+Multi-token expressions are matched as units (かもしれない, しょうがない), and about 37
+common grammar constructions get short notes (〜てしまう, 〜ている, 〜だろう); see
+[architecture](docs/architecture.md). There is no word-sense disambiguation or tokenizer
+comparison yet, and grammar notes are short learner hints, not full explanations. Kana normalization can merge homophones;
 candidate lists can be verbose. Reading and sense restrictions are preserved and
 displayed, not used to claim a context-specific sense. OCR errors propagate into NLP.
 

@@ -42,12 +42,28 @@ class UnitResponse(BaseModel):
     meanings: list[Meaning]
 
 
+class GrammarResponse(BaseModel):
+    """A grammar note (〜てしまう) over tokens[start_token:end_token], from resources/lexical/grammar.json."""
+    id: str
+    name: str
+    meaning: str
+    start_token: int
+    end_token: int
+
+
+def grammar_responses(analysis: TextAnalysisResult) -> list[GrammarResponse]:
+    from yomiscan.grammar_patterns import pattern_by_id
+    return [GrammarResponse(id=match.pattern, name=(pattern := pattern_by_id(match.pattern)).name, meaning=pattern.meaning,
+                            start_token=match.start, end_token=match.end) for match in analysis.grammar]
+
+
 class ImageAnalysisResponse(BaseModel):
     original_text: str
     translation: str | None
     processing: ProcessingTimes
     tokens: list[TokenResponse]
     units: list[UnitResponse] = []
+    grammar: list[GrammarResponse] = []
     target_language: str = "en"
     dictionary_language: str = "en"
     provenance: dict[str, object] = {}
@@ -92,6 +108,7 @@ class ImageAnalysisResponse(BaseModel):
                           for entry_id in unit.entry_ids
                           for sense in analysis.dictionary_entries[entry_id].senses],
             ) for unit in analysis.units],
+            grammar=grammar_responses(analysis),
         )
 
 
@@ -112,6 +129,7 @@ class BlockResponse(BaseModel):
     translation: str | None
     tokens: list[TokenResponse]
     units: list[UnitResponse] = []
+    grammar: list[GrammarResponse] = []
     confidence: float | None
     category: str
     status: str
@@ -143,6 +161,7 @@ class PageAnalysisResponse(BaseModel):
                 orientation=block.orientation, reading_order=block.reading_order,
                 original_text=block.original_text, translation=analysis.translation if analysis else None,
                 tokens=analysis.tokens if analysis else [], units=analysis.units if analysis else [],
+                grammar=analysis.grammar if analysis else [],
                 confidence=block.confidence,
                 category=block.category, status=block.status, error_message=block.error_message,
             ))

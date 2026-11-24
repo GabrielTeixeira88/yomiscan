@@ -52,10 +52,11 @@ wrong until しょうがない is matched as a unit).
 
 | Analyzer | Scored | Pass | Fail | Missing unit | Pass rate |
 |---|---:|---:|---:|---:|---:|
-| Stage 3 units, tokens and units scored | 152 | 145 | 6 | 1 | **95.4%** |
+| Stage 3 units, tokens and units scored | 152 | 145 | 6 | 1 | 95.4% |
+| Stage 3 units + grammar notes | 152 | 147 | 5 | 0 | **96.7%** |
 
-Units now match the expected expression in 13 of 14 cases. The exception is てしまう,
-which is not a JMdict headword and waits for grammar patterns. Four of the six failures
+Units match the expected expression in 13 of 14 cases. With grammar notes, all 14 are
+found; てしまう and だろう come from notes, since they are constructions, not JMdict headwords. Four of the six failures
 have the right meaning in different words ("that might be so" for "maybe", "have to do"
 for "must", "and yet" for "although", "to be able" for "can"); by the correction rule
 above, they stay failures. だろう is one token that looks up the copula だ, a grammar-pattern

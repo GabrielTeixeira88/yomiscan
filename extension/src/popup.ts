@@ -250,6 +250,24 @@ export class StudyPopup {
       expressions.append(list);
       this.body.append(expressions);
     }
+    const grammar = data.grammar ?? [];
+    if (grammar.length) {
+      // Constructions the dictionary does not list (〜てしまう, 〜だろう), with the words they span.
+      const section = element("section");
+      section.append(element("h2", "Grammar"));
+      const list = element("ul", undefined, "grammar");
+      for (const note of grammar) {
+        const item = element("li");
+        const name = element("strong", note.name);
+        name.lang = "ja";
+        const span = element("span", data.tokens.slice(note.start_token, note.end_token).map(token => token.surface).join(""), "metadata");
+        span.lang = "ja";
+        item.append(name, " ", span, element("div", note.meaning));
+        list.append(item);
+      }
+      section.append(list);
+      this.body.append(section);
+    }
     const breakdown = element("section");
     if(targetName!=='English')breakdown.append(element('p','Dictionary definitions remain English.'));
     breakdown.append(element("h2", "Word breakdown"));

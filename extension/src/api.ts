@@ -12,11 +12,16 @@ export interface Token {
 export interface Unit {
   surface: string; dictionary_form: string; start_token: number; end_token: number; meanings: Meaning[];
 }
+/** A grammar note (〜てしまう) covering tokens[start_token, end_token). */
+export interface GrammarNote {
+  id: string; name: string; meaning: string; start_token: number; end_token: number;
+}
 export interface Analysis {
   original_text: string; translation: string | null;
   processing: {ocr_ms: number; translation_ms: number; analysis_ms: number; total_ms: number};
   tokens: Token[];
   units?: Unit[];
+  grammar?: GrammarNote[];
   target_language?:string;dictionary_language?:string;
   provenance?:Record<string,unknown>;
 }
@@ -49,6 +54,12 @@ export function parseAnalysis(value: unknown): Analysis {
         || Number(unit.end_token) > value.tokens.length || !Array.isArray(unit.meanings) || !validMeanings(unit.meanings))
         throw new Error("Invalid expression data from local server.");
     }
+  }
+  const span = (item: Record<string, unknown>) => Number.isInteger(item.start_token) && Number.isInteger(item.end_token)
+    && Number(item.start_token) >= 0 && Number(item.end_token) > Number(item.start_token) && Number(item.end_token) <= (value.tokens as unknown[]).length;
+  if (value.grammar !== undefined) {
+    if (!Array.isArray(value.grammar) || !value.grammar.every(note => record(note) && span(note)
+      && ["id", "name", "meaning"].every(k => typeof note[k] === "string"))) throw new Error("Invalid grammar data from local server.");
   }
   for (const token of value.tokens) {
     if (!record(token) || typeof token.surface !== "string"

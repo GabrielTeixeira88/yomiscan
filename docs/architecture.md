@@ -47,8 +47,18 @@ read too:
 
 Units are an extra layer (`TextAnalysisResult.units`, `units` in API responses). Token
 analysis is unchanged, and the Study popup lists them under "Expressions" above the word
-breakdown. Known limit: a single-entry でも mid-sentence still shows "but" first. Grammar
-notes are the next Stage 3 step.
+breakdown. Known limit: a single-entry でも mid-sentence still shows "but" first.
+
+**Grammar notes (Stage 3).** `grammar_patterns.py` matches constructions that JMdict does
+not list (〜てしまう, 〜ている, 〜だろう, 〜ことができる, passive/potential, causative, the two
+meanings of 〜そうだ, and about 30 more). The patterns are data in
+`resources/lexical/grammar.json`. A pattern is a sequence of token steps (`surface`, `base`, `pos`,
+conjugation `form`), with an optional `after` step for the preceding token. The て-patterns
+require a verb, adjective or auxiliary before them, so 僕でも is not 〜ても. At one start,
+the longest match wins; a match nested inside another is dropped (ば inside
+なければならない). Matches are `TextAnalysisResult.grammar` and `grammar` in API responses
+(id, name, short learner meaning, token span), and the popup lists them under "Grammar". The
+evaluator accepts a grammar note whose forms include an expected unit (てしまう, だろう).
 
 **Configurable loopback port.** `extension/src/backend.ts` owns the backend address:
 `http://127.0.0.1:<port>`, default 47615 (not AnkiConnect's 8765), with an optional

@@ -23,6 +23,7 @@ from pydantic import TypeAdapter, ValidationError
 from .glossary import GlossaryEntry, applicable_terms
 from .lexical_ranking import choose_matches
 from .lexical_units import LexicalUnit, find_units
+from .grammar_patterns import GrammarMatch, find_grammar
 from .translation.options import TranslationOptions, validate_options, capabilities
 from .translation.structured import PageTranslationRequest, TranslationSegment, CONTRACT_VERSION, StructuredTranslationError
 from .translation.base import TranslationContext
@@ -49,6 +50,8 @@ class TextAnalysisResult:
     # Multi-token meaning units over `tokens` (lexical_units.py); empty for results cached
     # before units existed, whose cache keys no longer match anyway.
     units: tuple[LexicalUnit, ...] = ()
+    # Grammar notes (grammar_patterns.py) over `tokens`.
+    grammar: tuple[GrammarMatch, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -90,7 +93,8 @@ class TextAnalyzer:
         results: list[TextAnalysisResult | Exception] = []
         for text in texts:
             try:
-                lexical_key = cache.key("lexical", text, lexical_identity, algorithm("analysis.py", "lexical_ranking.py", "lexical_units.py", "resources/lexical/units.json")) if cache and all(
+                lexical_key = cache.key("lexical", text, lexical_identity, algorithm("analysis.py", "lexical_ranking.py", "lexical_units.py", "resources/lexical/units.json",
+                                                                       "grammar_patterns.py", "resources/lexical/grammar.json")) if cache and all(
                     item is not None for item in lexical_identity) else None
                 payload = cache.get("lexical", lexical_key) if cache else None
                 lexical = None
@@ -239,7 +243,7 @@ class TextAnalyzer:
             entries.update((entry.entry_id, entry) for entry in matches)
             units.append(unit)
         return TextAnalysisResult(
-            text, tuple(tokens), entries, translation, (perf_counter() - start) * 1000, tuple(units),
+            text, tuple(tokens), entries, translation, (perf_counter() - start) * 1000, tuple(units), find_grammar(raw),
         )
 
 
@@ -281,10 +285,12 @@ def analyze_recognized_blocks(blocks: Sequence[OCRResult], analyzer: TextAnalyze
     ocr = OCRResult(combined_text, blocks[0].engine, sum(block.processing_time_ms for block in blocks),
                     {"study_ocr": {"mode": "blocks", "blocks": len(blocks)}})
     # Unit token indexes are per block; shift them into the combined token sequence.
-    units, offset = [], 0
+    units, grammar, offset = [], [], 0
     for item in results:
         units.extend(replace(unit, start=unit.start + offset, end=unit.end + offset) for unit in item.units)
+        grammar.extend(replace(match, start=match.start + offset, end=match.end + offset) for match in item.grammar)
         offset += len(item.tokens)
     analysis = TextAnalysisResult(combined_text, tuple(token for item in results for token in item.tokens),
-                                  entries, translation, sum(item.processing_time_ms for item in results), tuple(units))
+                                  entries, translation, sum(item.processing_time_ms for item in results), tuple(units),
+                                  tuple(grammar))
     return ImageAnalysisResult(ocr, analysis)

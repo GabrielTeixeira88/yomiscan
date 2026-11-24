@@ -101,6 +101,13 @@ test("expression units are optional, validated and must address real tokens", ()
   assert.throws(() => parseAnalysis({...response(), units: [{...unit, meanings: [{...meaning, glosses: [1]}]}]}), /expression/);
 });
 
+test("grammar notes are optional, validated and must address real tokens", () => {
+  const note = {id: "te-iru", name: "〜ている", meaning: "ongoing", start_token: 0, end_token: 1};
+  assert.deepEqual(parseAnalysis({...response(), grammar: [note]}).grammar, [note]);
+  assert.throws(() => parseAnalysis({...response(), grammar: [{...note, meaning: 3}]}), /grammar/);
+  assert.throws(() => parseAnalysis({...response(), grammar: [{...note, end_token: 99}]}), /grammar/);
+});
+
 test("friendly HTTP messages never require raw server errors", () => {
   assert.match(httpError(503), /models or dictionary/);
   assert.match(httpError(429), /another crop/);

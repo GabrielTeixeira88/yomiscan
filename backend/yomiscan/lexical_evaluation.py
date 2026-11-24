@@ -121,6 +121,15 @@ def evaluate_result(case: GoldenCase, result: TextAnalysisResult) -> list[Outcom
         # that already is the whole expression (だろう) also counts.
         unit = next((item for item in result.units if text in (item.surface, item.lookup_form)), None) or next(
             (item for item in result.units if text in item.surface), None)
+        if unit is None:
+            # A grammar note whose forms include the text (てしまう) explains the unit instead.
+            from .grammar_patterns import pattern_by_id
+            note = next((pattern_by_id(m.pattern) for m in result.grammar if text in pattern_by_id(m.pattern).forms), None)
+            if note is not None:
+                gloss = expected.get("gloss")
+                ok = not gloss or gloss.lower() in note.meaning.lower()
+                outcomes.append(Outcome(case.id, text, "pass" if ok else "fail", "" if ok else f"grammar note '{note.meaning}' lacks {gloss}"))
+                continue
         ids = unit.entry_ids if unit else next((item.entry_ids for item in result.tokens
                                                  if text in (item.token.surface, item.lookup_form)), None)
         if ids is None:
