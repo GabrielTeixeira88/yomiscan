@@ -37,19 +37,31 @@ def candidates() -> dict[str, list[dict]]:
     return by_case
 
 
+def source_images(corpus: Path = Path("samples/vision/pages.json")) -> dict[str, str]:
+    """Page id -> original image file name, so a rater can open the page behind each line."""
+    return {page["id"]: page["image"] for page in json.loads(corpus.read_text(encoding="utf-8"))["pages"]}
+
+
+# The rater's sheet adds the source image and region next to the translation; unblind drops them.
+SHEET_COLUMNS = [*COLUMNS[:5], "image", "region", *COLUMNS[5:]]
+
+
 def make() -> None:
     rng = random.Random(20261124)
+    images = source_images()
     rows, key = [], {}
     for case_id, group in candidates().items():
         if len(group) != 4:
             raise SystemExit(f"{case_id}: expected 4 candidates, got {len(group)}")
+        page_id, region_id = case_id.split("-", 1)
         rng.shuffle(group)
         for label, candidate in zip("ABCD", group, strict=True):
             key[f"{case_id}/{label}"] = candidate["engine"]
-            rows.append({**{c: "" for c in COLUMNS}, "engine": label, "case_id": case_id, "line": candidate["line"],
-                         "source": candidate["source"], "translation": candidate["translation"]})
+            rows.append({**{c: "" for c in SHEET_COLUMNS}, "engine": label, "case_id": case_id, "line": candidate["line"],
+                         "source": candidate["source"], "translation": candidate["translation"],
+                         "image": images[page_id], "region": region_id})
     with (ROOT / "blind-ratings.csv").open("w", encoding="utf-8-sig", newline="") as handle:
-        writer = csv.DictWriter(handle, COLUMNS)
+        writer = csv.DictWriter(handle, SHEET_COLUMNS)
         writer.writeheader()
         writer.writerows(rows)
     (ROOT / "blind-key.json").write_text(json.dumps(key, indent=1), encoding="utf-8")
@@ -61,7 +73,7 @@ def unblind() -> None:
     with (ROOT / "blind-ratings.csv").open(encoding="utf-8-sig", newline="") as handle:
         rows = [{**row, "engine": key[f"{row['case_id']}/{row['engine']}"]} for row in csv.DictReader(handle)]
     with (ROOT / "unblinded.ratings.csv").open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, COLUMNS)
+        writer = csv.DictWriter(handle, COLUMNS, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows)
     print(f"{len(rows)} rows -> {ROOT / 'unblinded.ratings.csv'}")
