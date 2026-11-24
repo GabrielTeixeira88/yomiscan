@@ -14,5 +14,8 @@
     "@types/node": "^22.18.0",
     "esbuild": "^0.25.9",
     "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "onnxruntime-web": "1.31.1"
   }
 }

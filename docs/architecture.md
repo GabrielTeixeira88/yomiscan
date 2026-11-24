@@ -171,6 +171,18 @@ hide all pages or request every read page. Font changes rerender only pages that
 have English. Switching between Read Chapter and Translate Chapter replaces the session;
 the backend caches make re-reading cheap.
 
+## Stage 5a browser engine (in progress)
+
+`extension/src/engine/` runs page vision inside Chrome with ONNX Runtime Web, in the
+offscreen document, without the Python backend. Increment 1 covers the detector,
+production grouping and band order, and greedy manga-ocr, plus pinned, SHA-256-verified
+model installation into Cache Storage from an explicit Setup action (**Advanced → Browser
+engine (preview)**). The extension pages are cross-origin isolated (COEP `require-corp`,
+COOP `same-origin`) so WASM runs multi-threaded; the CSP adds only `'wasm-unsafe-eval'`.
+Lexical analysis, translation and the engine switch follow. See the
+[Stage 5a record](decisions/stage-5a-browser-engine.md) for increments, measurements and
+the open hosting decision.
+
 ## Post-MVP reader controls, readiness and distribution
 
 `rendering/settings.py` validates immutable font scale 0.75–1.5.

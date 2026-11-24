@@ -5,6 +5,33 @@ import {imageHash} from './chapter/reports';
 import {validateTranslationOptions,type ReaderTranslationOptions} from './chapter/translation-options';
 import {fontScale} from './chapter/font-settings';
 import {MAX_READING_JSON} from './chapter/reading';
+import {BrowserEngine} from './engine/engine';
+
+// Browser engine (Stage 5a): created lazily; only the extension's own service worker may drive it.
+let engine: BrowserEngine | null = null;
+chrome.runtime.onMessage.addListener((message, sender, respond) => {
+  if (sender.id !== chrome.runtime.id || sender.tab || sender.url !== chrome.runtime.getURL('background.js') || message?.target !== 'offscreen-engine') return;
+  engine ??= new BrowserEngine();
+  const current = engine;
+  void (async () => {
+    switch (message.operation) {
+      case 'status': return current.status();
+      case 'install':
+        if (typeof message.base !== 'string' || message.base.length > 500) throw new Error('Invalid artifact source');
+        current.startInstall(message.base); return current.status();
+      case 'cancel': current.cancelInstall(); return current.status();
+      case 'remove': await current.remove(); return current.status();
+      case 'recognize': {
+        if (typeof message.data !== 'string' || message.data.length > MAX_INPUT * 4 / 3 + 4 ||
+          !['image/png', 'image/jpeg', 'image/webp'].includes(message.mime)) throw new Error('Invalid page image');
+        const bytes = Uint8Array.from(atob(message.data), c => c.charCodeAt(0));
+        return current.recognize(new Blob([bytes], {type: message.mime}));
+      }
+      default: throw new Error('Unknown browser engine operation');
+    }
+  })().then(data => respond({ok: true, data}), error => respond({ok: false, error: error instanceof Error ? error.message : 'Browser engine failed'}));
+  return true;
+});
 
 // Serialize across chapter tabs too. Study requests still use the backend busy guard.
 let tail: Promise<void> = Promise.resolve();

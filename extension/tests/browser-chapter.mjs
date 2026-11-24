@@ -1,7 +1,7 @@
 // Opt-in isolated Chrome check. --mock-backend runs entirely model-free on port 8774.
 // Run from repository root after building extension/dist. No browser-test dependencies.
 import http from "node:http";
-import {readFile,writeFile,mkdir,readdir} from "node:fs/promises";
+import {readFile,writeFile,mkdir,readdir,cp} from "node:fs/promises";
 import {createHash,randomUUID} from 'node:crypto';
 import assert from "node:assert/strict";
 import path from "node:path";
@@ -20,7 +20,10 @@ if(mocked) {
   // Point the built bundles' default backend port at the mock server; fail if nothing matched.
   // (The offscreen document receives the address from the content script.)
   const redirected=[];
-  for(const name of await readdir('extension/dist')) {
+  for(const entry of await readdir('extension/dist',{withFileTypes:true})) {
+    const name=entry.name;
+    // Binary runtime folders (ort/) are copied unchanged.
+    if(entry.isDirectory()){await cp(path.join('extension/dist',name),path.join(extensionPath,name),{recursive:true});continue;}
     const source=await readFile(path.join('extension/dist',name),'utf8');
     const rewritten=source.replaceAll('DEFAULT_BACKEND_PORT = 47615','DEFAULT_BACKEND_PORT = 8774');
     if(rewritten!==source&&name.endsWith('.js'))redirected.push(name);

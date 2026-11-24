@@ -11,6 +11,12 @@ if (process.argv.includes("--test")) {
   await copyFile("manifest.json", "dist/manifest.json");
   await copyFile("offscreen.html", "dist/offscreen.html");
   await copyFile("image-access.html", "dist/image-access.html");
+  // Browser engine (Stage 5a): ONNX Runtime Web, loaded at runtime by the offscreen document.
+  // ort.wasm uses the plain threaded build; ort.webgpu uses the asyncify build.
+  await mkdir("dist/ort", {recursive: true});
+  for (const name of ["ort.wasm.min.mjs", "ort.webgpu.min.mjs", "ort-wasm-simd-threaded.mjs", "ort-wasm-simd-threaded.wasm",
+    "ort-wasm-simd-threaded.asyncify.mjs", "ort-wasm-simd-threaded.asyncify.wasm"])
+    await copyFile(`node_modules/onnxruntime-web/dist/${name}`, `dist/ort/${name}`);
   const options = [
     {entryPoints: ["src/background.ts"], outfile: "dist/background.js", format: "esm"},
     {entryPoints: ["src/content.ts"], outfile: "dist/content.js", format: "iife"},
