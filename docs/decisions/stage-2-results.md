@@ -44,7 +44,7 @@ the outcome.
 | G3 | WebGPU median ≤ 0.5 s, p95 ≤ 1.0 s | target | q4 greedy **85 ms / 165 ms** on a discrete GPU; integrated GPU unmeasured | Met (dGPU) |
 | G4 | WASM median ≤ 2.0 s, p95 ≤ 4.0 s | target | int8 greedy **194 / 309 ms** (8 threads), **340 / 565 ms** (4 threads) | Met (desktop) |
 | G5 | Load + first block ≤ 30 s | target | **1.2–3.4 s** for a new document reading from Cache Storage. A cold browser restart was not measured | Met |
-| G6 | First-run transfer ≤ 600 MB | hard | **235–245 MB** gzip (OCR + detector + JMdict SQLite + UniDic tokenizer). About 300 MB with browser OPUS | **Pass** |
+| G6 | First-run transfer ≤ 600 MB | hard | **235–245 MB** gzip (OCR + detector + JMdict SQLite + UniDic tokenizer). About 425–435 MB with browser OPUS (fp16) | **Pass** |
 | G7 | Recall ≥ PyTorch − 1/100 | hard | PyTorch 85.8%; browser fp32 **85.8%**, fp16 **86.2%**. Held-out 87.6% for both | **Pass** |
 | G8 | Offscreen peak ≤ 1.5 GB (10 pages) | hard | Detector + OCR pipeline, 10 pages: **785–933 MiB** (extension process) | **Pass** |
 
@@ -85,9 +85,13 @@ page** on WebGPU (q4 + fp16 detector), **3.0 s** on WASM ×8 and **5.5–5.7 s**
   0.9 s from storage, 0.07 ms per lookup). Persist it in OPFS from a worker.
 - **Tokenizer:** `lindera-wasm-unidic` 2.1.0 (UniDic, 50 MB). It scored identically to
   fugashi + UniDic-lite on the lexical golden set (137/138, the same single failure).
-- **Translation:** browser OPUS (Transformers.js, q8, 64 MB): 265–336 ms per line on the CPU
-  and 218 ms on WebGPU (fp16). It decodes greedily, unlike Python's 6-beam search, and matched
-  Python output on 13–24% of lines; quality is in the blind rating below. Chrome's built-in Translator
+- **Translation:** browser OPUS **fp16 with beam search on WASM** (189 MB gzip). The
+  transformers-exact beam search (`browser/beam.mjs`, shared with the OCR port; KV cache
+  reordered per beam) reproduces the Python backend's OPUS (beam 4) on **99/100** real
+  lines. It takes **710 ms per line** median (p95 1.4 s) with 8 threads and 886 ms with 4.
+  WebGPU is slower for this small decoder (971 ms) and drifts more (93/100). The q8 weights
+  diverge (30/100 even with beam search), so they are not used. Transformers.js supplies only
+  the Marian tokenizer. Chrome's built-in Translator
   stays **optional and experimental**. It needs a user click to download its language pack
   (18.5 s first time), then translates in about 7 ms per line. Hy-MT2 belongs to the companion engine.
 
@@ -106,8 +110,8 @@ page** on WebGPU (q4 + fp16 detector), **3.0 s** on WASM ×8 and **5.5–5.7 s**
 
 ## Translation bake-off (informational, pending owner ratings)
 
-100 real corpus lines (local only) were translated by Python OPUS (beam 6), browser OPUS
-(q8, greedy), Hy-MT2 manga v5 (llama.cpp, GPU) and the Chrome Translator. A blind sheet
+100 real corpus lines (local only) were translated by Python OPUS (beam 4), browser OPUS
+(q8, greedy; the first browser attempt), Hy-MT2 manga v5 (llama.cpp, GPU) and the Chrome Translator. A blind sheet
 (`.cache/stage2/blind-ratings.csv`, four shuffled candidates per line) awaits optional owner
 ratings. `research/stage-2/blind_ratings.py unblind` and `scripts/summarize_translation_ratings.py`
 then summarize the ratings. No winner is chosen without ratings.
@@ -125,14 +129,16 @@ owner.
 |---|---:|---:|---:|---:|
 | Hy-MT2 manga v5 (GPU, companion) | 31.9 | 13.8 | 14 / 42 | 2 |
 | Chrome built-in Translator (optional) | 29.2 | 9.1 | **11 / 42** | 0 |
-| OPUS, Python (beam 6, current backend) | 24.2 | 6.6 | 19 / 42 | 0 |
-| OPUS, browser (q8, greedy) | 22.5 | 5.6 | **28 / 42** | 1 |
+| OPUS, Python (beam 4, current backend) | 24.2 | 6.6 | 19 / 42 | 0 |
+| OPUS, browser (fp16, beam 4), recommended | 24.1 | 6.6 | 19 / 42 | 0 |
+| OPUS, browser (q8, greedy), first attempt | 22.5 | 5.6 | 28 / 42 | 1 |
 
 Findings:
-- **Browser OPUS as measured is the weakest option.** Greedy decoding plus 8-bit weights
-  add about 9 meaning errors over Python's beam search. Before it ships as the browser
-  default, OPUS needs beam search in JavaScript (the Stage 2 OCR port already has a
-  transformers-exact beam implementation) and a re-check of fp16 against q8.
+- **Beam search closes the browser gap.** The first browser attempt (q8, greedy) added 9
+  meaning errors. With fp16 weights and beam search, browser OPUS differs from Python on
+  one of these 42 lines (both versions are wrong there), so it has the same 19 errors and
+  the same scores. The blind sheet's browser candidate is the earlier greedy run. Python OPUS
+  ratings stand for the recommended browser OPUS.
 - **Every engine fails the same hard cases:** katakana robot speech, all-hiragana child
   speech, implied subjects that only context supplies (Japanese often omits who is
   speaking or acting), and puns. These lines need context-aware translation (future work)

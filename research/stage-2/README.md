@@ -41,13 +41,16 @@ uv run --frozen python research/stage-2/score_ocr.py reports/stage2-ocr-referenc
 |---|---|
 | `export_manga_ocr.py`, `quantize_manga_ocr.py` | ONNX encoder + decoder (no KV cache) for `kha-white/manga-ocr-base`, with fp16/int8/q4 variants |
 | `export_detector.py` | ONNX export of the production RT-DETR-v2 weights (fp32, fp16) |
-| `browser/ocr.mjs` | JS manga-ocr: PIL-exact preprocessing, transformers-exact beam search, greedy decoding, post-processing |
+| `browser/beam.mjs` | transformers-exact beam search shared by OCR and OPUS |
+| `browser/ocr.mjs` | JS manga-ocr: PIL-exact preprocessing, beam or greedy decoding, post-processing |
+| `browser/opus.mjs`, `browser/validate-opus-node.mjs` | OPUS-MT with KV cache and beam 4 (Python-equivalent), validated in Node against the Python backend |
 | `browser/detector.mjs` | JS detector pre- and post-processing, matching `RTDetrImageProcessorPil` and `decode_regions` |
 | `browser/extension/` | Spike-only MV3 extension. The offscreen document runs ONNX Runtime Web (WebGPU or WASM) |
 | `browser/run-browser.mjs` | Launches Chrome with a fresh profile over CDP, loads the extension, primes Cache Storage, runs configs, samples process memory |
 | `score_ocr.py` | G1/G2 against the reference arm, using `vision_benchmark` normalization and metrics |
 | `artifact_sizes.py` | G6 raw and gzip transfer sizes |
 | `evaluate_js_tokenizer.py`, `browser/tokenize-golden.mjs` | Informational: lindera-wasm-unidic on the lexical golden set |
+| `blind_ratings.py`, `score_official.py` | Informational: blind rating sheet; scoring against owner-supplied official English (local) |
 | `build_translation_set.py` | Informational: 100 real corpus lines for the translation bake-off (local only) |
 
 Config syntax for `run-browser.mjs`: `variant:backend:decoding[:low-power|high-performance][:tN]`.

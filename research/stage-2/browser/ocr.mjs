@@ -4,6 +4,8 @@
 //   transformers beam search (num_beams 4, length_penalty 2, early_stopping, no_repeat_ngram 3,
 //   max_length 300) or greedy decoding; tokenizer decode; manga_ocr.post_process.
 
+import {beamSearch} from "./beam.mjs";
+
 const SIZE = 224, PRECISION_BITS = 32 - 8 - 2;
 
 // ---- preprocessing -------------------------------------------------------------------------
@@ -101,25 +103,6 @@ export function decodeTokens(ids, vocabulary) {
 
 // ---- decoding ------------------------------------------------------------------------------
 
-function logSoftmaxRow(logits, offset, size, out) {
-  let max = -Infinity;
-  for (let i = 0; i < size; i++) if (logits[offset + i] > max) max = logits[offset + i];
-  let sum = 0;
-  for (let i = 0; i < size; i++) sum += Math.exp(logits[offset + i] - max);
-  const lse = max + Math.log(sum);
-  for (let i = 0; i < size; i++) out[i] = logits[offset + i] - lse;
-}
-
-function bannedNgramTokens(sequence, n) {
-  const length = sequence.length, banned = new Set();
-  if (length + 1 < n) return banned;
-  const prefix = sequence.slice(length - (n - 1)).join(",");
-  for (let i = 0; i + n <= length; i++) {
-    if (sequence.slice(i, i + n - 1).join(",") === prefix) banned.add(sequence[i + n - 1]);
-  }
-  return banned;
-}
-
 export class MangaOcr {
   constructor({ort, encoder, decoder, vocabulary, generation}) {
     Object.assign(this, {ort, encoder, decoder, vocabulary});
@@ -164,59 +147,22 @@ export class MangaOcr {
     return tokens;
   }
 
-  // transformers GenerationMixin._beam_search for batch size 1 (see module comment).
+  // transformers GenerationMixin._beam_search (beam.mjs); the decoder has no KV cache, so every
+  // step re-reads each running beam's whole sequence.
   async beam(hidden) {
-    const g = this.generation, beams = g.num_beams, keep = 2 * beams, V = this.vocab, promptLength = 1;
-    let running = Array.from({length: beams}, () => [g.decoder_start_token_id]);
-    let runningScores = Array.from({length: beams}, (_, i) => i === 0 ? 0 : -1e9);
-    let finished = Array.from({length: beams}, () => ({tokens: null, score: -1e9, done: false}));
-    let heuristicUnsatisfied = true, curLength = 1;
-    const row = new Float64Array(V);
-    while (true) {
-      const {logits, stride, last} = await this.logits(running, hidden);
-      // Accumulated log probabilities over beams x vocabulary; keep the top `keep`.
-      const candidates = [];
-      for (let b = 0; b < beams; b++) {
-        logSoftmaxRow(logits, b * stride + last, V, row);
-        if (g.no_repeat_ngram_size > 0) for (const t of bannedNgramTokens(running[b], g.no_repeat_ngram_size)) row[t] = -Infinity;
-        for (let t = 0; t < V; t++) {
-          const score = row[t] + runningScores[b];
-          if (candidates.length < keep) { candidates.push({score, b, t}); if (candidates.length === keep) candidates.sort((x, y) => y.score - x.score || x.b * V + x.t - (y.b * V + y.t)); }
-          else if (score > candidates[keep - 1].score) {
-            let i = keep - 1;
-            while (i > 0 && score > candidates[i - 1].score) { candidates[i] = candidates[i - 1]; i--; }
-            candidates[i] = {score, b, t};
-          }
-        }
-      }
-      const top = candidates.map(c => ({score: c.score, tokens: [...running[c.b], c.t]}));
-      const hits = top.map(c => c.tokens.at(-1) === g.eos_token_id || curLength + 1 >= g.max_length);
-      // e. next running beams: best `beams` non-finished candidates.
-      const runningOrder = top.map((c, i) => ({i, s: c.score + (hits[i] ? -1e9 : 0)})).sort((x, y) => y.s - x.s || x.i - y.i).slice(0, beams);
-      running = runningOrder.map(o => top[o.i].tokens);
-      runningScores = runningOrder.map(o => o.s);
-      // f. finished beams: only the first `beams` ranks may finish; length-normalised score.
-      const full = finished.every(f => f.done) && g.early_stopping === true;
-      const merged = [...finished.map(f => ({...f}))];
-      top.forEach((c, i) => {
-        let s = c.score / Math.pow(curLength + 1 - promptLength, g.length_penalty);
-        if (full) s += -1e9;
-        if (!heuristicUnsatisfied) s += -1e9;
-        const justFinished = hits[i] && i < beams;
-        if (!justFinished) s += -1e9;
-        merged.push({tokens: c.tokens, score: s, done: justFinished});
-      });
-      finished = merged.map((m, i) => ({...m, i})).sort((x, y) => y.score - x.score || x.i - y.i).slice(0, beams);
-      curLength += 1;
-      // early-stop heuristic (early_stopping true/false use cur_len - prompt length)
-      const best = runningScores[0] / Math.pow(curLength - promptLength, g.length_penalty);
-      const worst = Math.min(...finished.map(f => f.score));
-      heuristicUnsatisfied = heuristicUnsatisfied && finished.some(f => best > (f.done ? worst : -1e9));
-      const openBeam = !(finished.every(f => f.done) && g.early_stopping === true);
-      const validContinuations = !hits.every(Boolean);
-      if (!(heuristicUnsatisfied && openBeam && validContinuations)) break;
-    }
-    return finished[0].tokens;
+    const g = this.generation;
+    const result = await beamSearch({
+      next: async sequences => {
+        const {logits, stride, last} = await this.logits(sequences, hidden);
+        const rows = new Float32Array(sequences.length * this.vocab);
+        for (let b = 0; b < sequences.length; b++) rows.set(logits.subarray(b * stride + last, b * stride + last + this.vocab), b * this.vocab);
+        return rows;
+      },
+      vocabSize: this.vocab, numBeams: g.num_beams, startId: g.decoder_start_token_id, eosId: g.eos_token_id,
+      maxLength: g.max_length, lengthPenalty: g.length_penalty, earlyStopping: g.early_stopping,
+      noRepeatNgram: g.no_repeat_ngram_size ?? 0,
+    });
+    return result.tokens;
   }
 
   async recognize(rgba, width, height, {decoding = "beam"} = {}) {

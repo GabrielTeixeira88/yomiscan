@@ -38,6 +38,8 @@ const extension = path.join(root, "extension");
 await rm(extension, {recursive: true, force: true});
 await cp("extension", extension, {recursive: true});
 await cp("ocr.mjs", path.join(extension, "ocr.mjs"));
+await cp("beam.mjs", path.join(extension, "beam.mjs"));
+await cp("opus.mjs", path.join(extension, "opus.mjs"));
 await cp("detector.mjs", path.join(extension, "detector.mjs"));
 await cp("node_modules/@sqlite.org/sqlite-wasm/dist", path.join(extension, "sqlite"), {recursive: true});
 // Transformers.js bundle + the onnxruntime-web build it depends on (separate page, separate runtime).
@@ -121,7 +123,10 @@ try {
       .map(l => JSON.parse(l)).map(c => ({id: c.id, text: c.texts[0]}));
     report.opus = [];
     for (const spec of value("--opus").split(",")) {
-      const [device, dtype, threadText] = spec.split(":");
+      // device:dtype[:beam|greedy][:tN]
+      const [device, dtype, ...extra] = spec.split(":");
+      const decoding = extra.find(e => e === "beam" || e === "greedy") ?? "beam";
+      const threadText = extra.find(e => /^t\d+$/.test(e));
       const {targetId} = await call("Target.createTarget", {url: `chrome-extension://${extensionId}/opus.html${value("--opus-model") ? "?model=" + encodeURIComponent(value("--opus-model")) : ""}`});
       const page = (await call("Target.attachToTarget", {targetId, flatten: true})).sessionId;
       await until(() => evaluate(page, "globalThis.opusReady === true").catch(error => {
@@ -130,7 +135,7 @@ try {
       }));
       if (flag("--probe")) console.log("probe", JSON.stringify(await evaluate(page, "probeTokenizer()")));
       let result;
-      try { result = await evaluate(page, `runOpus(${JSON.stringify({device, dtype, lines, threads: threadText ? Number(threadText.slice(1)) : 8})})`); }
+      try { result = await evaluate(page, `runOpus(${JSON.stringify({device, dtype, decoding, lines, threads: threadText ? Number(threadText.slice(1)) : 8})})`); }
       catch (error) { result = {device, dtype, error: String(error.message ?? error)}; }
       report.opus.push(result);
       await call("Target.closeTarget", {targetId});

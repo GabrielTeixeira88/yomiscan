@@ -20,10 +20,12 @@ ROOT = Path(".cache/stage2")
 
 def engine_outputs() -> dict[str, dict[str, str]]:
     outputs: dict[str, dict[str, str]] = {}
-    for engine, name in (("opus (python, beam 6)", "translate-opus.ratings.csv"), ("hy-mt2-manga", "translate-hy.ratings.csv")):
+    for engine, name in (("opus (python, beam 4)", "translate-opus.ratings.csv"), ("hy-mt2-manga", "translate-hy.ratings.csv")):
         with (ROOT / name).open(encoding="utf-8", newline="") as handle:
             outputs[engine] = {row["case_id"]: row["translation"] for row in csv.DictReader(handle)}
-    for engine, name in (("opus (browser, q8 greedy)", "opus-browser-wasm-q8.json"), ("chrome-translator", "chrome-translator.json")):
+    for engine, name in (("opus (browser, q8 greedy)", "opus-browser-wasm-q8.json"),
+                         ("opus (browser, fp16 beam 4)", "opus-browser-wasm-fp16-beam.json"),
+                         ("chrome-translator", "chrome-translator.json")):
         outputs[engine] = {row["id"]: row["output"] for row in json.loads((ROOT / name).read_text(encoding="utf-8"))["rows"]}
     return outputs
 
