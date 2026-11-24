@@ -61,6 +61,7 @@ try {
   }
   const installMs = Date.now() - installStarted;
   const rows = [], lexicalMs = [], lexical = {compared: 0, surfaces: 0, forms: 0, units: 0, grammar: 0, examples: []};
+  const translationMs = [], translation = {compared: 0, identical: 0, examples: []};
   for (const file of pages) {
     const bytes = await readFile(file), mime = file.endsWith(".png") ? "image/png" : file.endsWith(".webp") ? "image/webp" : "image/jpeg";
     const form = new FormData(); form.append("file", new Blob([bytes], {type: mime}), path.basename(file));
@@ -85,6 +86,14 @@ try {
         lexical.compared++;
         for (const key of ['surfaces', 'forms', 'units', 'grammar']) if (b[key] === p[key]) lexical[key]++;
         if (b.forms !== p.forms) lexical.examples.push({text: ref.original_text, browser: b.forms, backend: p.forms});
+        if (ref.translation && ref.provenance?.engine === 'marian-mt') {
+          // Backend OPUS (one page batch) against browser OPUS (one line at a time).
+          const translated = await engine("translate", {text: ref.original_text});
+          translationMs.push(Math.round(translated.ms));
+          translation.compared++;
+          if (translated.translation === ref.translation) translation.identical++;
+          else translation.examples.push({text: ref.original_text, browser: translated.translation, backend: ref.translation});
+        }
       }
     }
     rows.push({page: path.basename(file), backend_blocks: reference.text_blocks.length, browser_blocks: browser.blocks.length, matched, exact,
@@ -101,8 +110,12 @@ try {
     median_page_ms_after_first: times.length ? times[Math.floor(times.length / 2)] : null,
     lexical: {...lexical, examples: lexical.examples.length, first_ms: lexicalMs[0],
       median_ms_after_first: lexicalMs.length > 1 ? lexicalMs.slice(1).sort((a, b) => a - b)[Math.floor((lexicalMs.length - 1) / 2)] : null}};
+  const sorted = translationMs.slice(1).sort((a, b) => a - b);
+  summary.translation = {compared: translation.compared, identical: translation.identical, first_ms: translationMs[0],
+    median_ms_after_first: sorted.length ? sorted[Math.floor(sorted.length / 2)] : null, p95_ms: sorted.length ? sorted[Math.floor(sorted.length * .95)] : null};
   for (const example of lexical.examples.slice(0, 8)) console.log(`  lexical difference: ${example.text}\n    browser ${example.browser}\n    backend ${example.backend}`);
+  for (const example of translation.examples) console.log(`  translation difference: ${example.text}\n    browser ${example.browser}\n    backend ${example.backend}`);
   console.log(JSON.stringify(summary));
   await mkdir(".cache/stage5a", {recursive: true});
-  await writeFile(`.cache/stage5a/vision-parity-${status.backend}.json`, JSON.stringify({summary, rows}, null, 1));
+  await writeFile(`.cache/stage5a/vision-parity-${status.backend}.json`, JSON.stringify({summary, rows, lexical_examples: lexical.examples, translation_examples: translation.examples}, null, 1));
 } finally {ws.close();}

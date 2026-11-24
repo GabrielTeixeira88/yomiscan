@@ -69,8 +69,9 @@ test("PIL bilinear resize keeps a flat image flat and crops copy rows exactly", 
 
 test("pinned artifact manifest is valid; each backend needs one OCR variant plus the shared components", () => {
   const manifest = parseManifest(pinned);
-  assert.deepEqual(requiredComponents('webgpu', manifest.components).map(c => c.id), ['detector', 'ocr-q4', 'tokenizer', 'dictionary']);
-  assert.deepEqual(requiredComponents('wasm', manifest.components).map(c => c.id), ['detector', 'ocr-int8', 'tokenizer', 'dictionary']);
+  const shared = ['tokenizer', 'dictionary', 'translation-opus-ja-en'];
+  assert.deepEqual(requiredComponents('webgpu', manifest.components).map(c => c.id), ['detector', 'ocr-q4', ...shared]);
+  assert.deepEqual(requiredComponents('wasm', manifest.components).map(c => c.id), ['detector', 'ocr-int8', ...shared]);
   assert.throws(() => parseManifest({...manifest, components: [{...manifest.components[0], files: [{path: '../x', bytes: 1, sha256: 'a'.repeat(64)}]}]}));
   assert.throws(() => parseManifest({...manifest, components: [manifest.components[0], manifest.components[0]]}));
 });

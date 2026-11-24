@@ -16,6 +16,7 @@ import "./furigana-tests";
 import "./reading-tests";
 import "./engine-tests";
 import "./lexical-tests";
+import "./translation-engine-tests";
 
 const viewport = {width: 800, height: 600};
 test("study copy writes exact Japanese/English and reports clipboard failures safely",async()=>{

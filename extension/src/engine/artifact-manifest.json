@@ -101,6 +101,45 @@
      "sha256": "2ee60d9de22640c57ec02e616992c483e8cde21fbbedb8ad346c4051ba3a1709"
     }
    ]
+  },
+  {
+   "id": "translation-opus-ja-en",
+   "kind": "translation",
+   "variant": "fp16",
+   "license": "CC-BY-4.0 (Helsinki-NLP)",
+   "source": "Xenova/opus-mt-ja-en: ONNX export of Helsinki-NLP/opus-mt-ja-en (CC-BY-4.0); fp16 files",
+   "files": [
+    {
+     "path": "translation-opus-ja-en/encoder_model_fp16.onnx",
+     "bytes": 100674164,
+     "sha256": "7ef42195c2f1c0bcbab5e3e88ec8f990ad52c2e21ead8537491a8c92f5f7aad2"
+    },
+    {
+     "path": "translation-opus-ja-en/decoder_model_merged_fp16.onnx",
+     "bytes": 113958211,
+     "sha256": "050c61002bfbba02b7fd3b277104ec86dc2889d27621d839b7c8c9171a2cc7bf"
+    },
+    {
+     "path": "translation-opus-ja-en/tokenizer.json",
+     "bytes": 5991485,
+     "sha256": "770ff2855437cf44f1f110550c5a9dca773253a167aeac36076b2073d259aa3b"
+    },
+    {
+     "path": "translation-opus-ja-en/tokenizer_config.json",
+     "bytes": 280,
+     "sha256": "414e9e7e2492b95fa80f24ccb295645d35c4dd0a74d7ef8b89820c0c7e8ec356"
+    },
+    {
+     "path": "translation-opus-ja-en/config.json",
+     "bytes": 1376,
+     "sha256": "d35476f1d3858883feec67e5a63ddc387452a70fda9c8e26db99c71aa2ad6a34"
+    },
+    {
+     "path": "translation-opus-ja-en/generation_config.json",
+     "bytes": 293,
+     "sha256": "ed1bc2193210ca2a6dc9c144ea789936fed8a27113e01010d8e591f45f238912"
+    }
+   ]
   }
  ]
 }

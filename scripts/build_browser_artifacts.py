@@ -25,6 +25,7 @@ MANGA_OCR = "kha-white/manga-ocr-base (Apache-2.0); ONNX export, research/stage-
 LINDERA = "lindera-wasm-unidic@2.1.0 (npm, pinned in extension/package-lock.json)"
 LINDERA_WASM = ROOT / "extension" / "node_modules" / "lindera-wasm-unidic" / "lindera_wasm_unidic_bg.wasm"
 JMDICT = "JMdict (EDRDG), imported by scripts/import_jmdict.py; attribution required"
+OPUS = "Xenova/opus-mt-ja-en: ONNX export of Helsinki-NLP/opus-mt-ja-en (CC-BY-4.0); fp16 files"
 DETECTOR = "ogkalu/comic-text-and-bubble-detector@16e8a622f91fabc6b5b65c96d32d1183f8843546 (Apache-2.0); ONNX export"
 
 
@@ -52,6 +53,11 @@ def components(stage2: Path, dictionary: Path = ROOT / "data" / "jmdict.sqlite3"
                   ((tokenizer, "tokenizer/lindera_wasm_unidic_bg.wasm"),)),
         Component("dictionary", "dictionary", "jmdict-schema2", "CC-BY-SA-4.0 (EDRDG)", JMDICT,
                   ((dictionary, "dictionary/jmdict.sqlite3"),)),
+        # Stage 2: fp16 + beam search on WASM reproduces the Python backend on 99/100 lines.
+        Component("translation-opus-ja-en", "translation", "fp16", "CC-BY-4.0 (Helsinki-NLP)", OPUS, tuple(
+            (stage2 / "hf" / "Xenova" / "opus-mt-ja-en" / source, f"translation-opus-ja-en/{Path(source).name}") for source in (
+                "onnx/encoder_model_fp16.onnx", "onnx/decoder_model_merged_fp16.onnx", "tokenizer.json", "tokenizer_config.json",
+                "config.json", "generation_config.json"))),
     )
 
 

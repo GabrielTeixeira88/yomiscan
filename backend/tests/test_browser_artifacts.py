@@ -27,7 +27,7 @@ def test_builder_copies_exports_and_pins_size_and_sha256(tmp_path):
     paths, output, pinned = fake_inputs(tmp_path), tmp_path / "out", tmp_path / "pinned.json"
     manifest = builder.build(paths["stage2"], output, pinned, paths["dictionary"], paths["tokenizer"])
     assert json.loads(pinned.read_text(encoding="utf-8")) == manifest == json.loads((output / "manifest.json").read_text(encoding="utf-8"))
-    assert [c["id"] for c in manifest["components"]] == ["detector", "ocr-q4", "ocr-int8", "tokenizer", "dictionary"]
+    assert [c["id"] for c in manifest["components"]] == ["detector", "ocr-q4", "ocr-int8", "tokenizer", "dictionary", "translation-opus-ja-en"]
     for component in manifest["components"]:
         for entry in component["files"]:
             data = (output / entry["path"]).read_bytes()

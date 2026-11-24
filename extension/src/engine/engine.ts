@@ -10,6 +10,8 @@ import sqlite3InitModule from '@sqlite.org/sqlite-wasm';
 import {analyzeLexical, type JapaneseToken} from './lexical';
 import {JmdictDatabase, fromLindera, toAnalysis, type LinderaToken, type Sqlite3} from './lexicon';
 import type {Analysis} from '../api';
+import {Tokenizer} from '@huggingface/tokenizers';
+import {OpusTranslator, type MarianTokenizer} from './translation';
 
 export type Backend = 'webgpu' | 'wasm';
 export interface ComponentStatus {id: string; kind: string; variant: string; bytes: number; license: string; source: string; installed: boolean}
@@ -28,7 +30,7 @@ export async function chooseBackend(): Promise<Backend> {
 /** The components one backend needs. int8 OCR must not run on WebGPU (no fast int8 path; 10x slower). */
 export function requiredComponents(backend: Backend, components: readonly ArtifactComponent[] = manifest.components): ArtifactComponent[] {
   const ocr = backend === 'webgpu' ? 'q4' : 'int8';
-  return components.filter(c => ['detector', 'tokenizer', 'dictionary'].includes(c.kind) || (c.kind === 'ocr' && c.variant === ocr));
+  return components.filter(c => ['detector', 'tokenizer', 'dictionary', 'translation'].includes(c.kind) || (c.kind === 'ocr' && c.variant === ocr));
 }
 
 interface LexicalEngine {tokenize(text: string): JapaneseToken[]; dictionary: JmdictDatabase}
@@ -65,7 +67,7 @@ export class BrowserEngine {
 
   async remove(): Promise<void> {
     if (this.install.state === 'running') throw new Error('Cancel the installation first');
-    this.vision = null;
+    this.vision = null;this.translator = null;
     const lexical = this.lexical;this.lexical = null;
     (await lexical?.catch(() => null))?.dictionary.close();
     for (const component of manifest.components) await this.store.remove(component);
@@ -78,16 +80,10 @@ export class BrowserEngine {
     this.vision ??= (async () => {
       const backend = await this.backend, components = requiredComponents(backend);
       for (const c of components) if (!await this.store.installed(c)) throw new Error('Browser engine models are not installed. Open Setup → Browser engine.');
-      const ort: typeof Ort = await import(/* @vite-ignore */ chrome.runtime.getURL(backend === 'webgpu' ? 'ort/ort.webgpu.min.mjs' : 'ort/ort.wasm.min.mjs'));
-      ort.env.wasm.wasmPaths = chrome.runtime.getURL('ort/');
-      ort.env.wasm.numThreads = this.threads();
+      const ort = await this.runtime();
       const options: Ort.InferenceSession.SessionOptions = {executionProviders: [backend], graphOptimizationLevel: 'all'};
       if (backend === 'webgpu') options.preferredOutputLocation = 'cpu';
-      const file = (component: ArtifactComponent, name: string) => {
-        const entry = component.files.find(f => f.path.endsWith('/' + name));
-        if (!entry) throw new Error(`Manifest component ${component.id} lacks ${name}`);
-        return this.store.read(entry);
-      };
+      const file = (component: ArtifactComponent, name: string) => this.file(component, name);
       const detectorComponent = components.find(c => c.kind === 'detector')!, ocrComponent = components.find(c => c.kind === 'ocr')!;
       const detector = await ort.InferenceSession.create(await file(detectorComponent, 'detector-fp16.onnx'), options);
       const vocabulary = new TextDecoder().decode(await file(ocrComponent, 'vocab.txt')).split(/\r?\n/);
@@ -98,6 +94,47 @@ export class BrowserEngine {
       return {ort, detector, ocr};
     })().catch(error => {this.vision = null; throw error;});
     return this.vision;
+  }
+
+  private ortRuntime: Promise<typeof Ort> | null = null;
+  /** One ONNX Runtime bundle per document: the WebGPU build (it also runs WASM) or the plain threaded WASM build. */
+  private runtime(): Promise<typeof Ort> {
+    this.ortRuntime ??= (async () => {
+      const backend = await this.backend;
+      const ort: typeof Ort = await import(/* @vite-ignore */ chrome.runtime.getURL(backend === 'webgpu' ? 'ort/ort.webgpu.min.mjs' : 'ort/ort.wasm.min.mjs'));
+      ort.env.wasm.wasmPaths = chrome.runtime.getURL('ort/');
+      ort.env.wasm.numThreads = this.threads();
+      return ort;
+    })().catch(error => {this.ortRuntime = null; throw error;});
+    return this.ortRuntime;
+  }
+
+  private file(component: ArtifactComponent, name: string): Promise<Uint8Array<ArrayBuffer>> {
+    const entry = component.files.find(f => f.path.endsWith('/' + name));
+    if (!entry) throw new Error(`Manifest component ${component.id} lacks ${name}`);
+    return this.store.read(entry);
+  }
+
+  private translator: Promise<OpusTranslator> | null = null;
+  /** OPUS-MT always runs on WASM threads: Stage 2 found WebGPU slower for this decoder and less exact (93/100). */
+  private loadTranslator(): Promise<OpusTranslator> {
+    this.translator ??= (async () => {
+      const component = requiredComponents(await this.backend).find(c => c.kind === 'translation');
+      if (!component || !await this.store.installed(component)) throw new Error('Browser engine translation model is not installed. Open Setup → Browser engine.');
+      const ort = await this.runtime(), json = async (name: string) => JSON.parse(new TextDecoder().decode(await this.file(component, name)));
+      const options: Ort.InferenceSession.SessionOptions = {executionProviders: ['wasm'], graphOptimizationLevel: 'all'};
+      const tokenizer = new Tokenizer(await json('tokenizer.json'), await json('tokenizer_config.json')) as unknown as MarianTokenizer;
+      return new OpusTranslator(ort, tokenizer, await ort.InferenceSession.create(await this.file(component, 'encoder_model_fp16.onnx'), options),
+        await ort.InferenceSession.create(await this.file(component, 'decoder_model_merged_fp16.onnx'), options),
+        await json('config.json'), await json('generation_config.json'));
+    })().catch(error => {this.translator = null; throw error;});
+    return this.translator;
+  }
+
+  /** Sentence translation, one line at a time (as the backend's single-line path). */
+  async translate(text: string): Promise<{translation: string; ms: number}> {
+    const started = performance.now(), translator = await this.loadTranslator();
+    return {translation: await translator.translate(text), ms: performance.now() - started};
   }
 
   private lexical: Promise<LexicalEngine> | null = null;
@@ -125,12 +162,18 @@ export class BrowserEngine {
     return this.lexical;
   }
 
-  /** Tokens, ranked JMdict entries, units, grammar notes and inflection labels, in the Study shape. */
-  async analyzeText(text: string): Promise<Analysis> {
+  /** Tokens, ranked JMdict entries, units, grammar notes, inflection labels and (optionally) the
+   * sentence translation, in the Study response shape. */
+  async analyzeText(text: string, {translate = false} = {}): Promise<Analysis> {
     const started = performance.now(), lexical = await this.loadLexical();
     const result = analyzeLexical(text, lexical.tokenize(text), form => lexical.dictionary.lookup(form));
-    const analysis = toAnalysis(result, null, {analysis_origin: 'browser'});
-    analysis.processing.analysis_ms = analysis.processing.total_ms = performance.now() - started;
+    const analysis_ms = performance.now() - started;
+    const translated = translate && text.trim() ? await this.translate(text) : null;
+    const analysis = toAnalysis(result, translated?.translation ?? null,
+      {analysis_origin: 'browser', ...(translated ? {engine: 'marian-mt', model: 'Helsinki-NLP/opus-mt-ja-en'} : {})});
+    analysis.processing.analysis_ms = analysis_ms;
+    analysis.processing.translation_ms = translated?.ms ?? 0;
+    analysis.processing.total_ms = performance.now() - started;
     return analysis;
   }
 
