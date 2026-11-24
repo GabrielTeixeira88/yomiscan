@@ -60,7 +60,7 @@ try {
     if (status.install.state !== "done") throw new Error(`Install failed: ${status.install.error}`);
   }
   const installMs = Date.now() - installStarted;
-  const rows = [];
+  const rows = [], lexicalMs = [], lexical = {compared: 0, surfaces: 0, forms: 0, units: 0, grammar: 0, examples: []};
   for (const file of pages) {
     const bytes = await readFile(file), mime = file.endsWith(".png") ? "image/png" : file.endsWith(".webp") ? "image/webp" : "image/jpeg";
     const form = new FormData(); form.append("file", new Blob([bytes], {type: mime}), path.basename(file));
@@ -75,6 +75,17 @@ try {
       if (best < 0) continue;
       used.add(best); matched++;
       const d = cer(ref.original_text, browser.blocks[best].text); edits += d.edits; length += d.length; if (!d.edits) exact++;
+      if (!d.edits && ref.status === 'success' && ref.tokens.length) {
+        // Same text in both engines: compare the browser lexical engine with the backend's analysis.
+        const t = Date.now(), analysis = await engine("analyze-text", {text: ref.original_text});
+        lexicalMs.push(Date.now() - t);
+        const view = a => ({surfaces: a.tokens.map(x => x.surface).join('|'), forms: a.tokens.map(x => `${x.dictionary_form}:${x.meanings[0]?.entry_id ?? '-'}`).join('|'),
+          units: a.units.map(u => `${u.start_token}-${u.end_token}:${u.dictionary_form}`).join('|'), grammar: a.grammar.map(g => g.id).join('|')});
+        const b = view(analysis), p = view(ref);
+        lexical.compared++;
+        for (const key of ['surfaces', 'forms', 'units', 'grammar']) if (b[key] === p[key]) lexical[key]++;
+        if (b.forms !== p.forms) lexical.examples.push({text: ref.original_text, browser: b.forms, backend: p.forms});
+      }
     }
     rows.push({page: path.basename(file), backend_blocks: reference.text_blocks.length, browser_blocks: browser.blocks.length, matched, exact,
       cer: length ? edits / length : 0, edits, length, browser_ms: wallMs, load_ms: Math.round(browser.load_ms),
@@ -87,7 +98,10 @@ try {
   const times = rows.slice(1).map(r => r.browser_ms).sort((a, b) => a - b);
   const summary = {backend: status.backend, isolated: status.isolated, threads: status.threads, install_ms: installMs, pages: rows.length,
     backend_blocks: total.backend, matched_blocks: total.matched, exact_blocks: total.exact, cer: total.length ? total.edits / total.length : 0,
-    median_page_ms_after_first: times.length ? times[Math.floor(times.length / 2)] : null};
+    median_page_ms_after_first: times.length ? times[Math.floor(times.length / 2)] : null,
+    lexical: {...lexical, examples: lexical.examples.length, first_ms: lexicalMs[0],
+      median_ms_after_first: lexicalMs.length > 1 ? lexicalMs.slice(1).sort((a, b) => a - b)[Math.floor((lexicalMs.length - 1) / 2)] : null}};
+  for (const example of lexical.examples.slice(0, 8)) console.log(`  lexical difference: ${example.text}\n    browser ${example.browser}\n    backend ${example.backend}`);
   console.log(JSON.stringify(summary));
   await mkdir(".cache/stage5a", {recursive: true});
   await writeFile(`.cache/stage5a/vision-parity-${status.backend}.json`, JSON.stringify({summary, rows}, null, 1));
