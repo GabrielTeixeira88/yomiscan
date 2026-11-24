@@ -14,6 +14,7 @@ import "./reader-tests";
 import "./backend-tests";
 import "./furigana-tests";
 import "./reading-tests";
+import "./engine-tests";
 
 const viewport = {width: 800, height: 600};
 test("study copy writes exact Japanese/English and reports clipboard failures safely",async()=>{
@@ -180,7 +181,13 @@ test("aborted requests produce useful timeout guidance", async context => {
 test("manifest limits access to active tab and loopback; no content scripts run automatically", async () => {
   const manifest = JSON.parse(await readFile("manifest.json", "utf8"));
   assert.equal(manifest.manifest_version, 3);
-  assert.deepEqual(manifest.permissions, ["activeTab", "scripting", "offscreen", "storage"]);
+  // unlimitedStorage holds the browser engine's pinned models (Stage 5a); no new host access.
+  assert.deepEqual(manifest.permissions, ["activeTab", "scripting", "offscreen", "storage", "unlimitedStorage"]);
+  // WASM needs wasm-unsafe-eval (never unsafe-eval); threads need cross-origin isolation.
+  assert.match(manifest.content_security_policy.extension_pages, /script-src 'self' 'wasm-unsafe-eval';/);
+  assert.doesNotMatch(manifest.content_security_policy.extension_pages, /'unsafe-eval'|'unsafe-inline'/);
+  assert.equal(manifest.cross_origin_embedder_policy.value, "require-corp");
+  assert.equal(manifest.cross_origin_opener_policy.value, "same-origin");
   assert.deepEqual(manifest.host_permissions, ["http://127.0.0.1/*"]);
   assert.deepEqual(manifest.optional_host_permissions, ["http://*/*", "https://*/*"]);
   assert.equal(manifest.content_scripts, undefined);

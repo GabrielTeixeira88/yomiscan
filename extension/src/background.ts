@@ -106,6 +106,15 @@ async function capture(request: CaptureRequest, tab: chrome.tabs.Tab): Promise<u
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (sender.id !== chrome.runtime.id || sender.frameId !== 0 || sender.tab?.id === undefined) return;
+  if(message?.type==='engine'){
+    // Browser engine setup (Stage 5a). Page recognition is not exposed to content scripts here.
+    if(!['status','install','cancel','remove'].includes(message.operation)||(message.operation==='install'&&typeof message.base!=='string')){
+      sendResponse({ok:false,error:'Invalid browser engine request'});return;}
+    void prepareTransport().then(()=>chrome.runtime.sendMessage({target:'offscreen-engine',operation:message.operation,base:message.base}))
+      .then(reply=>sendResponse(reply??{ok:false,error:'Browser engine unavailable'}),
+        error=>sendResponse({ok:false,error:error instanceof Error?error.message:'Browser engine unavailable'}));
+    return true;
+  }
   if(message?.type==='chapter-readiness'){
     void readinessRequest().then(data=>sendResponse({ok:true,data}),()=>sendResponse({ok:false,error:'Readiness unavailable. Start the updated local backend.'}));return true;
   }

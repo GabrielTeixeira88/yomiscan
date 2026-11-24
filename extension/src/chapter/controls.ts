@@ -6,6 +6,7 @@ import type {Analysis} from '../api';
 import type {Rect} from '../geometry';
 import {HistoryControls} from './history-controls';
 import {SetupControls} from './setup-controls';
+import {EngineControls} from './engine-controls';
 
 export class ChapterControls {
   private host=document.createElement("div");
@@ -105,7 +106,7 @@ export class ChapterControls {
       this.translationOptions=options;this.english.textContent=targetLabel(options.target_language);
     });panel.append(this.translationSettings.element);
     panel.append(new HistoryControls(data=>this.showStudy(data,{x:16,y:16,width:0,height:0})).element);
-    advanced.append(new SetupControls().element);
+    advanced.append(new SetupControls().element,new EngineControls().element);
     const resources=document.createElement('details'),resourceTitle=document.createElement('summary'),resourceText=document.createElement('p');
     resourceTitle.textContent='Processing details';resources.append(resourceTitle,resourceText);
     resources.addEventListener('toggle',()=>{if(resources.open)resourceText.textContent=this.session?.resourceSummary()??'No processed page retained.';});advanced.append(resources);
