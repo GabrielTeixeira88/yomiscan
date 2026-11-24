@@ -49,6 +49,26 @@ only. Consequences fixed now, before any measurement:
 - **Scope.** G1, G2 and G7 are computed over all 23 pages and over held-out alone. Both
   are reported, and the gate uses all 23 pages. G3–G6 and G8 do not depend on corpus size.
 
+## Owner decision: browser-first (2026-11-24, during measurement)
+
+The owner chose **browser-first (Stage 5a)** before the gate result. The reason is that a
+Chrome Web Store extension that works on any computer's CPU is worth more than the speed
+the gate protects. A downloadable, all-dependencies engine will follow as an **optional
+companion** for GPU speed and stronger translation (it replaces Stage 5b as a mandatory
+installer). This is recorded as an owner decision, not as a change of thresholds after
+measurement started. The criteria are applied as follows:
+
+- **Hard requirements (must pass before Stage 5a ships):** G1 OCR accuracy, G2 OCR
+  robustness, G7 detection recall, G8 memory, and G6 download size. Wrong text or crashed
+  tabs would make the extension unusable.
+- **Reported targets, not pass/fail:** G3 WebGPU latency, G4 WASM latency and G5 cold
+  start. They set user expectations and optimization priorities. WebGPU is used when
+  Chrome offers an adapter (including integrated GPUs), and WASM on the CPU is the universal fallback.
+- **Reference laptop:** still wanted for realistic expectations, no longer decisive.
+- **Translation:** the browser build uses a model that runs on the CPU (OPUS). The
+  Chrome built-in Translator stays optional and experimental. Hy-MT2 and other GPU-class
+  models belong to the companion engine.
+
 ## Criteria
 
 | # | Criterion | Threshold | Measurement |
