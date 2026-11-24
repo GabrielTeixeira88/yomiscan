@@ -14,6 +14,7 @@ export function historyAnalysis(value:unknown):Analysis {
       translation_ms:data.processing.translation_ms,analysis_ms:data.processing.analysis_ms,total_ms:data.processing.total_ms},
     tokens:data.tokens.map(t=>({surface:t.surface,reading:t.reading,lemma:t.lemma,dictionary_form:t.dictionary_form,
       part_of_speech:t.part_of_speech,conjugation_type:t.conjugation_type,conjugation_form:t.conjugation_form,
+      ...(t.inflection?{inflection:[...t.inflection]}:{}),
       meanings:t.meanings.map(m=>({entry_id:m.entry_id,glosses:[...m.glosses],parts_of_speech:[...m.parts_of_speech],
         spellings:[...m.spellings],readings:[...m.readings],notes:[...m.notes],labels:[...m.labels]}))}))};
   if(data.units)result.units=data.units.map(u=>({surface:u.surface,dictionary_form:u.dictionary_form,start_token:u.start_token,

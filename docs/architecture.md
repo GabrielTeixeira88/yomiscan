@@ -60,6 +60,18 @@ the longest match wins; a match nested inside another is dropped (ば inside
 (id, name, short learner meaning, token span), and the popup lists them under "Grammar". The
 evaluator accepts a grammar note whose forms include an expected unit (てしまう, だろう).
 
+**Inflection labels and furigana (Stage 3).** `inflection.py` names how a verb or
+adjective is inflected, from rule data in `resources/lexical/inflections.json`. For each
+head it reads the head's own form (imperative, volitional), then the auxiliaries and
+て/で/ば that follow it, in order: 食べなかった = negative, past; 行きませんでした = polite,
+negative, past; 高くなかった = negative, past. An unknown auxiliary such as the copula だ ends
+the word. Labels attach to the head (`AnalyzedToken.inflection`, `inflection` in the API),
+and the popup shows them as "Form: negative · past". Furigana is aligned in the extension
+(`extension/src/furigana.ts`, pure, so a browser engine can reuse it). Kana runs anchor the
+reading and each kanji run takes the reading between them (食べ → 食(た)べ). An unalignable
+reading is shown over the whole word instead of a wrong split. The word breakdown renders
+it as DOM `<ruby>` nodes.
+
 **Configurable loopback port.** `extension/src/backend.ts` owns the backend address:
 `http://127.0.0.1:<port>`, default 47615 (not AnkiConnect's 8765), with an optional
 `backendPort` in `chrome.storage.local` (1024–65535), edited in Setup & readiness.

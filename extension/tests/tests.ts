@@ -11,6 +11,7 @@ import "./report-tests";
 import "./translation-tests";
 import "./reader-tests";
 import "./backend-tests";
+import "./furigana-tests";
 
 const viewport = {width: 800, height: 600};
 test("study copy writes exact Japanese/English and reports clipboard failures safely",async()=>{
@@ -106,6 +107,12 @@ test("grammar notes are optional, validated and must address real tokens", () =>
   assert.deepEqual(parseAnalysis({...response(), grammar: [note]}).grammar, [note]);
   assert.throws(() => parseAnalysis({...response(), grammar: [{...note, meaning: 3}]}), /grammar/);
   assert.throws(() => parseAnalysis({...response(), grammar: [{...note, end_token: 99}]}), /grammar/);
+});
+
+test("token inflection labels are optional string lists", () => {
+  const token = response().tokens[0];
+  assert.deepEqual(parseAnalysis({...response(), tokens: [{...token, inflection: ["negative", "past"]}]}).tokens[0].inflection, ["negative", "past"]);
+  assert.throws(() => parseAnalysis({...response(), tokens: [{...token, inflection: [1]}]}), /token/);
 });
 
 test("friendly HTTP messages never require raw server errors", () => {

@@ -1,4 +1,5 @@
 import type { Analysis, Meaning } from "./api";
+import {furigana} from "./furigana";
 import { constrainPopup, popupPosition, resizePopup, type Point, type Rect, type ResizeEdge } from "./geometry";
 
 export async function copyStudyText(text:string,write:(text:string)=>Promise<void>=value=>navigator.clipboard.writeText(value)):Promise<string> {
@@ -42,6 +43,7 @@ export const styles = `
     background: repeating-linear-gradient(135deg, transparent 0 3px, #7d9385 3px 5px, transparent 5px 7px);
     clip-path: polygon(100% 0, 100% 100%, 0 100%); }
   .surface { font-size: 18px; font-weight: 650; color: #244e34; }
+  .surface rt { font-size: 10px; font-weight: 400; color: #5d6b62; }
   .metadata { font-size: 12px; color: #526071; }
   ul { margin: 5px 0; padding-left: 20px; }
   li { margin: 4px 0; }
@@ -62,6 +64,18 @@ export function element<K extends keyof HTMLElementTagNameMap>(tag: K, text?: st
   if (text !== undefined) node.textContent = text;
   if (className) node.className = className;
   return node;
+}
+
+/** Word with furigana over its kanji runs, built as DOM nodes (never HTML strings). */
+function appendFurigana(parent: HTMLElement, surface: string, reading: string | null): void {
+  for (const segment of furigana(surface, reading)) {
+    if (!segment.reading) { parent.append(segment.text); continue; }
+    const ruby = document.createElement("ruby");
+    const rt = document.createElement("rt");
+    rt.textContent = segment.reading;
+    ruby.append(segment.text, rt);
+    parent.append(ruby);
+  }
 }
 
 function appendMeaning(list: HTMLElement, meaning: Meaning): void {
@@ -277,12 +291,14 @@ export class StudyPopup {
     if (!tokens.length) breakdown.append(element("p", "No word breakdown available."));
     for (const token of tokens) {
       const row = element("article");
-      const surface = element("div", token.surface, "surface");
+      const surface = element("div", undefined, "surface");
       surface.lang = "ja";
+      appendFurigana(surface, token.surface, token.reading);
       row.append(surface, element("p", `Reading: ${token.reading ?? "unavailable"}`, "metadata"));
       row.append(element("p", `Lemma: ${token.lemma ?? "unavailable"}`, "metadata"));
       if (token.dictionary_form && token.dictionary_form !== token.lemma) row.append(element("p", `Dictionary form: ${token.dictionary_form}`, "metadata"));
       row.append(element("p", `POS: ${token.part_of_speech ?? "unavailable"}`, "metadata"));
+      if (token.inflection?.length) row.append(element("p", `Form: ${token.inflection.join(" · ")}`, "metadata"));
       if (token.conjugation_type || token.conjugation_form) row.append(element("p", `Conjugation: ${[token.conjugation_type, token.conjugation_form].filter(Boolean).join(" / ")}`, "metadata"));
       if (!token.meanings.length) row.append(element("p", "No dictionary match", "metadata"));
       this.appendMeanings(row, token.meanings);

@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "description": "Learner labels for how a verb or adjective is inflected. For each verb/adjective token, the analyzer reads its own conjugation form, then the auxiliaries (and the particles て/で/ば) directly after it, in order: 食べ+なかっ+た = negative, past. The first rule whose fields all match a token gives its label (surface exact, base = orthographic base or lemma, form = conjugation-form prefix). Shared rule data for the Python analyzer and a browser engine. A follower rule may name its own pos; a token matching such a rule also continues the word (高く + adjective ない = negative).",
+  "own_forms": [
+    {"form": ["命令形"], "label": "imperative"},
+    {"form": ["意志推量形"], "label": "volitional"}
+  ],
+  "followers": [
+    {"pos": ["形容詞"], "base": ["ない"], "label": "negative"},
+    {"surface": ["たら", "だら"], "base": ["た"], "label": "conditional (-tara)"},
+    {"base": ["た"], "label": "past"},
+    {"base": ["ない"], "form": ["仮定形"], "label": "negative conditional"},
+    {"base": ["ない", "ぬ", "ん"], "label": "negative"},
+    {"base": ["ます"], "label": "polite"},
+    {"base": ["です"], "label": "polite"},
+    {"base": ["れる", "られる"], "label": "passive / potential"},
+    {"base": ["せる", "させる"], "label": "causative"},
+    {"base": ["たい"], "label": "want to"},
+    {"base": ["ちゃう", "じゃう"], "label": "completion (-te shimau)"},
+    {"base": ["てる", "でる"], "label": "progressive (-te iru)"},
+    {"base": ["とく", "どく"], "label": "in advance (-te oku)"},
+    {"base": ["う", "よう"], "label": "volitional"},
+    {"surface": ["て", "で"], "label": "te-form"},
+    {"surface": ["ば"], "label": "conditional (-ba)"}
+  ],
+  "follower_pos": ["助動詞"],
+  "follower_particles": ["て", "で", "ば"],
+  "heads": ["動詞", "形容詞"]
+}

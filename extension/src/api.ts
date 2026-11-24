@@ -7,6 +7,8 @@ export interface Token {
   surface: string; reading: string | null; lemma: string | null; dictionary_form: string | null;
   part_of_speech: string | null; conjugation_type: string | null; conjugation_form: string | null;
   meanings: Meaning[];
+  /** Learner labels for a verb/adjective head, e.g. ["negative", "past"]; absent from older servers. */
+  inflection?: string[];
 }
 /** A multi-token meaning unit (かもしれない) covering tokens[start_token, end_token). */
 export interface Unit {
@@ -64,7 +66,8 @@ export function parseAnalysis(value: unknown): Analysis {
   for (const token of value.tokens) {
     if (!record(token) || typeof token.surface !== "string"
       || !["reading", "lemma", "dictionary_form", "part_of_speech", "conjugation_type", "conjugation_form"].every(k => nullableString(token[k]))
-      || !Array.isArray(token.meanings)) throw new Error("Invalid token data from local server.");
+      || !Array.isArray(token.meanings)
+      || (token.inflection !== undefined && !strings(token.inflection))) throw new Error("Invalid token data from local server.");
     for (const meaning of token.meanings) {
       if (!record(meaning) || !Number.isInteger(meaning.entry_id)
         || !["glosses", "parts_of_speech", "spellings", "readings", "notes", "labels"].every(k => strings(meaning[k]))) {

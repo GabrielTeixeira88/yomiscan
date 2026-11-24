@@ -24,6 +24,7 @@ from .glossary import GlossaryEntry, applicable_terms
 from .lexical_ranking import choose_matches
 from .lexical_units import LexicalUnit, find_units
 from .grammar_patterns import GrammarMatch, find_grammar
+from .inflection import inflection_labels
 from .translation.options import TranslationOptions, validate_options, capabilities
 from .translation.structured import PageTranslationRequest, TranslationSegment, CONTRACT_VERSION, StructuredTranslationError
 from .translation.base import TranslationContext
@@ -38,6 +39,8 @@ class AnalyzedToken:
     token: JapaneseToken
     lookup_form: str | None
     entry_ids: tuple[int, ...]
+    # Learner labels for a verb/adjective head (inflection.py): ("negative", "past").
+    inflection: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -94,7 +97,8 @@ class TextAnalyzer:
         for text in texts:
             try:
                 lexical_key = cache.key("lexical", text, lexical_identity, algorithm("analysis.py", "lexical_ranking.py", "lexical_units.py", "resources/lexical/units.json",
-                                                                       "grammar_patterns.py", "resources/lexical/grammar.json")) if cache and all(
+                                                                       "grammar_patterns.py", "resources/lexical/grammar.json",
+                                                                       "inflection.py", "resources/lexical/inflections.json")) if cache and all(
                     item is not None for item in lexical_identity) else None
                 payload = cache.get("lexical", lexical_key) if cache else None
                 lexical = None
@@ -234,10 +238,10 @@ class TextAnalyzer:
                 cache[form] = self._dictionary.lookup(form)
             return cache[form]
         raw = self._tokenizer.tokenize(text)
-        for token in raw:
+        for token, labels in zip(raw, inflection_labels(raw), strict=True):
             matched_form, matches = choose_matches(token, lookup_candidates(token), lookup)
             entries.update((entry.entry_id, entry) for entry in matches)
-            tokens.append(AnalyzedToken(token, matched_form, tuple(e.entry_id for e in matches)))
+            tokens.append(AnalyzedToken(token, matched_form, tuple(e.entry_id for e in matches), labels))
         units = []
         for unit, matches in find_units(raw, lookup):
             entries.update((entry.entry_id, entry) for entry in matches)

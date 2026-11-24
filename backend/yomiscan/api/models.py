@@ -31,6 +31,7 @@ class TokenResponse(BaseModel):
     conjugation_type: str | None
     conjugation_form: str | None
     meanings: list[Meaning]
+    inflection: list[str] = []  # learner labels for verb/adjective heads, e.g. ["negative", "past"]
 
 
 class UnitResponse(BaseModel):
@@ -98,6 +99,7 @@ class ImageAnalysisResponse(BaseModel):
                 part_of_speech=item.token.part_of_speech,
                 conjugation_type=item.token.conjugation_type,
                 conjugation_form=item.token.conjugation_form,
+                inflection=list(item.inflection),
                 meanings=[Meaning(entry_id=entry_id, **sense.__dict__)
                           for entry_id in item.entry_ids
                           for sense in analysis.dictionary_entries[entry_id].senses],
