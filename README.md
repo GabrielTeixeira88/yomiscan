@@ -526,7 +526,9 @@ downloaded JMdict database is not required for tests. See
 `uv run python scripts/evaluate_lexical.py` scores dictionary ranking against the
 hand-written golden set in `benchmarks/lexical-golden.jsonl` using your local JMdict
 (no models). See [evaluation sets](docs/evaluation/README.md) for the format, recorded
-results (76.1% → 99.3% on its 138 expectations) and the owner-supplied page corpus specification.
+results (76.1% → 99.3% on its 138 expectations), the owner-supplied page corpus specification
+and its draft baseline (23 pages: dialogue detection recall 95.0%, OCR CER 4.05%; the ONNX
+detector was not made the default).
 
 See [sample testing instructions](samples/README.md) for a manual evaluation matrix.
 Do not commit copyrighted screenshots. Compare actual OCR with a manually verified
