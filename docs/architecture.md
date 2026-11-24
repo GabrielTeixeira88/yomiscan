@@ -72,6 +72,14 @@ reading and each kanji run takes the reading between them (食べ → 食(た)�
 reading is shown over the whole word instead of a wrong split. The word breakdown renders
 it as DOM `<ruby>` nodes.
 
+**Correcting OCR in Study (Stage 3).** The popup's "Edit text" button opens a text area
+with the recognized text. "Analyze edited text" sends it (1–1,000 characters) through the
+background worker to `POST /api/v1/analyze-text`. That endpoint runs
+`ImageAnalysisService.analyze_text` on the same single worker and busy guard as images. It
+does lexical analysis and sentence translation only, with no screenshot and no OCR. The
+security guard bounds its body to 8 KiB. The response is the usual Study JSON with
+`analysis_origin: "edited"`, and the popup re-renders in place.
+
 **Configurable loopback port.** `extension/src/backend.ts` owns the backend address:
 `http://127.0.0.1:<port>`, default 47615 (not AnkiConnect's 8765), with an optional
 `backendPort` in `chrome.storage.local` (1024–65535), edited in Setup & readiness.

@@ -79,6 +79,31 @@ def test_health_and_repeated_analysis_reuses_service(api):
     assert len(threads) == 3  # one initialization, two requests
 
 
+def test_edited_text_is_analyzed_without_ocr(api):
+    client, ocr, translator, _ = api
+    translator.translate.return_value = TranslationResult("猫を食べた", "I ate a cat", "fake", "fake", 3)
+    response = client.post("/api/v1/analyze-text", json={"text": " 猫を食べた "})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["original_text"] == "猫を食べた" and data["translation"] == "I ate a cat"
+    assert data["processing"]["ocr_ms"] == 0 and data["provenance"]["analysis_origin"] == "edited"
+    assert any(token["inflection"] == ["past"] for token in data["tokens"])
+    ocr.recognize.assert_not_called()
+
+
+@pytest.mark.parametrize("body,status", [({"text": "   "}, 422), ({"text": "猫" * 1001}, 422), ({"text": "猫", "extra": 1}, 422), ({}, 422)])
+def test_edited_text_is_validated(api, body, status):
+    client, *_ = api
+    assert client.post("/api/v1/analyze-text", json=body).status_code == status
+
+
+def test_edited_text_body_is_bounded(api):
+    client, *_ = api
+    response = client.post("/api/v1/analyze-text", content=b'{"text": "' + b"a" * 9000 + b'"}',
+                           headers={"Content-Type": "application/json"})
+    assert response.status_code == 413
+
+
 @pytest.mark.parametrize("format", ["PNG", "JPEG", "WEBP"])
 def test_image_formats(api, format):
     client, *_ = api

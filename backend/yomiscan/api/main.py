@@ -39,6 +39,12 @@ logger = logging.getLogger(__name__)
 ServiceFactory = Callable[[], AbstractContextManager[ImageAnalysisService]]
 
 
+class TextAnalysisRequest(BaseModel):
+    """OCR text the user corrected in the Study popup."""
+    model_config = ConfigDict(extra="forbid")
+    text: str = Field(min_length=1, max_length=1000)
+
+
 class CacheSettings(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     enabled: StrictBool
@@ -248,6 +254,38 @@ def create_app(
     @app.post("/api/v1/analyze-image", response_model=ImageAnalysisResponse)
     async def analyze(request: Request, file: Annotated[UploadFile, File()]) -> ImageAnalysisResponse:
         return await handle_upload(request, file, page=False)
+
+    @app.post("/api/v1/analyze-text", response_model=ImageAnalysisResponse)
+    async def analyze_text(request: Request, body: TextAnalysisRequest) -> ImageAnalysisResponse:
+        """Re-analyze corrected OCR text: no image, no OCR; same single worker as images."""
+        text = body.text.strip()
+        if not text:
+            raise HTTPException(422, "Enter some Japanese text to analyze.")
+        state = request.app.state
+        if state.service is None:
+            raise HTTPException(503, "Analysis resources unavailable. Check server logs and restart after setup.")
+        if state.busy:
+            raise HTTPException(429, "YomiScan is processing another crop. Please try again shortly.")
+        state.busy = True
+        start = perf_counter()
+
+        def perform() -> ImageAnalysisResponse:
+            analysis = state.service.analyze_text(text)
+            return ImageAnalysisResponse.from_analysis(analysis, total_ms=(perf_counter() - start) * 1000, origin="edited")
+        future = asyncio.get_running_loop().run_in_executor(state.executor, perform)
+
+        def finished(task: asyncio.Future) -> None:
+            state.busy = False
+            if not task.cancelled() and (error := task.exception()) is not None and not isinstance(error, HTTPException):
+                logger.error("Text analysis failed", exc_info=(type(error), error, error.__traceback__))
+        future.add_done_callback(finished)
+        try:
+            return await asyncio.shield(future)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            # HTTP boundary: do not disclose library errors, paths, or tracebacks to clients.
+            raise HTTPException(500, "Text analysis failed. See server logs.") from exc
 
     @app.post("/api/v1/analyze-page", response_model=PageAnalysisResponse)
     async def analyze_page(request: Request, file: Annotated[UploadFile, File()],

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { analyzeCrop, httpError, parseAnalysis } from "../src/api";
+import { analyzeCrop, analyzeText, httpError, parseAnalysis } from "../src/api";
 import { constrainPopup, resizePopup, popupPosition, sameViewport, screenshotRect, selectionRect, validSelection } from "../src/geometry";
 import {copyStudyText} from '../src/popup';
 import "./chapter-tests";
@@ -131,6 +131,18 @@ test("request sends only crop to fixed localhost endpoint and parses JSON", asyn
     return new Response(JSON.stringify(response()), {status: 200});
   });
   assert.equal((await analyzeCrop(new Blob(["crop"]), new AbortController().signal)).translation, "Cat");
+});
+
+test("edited text is posted as JSON and validated on both sides", async context => {
+  const calls: RequestInit[] = [];
+  const mocked = context.mock.method(globalThis, "fetch", async (_url: string, init: RequestInit) => { calls.push(init); return new Response(JSON.stringify(response())); });
+  assert.equal((await analyzeText(" 猫 ", new AbortController().signal)).original_text, response().original_text);
+  assert.equal(calls[0].body, JSON.stringify({text: "猫"}));
+  assert.equal((calls[0].headers as Record<string, string>)["X-YomiScan-Client"], "study-extension-v1");
+  await assert.rejects(analyzeText("  ", new AbortController().signal), /Enter some Japanese/);
+  await assert.rejects(analyzeText("猫".repeat(1001), new AbortController().signal), /1,000/);
+  mocked.mock.mockImplementation(async () => new Response("", {status: 404}));
+  await assert.rejects(analyzeText("猫", new AbortController().signal), /Update and restart/);
 });
 
 test("offline, invalid JSON, invalid schema, and HTTP errors are handled", async context => {

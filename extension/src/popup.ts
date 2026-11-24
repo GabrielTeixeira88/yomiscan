@@ -1,4 +1,4 @@
-import type { Analysis, Meaning } from "./api";
+import { parseAnalysis, type Analysis, type Meaning } from "./api";
 import {furigana} from "./furigana";
 import { constrainPopup, popupPosition, resizePopup, type Point, type Rect, type ResizeEdge } from "./geometry";
 
@@ -44,6 +44,7 @@ export const styles = `
     clip-path: polygon(100% 0, 100% 100%, 0 100%); }
   .surface { font-size: 18px; font-weight: 650; color: #244e34; }
   .surface rt { font-size: 10px; font-weight: 400; color: #5d6b62; }
+  textarea.editor { width: 100%; box-sizing: border-box; font: inherit; font-size: 15px; margin: 6px 0; }
   .metadata { font-size: 12px; color: #526071; }
   ul { margin: 5px 0; padding-left: 20px; }
   li { margin: 4px 0; }
@@ -212,6 +213,36 @@ export class StudyPopup {
     row.append(details);
   }
 
+  /** "Edit text": correct OCR mistakes, then re-analyze the edited text locally (no new screenshot). */
+  private appendEditor(section: HTMLElement, original: string): void {
+    const edit = element("button", "Edit text", "copy");
+    edit.lang = "en";
+    edit.setAttribute("aria-label", "Edit the recognized Japanese text");
+    edit.addEventListener("click", () => {
+      const area = element("textarea", undefined, "editor");
+      area.value = original; area.maxLength = 1000; area.rows = 3; area.lang = "ja";
+      area.setAttribute("aria-label", "Corrected Japanese text");
+      const run = element("button", "Analyze edited text", "action");
+      run.lang = "en";
+      const feedback = element("p", "", "copy-feedback"); feedback.setAttribute("role", "status"); feedback.lang = "en";
+      run.addEventListener("click", () => {
+        run.disabled = true; feedback.textContent = "Analyzing locally…";
+        void chrome.runtime.sendMessage({type: "study-reanalyze", text: area.value}).then(reply => {
+          if (this.listeners.signal.aborted || !section.isConnected) return;
+          if (!reply?.ok) { feedback.textContent = reply?.error ?? "Local analysis failed."; run.disabled = false; return; }
+          this.show(parseAnalysis(reply.data));
+        }, () => {
+          if (this.listeners.signal.aborted) return;
+          feedback.textContent = "Analysis unavailable. Reload the extension."; run.disabled = false;
+        });
+      });
+      edit.replaceWith(area, run, feedback);
+      area.focus();
+      this.position();
+    });
+    section.append(edit);
+  }
+
   status(message: string, error = false): void {
     this.body.replaceChildren(element("p", message, `status${error ? " error" : ""}`));
     this.position();
@@ -241,7 +272,7 @@ export class StudyPopup {
         window.setTimeout(()=>{if(feedback.textContent===message)feedback.textContent='';},3000);
       });});
       section.append(copy,feedback);
-      if (className === "original") section.lang = "ja";
+      if (className === "original") { section.lang = "ja"; this.appendEditor(section, data.original_text); }
       this.body.append(section);
     }
     const units = data.units ?? [];
@@ -318,6 +349,7 @@ export class StudyPopup {
     footer.append(attribution);
     const time = data.processing;
     if(data.provenance?.analysis_origin==='page')footer.append(element('p','Reused completed page analysis; no new screenshot or OCR.'));
+    if(data.provenance?.analysis_origin==='edited')footer.append(element('p','Analyzed your edited text; no new screenshot or OCR.'));
     footer.append(element("p", `Local processing · OCR ${Math.round(time.ocr_ms)} ms · Translation ${Math.round(time.translation_ms)} ms · Analysis ${Math.round(time.analysis_ms)} ms`));
     this.body.append(footer);
     const save=element('button','Save to History','action'),saved=element('p','','copy-feedback');saved.setAttribute('role','status');

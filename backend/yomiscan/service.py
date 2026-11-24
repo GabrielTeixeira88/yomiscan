@@ -9,7 +9,7 @@ from time import perf_counter
 
 from PIL import Image
 
-from .analysis import ImageAnalysisResult, TextAnalyzer, analyze_image, analyze_recognized_blocks
+from .analysis import ImageAnalysisResult, TextAnalysisResult, TextAnalyzer, analyze_image, analyze_recognized_blocks
 from .dictionary import SQLiteDictionary
 from .nlp import FugashiTokenizer
 from .ocr import MangaOCREngine, OCREngine, OCRResult
@@ -160,6 +160,10 @@ class ImageAnalysisService:
         return {"ocr": {"loaded": True}, "translation": {"loaded": translation.get("device") not in (None, "unloaded"),
             "device": translation.get("device")}, "detection": {"loaded": detector is not None},
             "processing_cache": {"persistent_enabled": self.cache.enabled}, "glossary_open": self._glossaries is not None}
+
+    def analyze_text(self, text: str) -> TextAnalysisResult:
+        """Study text the user corrected after OCR: lexical analysis and sentence translation only."""
+        return self._analyzer.analyze(text)
 
     def analyze_image(self, image: Image.Image) -> ImageAnalysisResult:
         """Study a selection: read every detected text block, or the whole selection.

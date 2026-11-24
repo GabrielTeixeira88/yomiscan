@@ -106,3 +106,28 @@ export async function analyzeCrop(blob: Blob, signal: AbortSignal): Promise<Anal
   catch { throw new Error("The local server returned invalid JSON."); }
   return parseAnalysis(value);
 }
+
+/** Re-analyze OCR text the user corrected in the popup (no screenshot, no OCR). */
+export async function analyzeText(text: string, signal: AbortSignal): Promise<Analysis> {
+  const value = text.trim();
+  if (!value) throw new Error("Enter some Japanese text to analyze.");
+  if (value.length > 1000) throw new Error("Edited text is limited to 1,000 characters.");
+  const base = await backendBase();
+  let response: Response;
+  try {
+    response = await fetch(`${base}/api/v1/analyze-text`, {
+      method: "POST", headers: {"X-YomiScan-Client": "study-extension-v1", "Content-Type": "application/json"},
+      body: JSON.stringify({text: value}), signal, credentials: "omit", redirect: "error", cache: "no-store",
+    });
+  } catch (error) {
+    if (signal.aborted) throw new Error("Analysis was cancelled or timed out; the backend may still be finishing.");
+    throw new Error(`Cannot reach YomiScan. Start the local server at ${base.replace("http://", "")} and try again.`, {cause: error});
+  }
+  if (response.status === 404) throw new Error("This backend cannot analyze edited text yet. Update and restart the local server.");
+  if (response.status === 413 || response.status === 422) throw new Error("Edited text must be 1 to 1,000 characters.");
+  if (!response.ok) throw new Error(httpError(response.status));
+  let data: unknown;
+  try { data = await response.json(); }
+  catch { throw new Error("The local server returned invalid JSON."); }
+  return parseAnalysis(data);
+}

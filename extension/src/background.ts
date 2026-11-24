@@ -1,5 +1,5 @@
 import {backendBase} from './backend';
-import { analyzeCrop } from "./api";
+import { analyzeCrop, analyzeText } from "./api";
 import {installSourceFetch} from './chapter/source-fetch';
 import {CaptureThrottle} from './chapter/capture-throttle';
 import {cacheRequest} from './chapter/cache-client';
@@ -108,6 +108,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (sender.id !== chrome.runtime.id || sender.frameId !== 0 || sender.tab?.id === undefined) return;
   if(message?.type==='chapter-readiness'){
     void readinessRequest().then(data=>sendResponse({ok:true,data}),()=>sendResponse({ok:false,error:'Readiness unavailable. Start the updated local backend.'}));return true;
+  }
+  if(message?.type==='study-reanalyze'){
+    if(typeof message.text!=='string'||message.text.length>1000){sendResponse({ok:false,error:'Edited text must be 1 to 1,000 characters.'});return;}
+    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),25_000);
+    void analyzeText(message.text,controller.signal).then(data=>sendResponse({ok:true,data}),
+      error=>sendResponse({ok:false,error:error instanceof Error?error.message:'Local analysis failed'})).finally(()=>clearTimeout(timer));
+    return true;
   }
   if(message?.type==='study-history'){
     if(typeof message.operation!=='string'||!message.payload||typeof message.payload!=='object'||Array.isArray(message.payload)||

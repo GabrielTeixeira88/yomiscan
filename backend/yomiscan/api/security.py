@@ -11,6 +11,7 @@ EXTENSION_ORIGIN = r"chrome-extension://[a-p]{32}"
 CLIENT_HEADER = b"x-yomiscan-client"
 CLIENT_VALUE = b"study-extension-v1"
 MAX_BODY_BYTES = MAX_FILE_BYTES + 64 * 1024
+MAX_TEXT_BODY_BYTES = 8 * 1024  # 1,000 characters of edited OCR text as JSON
 
 
 class LocalRequestGuard:
@@ -47,9 +48,12 @@ class LocalRequestGuard:
                 return
             body.extend(message.get("body", b""))
             administration = scope.get("path", "").startswith(("/api/v1/cache", "/api/v1/glossaries"))
-            limit = 1024 if scope.get("path", "").startswith("/api/v1/cache") else 2048 if administration else MAX_BODY_BYTES
+            text = scope.get("path") == "/api/v1/analyze-text"
+            limit = (1024 if scope.get("path", "").startswith("/api/v1/cache") else 2048 if administration
+                     else MAX_TEXT_BODY_BYTES if text else MAX_BODY_BYTES)
             if len(body) > limit:
-                detail = "Local settings body exceeds its limit." if administration else "Upload exceeds the 10 MiB image limit."
+                detail = ("Local settings body exceeds its limit." if administration else "Edited text exceeds its limit." if text
+                          else "Upload exceeds the 10 MiB image limit.")
                 await JSONResponse({"detail": detail}, 413)(scope, receive, send)
                 return
             if not message.get("more_body", False):

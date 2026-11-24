@@ -274,6 +274,9 @@ only if clicked.
   failure. Fix setup and restart; see terminal diagnostics.
 - `POST /api/v1/analyze-image`: multipart upload named **`file`**, plus header
   **`X-YomiScan-Client: study-extension-v1`**. Supports still PNG, JPEG and WebP.
+- `POST /api/v1/analyze-text`: JSON `{"text": "..."}` (1–1,000 characters, same header).
+  It returns the same JSON for text the user corrected in the Study popup ("Edit text"),
+  without OCR. `provenance.analysis_origin` is `"edited"`.
 - API schema: `http://127.0.0.1:47615/docs`. POST clients must supply the client header;
   the curl example is the simplest manual request.
 
@@ -283,8 +286,9 @@ curl.exe -H "X-YomiScan-Client: study-extension-v1" -F "file=@samples/test.png" 
 ```
 
 JSON contains `original_text`, separate `translation`, `processing` times, and ordered
-`tokens` with readings, lemmas, dictionary forms, POS, conjugation, and grouped senses
-with restrictions. The extension never needs to know which translation model is used.
+`tokens` with readings, lemmas, dictionary forms, POS, conjugation, learner `inflection`
+labels, and grouped senses with restrictions. `units` (multi-word expressions) and
+`grammar` (construction notes) refer to token ranges. The extension never needs to know which translation model is used.
 Limits: **10 MiB image**, **12 megapixels**, one analysis at a time. Overlapping requests
 return 429. The extension times out after 25 seconds. Client cancellation does not
 interrupt ongoing model inference; wait before selecting again.
