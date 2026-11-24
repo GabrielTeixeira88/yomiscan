@@ -32,6 +32,52 @@ Can YomiScan's public build run text detection and OCR **inside the Chrome exten
   is available, the gate is **not applied**, and the owner decides whether a
   substitute machine is acceptable.
 
+## Owner deviation recorded before measuring (2026-11-24)
+
+The owner chose to apply the gate to the **23-page, 10-series Stage 1 corpus**
+(253 regions; 105 in the 9-page `held_out` split) instead of waiting for 40 pages. The owner
+accepted the draft annotations as they are; they were not checked line by line, and
+`annotations_complete` remains `false`. This replaces the corpus input above for this run
+only. Consequences fixed now, before any measurement:
+
+- **Resolution.** On the held-out split, one region is about 1 point. A G1 or G7
+  difference within **±2 points** of its threshold is reported as **inconclusive**, not
+  as a pass or fail. An inconclusive G1 or G7 becomes a fresh owner decision, the same way as
+  CONDITIONAL.
+- **Same references for both arms.** Reference errors affect both OCR arms equally, so
+  G1's *difference* stays meaningful even though absolute CER is a draft value.
+- **Scope.** G1, G2 and G7 are computed over all 23 pages and over held-out alone. Both
+  are reported, and the gate uses all 23 pages. G3–G6 and G8 do not depend on corpus size.
+
+## Owner decision: browser-first (2026-11-24, during measurement)
+
+The owner chose **browser-first (Stage 5a)** before the gate result. The reason is that a
+Chrome Web Store extension that works on any computer's CPU is worth more than the speed
+the gate protects. A downloadable, all-dependencies engine will follow as an **optional
+companion** for GPU speed and stronger translation (it replaces Stage 5b as a mandatory
+installer). This is recorded as an owner decision, not as a change of thresholds after
+measurement started. The criteria are applied as follows:
+
+- **Hard requirements (must pass before Stage 5a ships):** G1 OCR accuracy, G2 OCR
+  robustness, G7 detection recall, G8 memory, and G6 download size. Wrong text or crashed
+  tabs would make the extension unusable.
+- **Reported targets, not pass/fail:** G3 WebGPU latency, G4 WASM latency and G5 cold
+  start. They set user expectations and optimization priorities. WebGPU is used when
+  Chrome offers an adapter (including integrated GPUs), and WASM on the CPU is the universal fallback.
+- **Reference laptop:** still wanted for realistic expectations, no longer decisive.
+- **Translation:** the browser build uses a model that runs on the CPU (OPUS). The
+  Chrome built-in Translator stays optional and experimental. Hy-MT2 and other GPU-class
+  models belong to the companion engine.
+
+## Owner decision: download budget raised to 1 GB (2026-11-24, after measurement)
+
+The owner raised the G6 budget from 600 MB to **1 GB** of YomiScan-managed first-run transfer,
+so that a size cap never forces a clearly worse model. This was decided after the measured
+configuration (about 430 MB with browser OPUS) had already passed 600 MB, so it changes no
+Stage 2 outcome; it is headroom for later models. Size is still reported, and smaller
+downloads remain preferred: models are fetched on first use of the feature that needs them
+(for example, translation only when it is first turned on), not all at install.
+
 ## Criteria
 
 | # | Criterion | Threshold | Measurement |
