@@ -1,4 +1,4 @@
-import {ChapterTranslationSession,type ChapterSummary} from "./session";
+import {ChapterTranslationSession,type ChapterSummary,type SessionMode} from "./session";
 import {coverageSummary} from './coverage';
 import {TranslationSettings} from './translation-settings';
 import {defaultTranslationOptions,targetLabel,type ReaderTranslationOptions} from './translation-options';
@@ -35,7 +35,11 @@ export class ChapterControls {
     header.append(title,button("×",()=>{this.showHost(false);}));panel.append(header);
     const heading=(text:string)=>{const h=document.createElement("h2");h.textContent=text;panel.append(h);};
     heading("Study");panel.append(button("Select Text",selectText));
-    heading("Reading");panel.append(button("Translate Chapter",()=>{void this.current().start();}),button("Stop Translation",()=>this.session?.stop()));
+    heading("Reading");panel.append(button("Read Chapter",()=>{void this.current('read').start();}),
+      button("Translate Chapter",()=>{void this.current('translate').start();}),button("Stop",()=>this.session?.stop()));
+    const readingHelp=document.createElement('small');
+    readingHelp.textContent='Read Chapter keeps the Japanese: click an outlined bubble (or press J / K) to study it; each page’s English button shows its translation. Translate Chapter replaces every page with English.';
+    panel.append(readingHelp,document.createElement('br'));
     const permissionHelp=document.createElement('small');permissionHelp.textContent='Translate/Retry may ask Chrome for access to this reader’s image hosts. Screenshots and analysis stay local.';
     panel.append(permissionHelp);
     const scrollLabel=document.createElement('label'),scrollOption=document.createElement('input');scrollOption.type='checkbox';
@@ -123,9 +127,11 @@ export class ChapterControls {
   private showHost(visible:boolean):void {this.host.style.setProperty("display",visible?"block":"none","important");}
   private selectedPageId():number|undefined {return this.pageSelect.value?Number(this.pageSelect.value):undefined;}
   open():void {this.showHost(true);}
-  private current():ChapterTranslationSession {
-    if(this.sessionURL!==location.href || this.session?.isDisposed){this.session?.dispose();this.session=null;this.sessionURL=location.href;}
-    if(!this.session)this.session=new ChapterTranslationSession(status=>this.show(status),hidden=>{this.host.style.setProperty("visibility",hidden?"hidden":"visible","important");},undefined,{...this.translationOptions},this.fontScale,this.showStudy);
+  /** The page's session; choosing the other mode replaces it (backend caches make re-reading pages cheap). */
+  private current(mode?:SessionMode):ChapterTranslationSession {
+    if(this.sessionURL!==location.href || this.session?.isDisposed || (mode&&this.session&&this.session.mode!==mode)){
+      this.session?.dispose();this.session=null;this.sessionURL=location.href;}
+    if(!this.session)this.session=new ChapterTranslationSession(status=>this.show(status),hidden=>{this.host.style.setProperty("visibility",hidden?"hidden":"visible","important");},undefined,{...this.translationOptions},this.fontScale,this.showStudy,mode??'translate');
     this.session.allowStitch=this.stitchEnabled;
     return this.session;
   }
@@ -136,7 +142,8 @@ export class ChapterControls {
     if(options.some(p=>String(p.id)===selection))this.pageSelect.value=selection;
     this.original.setAttribute("aria-pressed",String(status.view==="original"));this.english.setAttribute("aria-pressed",String(status.view==="english"));
     const pending=this.session?[...this.session.queue.pages.values()].some(p=>p.state==="queued"):false;
-    this.status.textContent=`${status.translated} / ${status.total} pages translated · ${status.failed} failed · ${status.skipped} skipped\n`+
+    const reading=status.mode==='read';
+    this.status.textContent=`${reading?'Reading mode · ':''}${status.translated} / ${status.total} pages ${reading?'read':'translated'} · ${status.failed} failed · ${status.skipped} skipped\n`+
       (status.processing?`Page ${status.processing} processing…`:status.active&&!pending?"Known pages finished; watching for lazy-loaded pages.":"")+
       '\n'+status.message;
     if(this.session){const cache=this.session.memoryStats(),evicted=[...this.session.queue.pages.values()].filter(p=>p.state==='evicted').length;

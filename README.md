@@ -53,6 +53,7 @@ ZIP/backend distributions include checksums and installation checks. See
 | Current capability | Status |
 | --- | --- |
 | Study selection, draggable/resizable popup, readings/morphology/JMdict | Implemented; Copy Japanese / Copy English available |
+| Read Chapter: clickable bubbles, J/K navigation, English per page | Implemented (Stage 4); uses the same page discovery and acquisition |
 | Translate Chapter, lazy image discovery, source/capture fallbacks, Original/English | Implemented for supported image readers |
 | Retry failed/skipped pages; retranslate one successful page | Implemented; prior successful result retained on failed/cancelled refresh |
 | Per-page local diagnostic ZIP | Implemented; metadata-only default, explicit text/image inclusions |
@@ -137,10 +138,19 @@ npm.cmd run build
 ```
 
 Load `extension/dist` at `chrome://extensions` → Developer mode → Load unpacked.
-Open an image-based chapter and click YomiScan → **Translate Chapter**. Visible pages
-process first, one at a time. **Original / English** switches cached results immediately;
-close the controls with × to read unobstructed. **Stop Translation** stops future work
-while the current page may finish. **Retry Failed / Skipped** retries explicitly.
+
+**Read Chapter (Stage 4 reading mode)** keeps the Japanese on the page. Pages are read in
+the background, visible ones first and then the next ones. Each bubble gets a faint outline.
+Click a bubble, or press **J** / **K** for the next / previous bubble, to open its study card
+straight away: no dragging and no new OCR. Each page has an **English** button at its
+top-right corner that renders that page's translation on demand, and **Japanese** switches
+back. See [reading mode](docs/architecture.md#stage-4-reading-mode).
+
+Open an image-based chapter and click YomiScan → **Translate Chapter** to replace every
+page with English instead. Visible pages process first, one at a time. **Original /
+English** switches cached results immediately; close the controls with × to read
+unobstructed. **Stop** stops future work (in either mode) while the current page may
+finish. **Retry Failed / Skipped** retries explicitly.
 **Clear Session** removes all translated overlays and releases cached images.
 
 Select a page in **Page** (or leave **Nearest viewport**) and choose **Retranslate Page**

@@ -152,3 +152,31 @@ def test_real_stage_callbacks_status_busy_and_cached_job_isolation(tmp_path, mon
         assert client.post("/api/v1/render-page", params={"job_id": other}, headers=HEADERS, files=files).status_code == 200
         restored = client.get("/api/v1/jobs/"+other, headers=HEADERS).json()
         assert all(s["state"] == "cached" for s in restored["stages"].values())
+
+
+def test_reading_analysis_reports_progress_and_a_later_render_reuses_its_stages(tmp_path, monkeypatch):
+    """Reading mode analyzes first; toggling English for that page must not repeat OCR or translation."""
+    monkeypatch.setattr("yomiscan.readiness.local_artifacts", lambda *a: ([], False))
+    @contextmanager
+    def factory():
+        service, *_ = resources(tmp_path)
+        try: yield service
+        finally: service.close()
+    image = BytesIO();page().save(image, "PNG")
+    files = {"file": ("page.png", image.getvalue(), "image/png")}
+    reading, english = str(uuid4()), str(uuid4())
+    with TestClient(create_app(factory), base_url="http://localhost") as client:
+        configuration = client.get("/health").headers["X-YomiScan-Configuration"]
+        stale = client.post("/api/v1/analyze-page", params={"configuration": "0"*64}, headers=HEADERS, files=files)
+        assert stale.status_code == 409
+        analyzed = client.post("/api/v1/analyze-page", params={"job_id": reading, "configuration": configuration},
+                               headers=HEADERS, files=files)
+        assert analyzed.status_code == 200
+        blocks = analyzed.json()["text_blocks"]
+        assert blocks and all("provenance" in block and "analysis_origin" not in block["provenance"] for block in blocks)
+        status = client.get("/api/v1/jobs/"+reading, headers=HEADERS).json()
+        assert status["state"] == "completed" and status["stages"]["ocr"]["computed"]
+        assert client.post("/api/v1/render-page", params={"job_id": english}, headers=HEADERS, files=files).status_code == 200
+        stages = client.get("/api/v1/jobs/"+english, headers=HEADERS).json()["stages"]
+        assert {"detection", "ocr", "translation"} <= stages.keys()
+        assert all(stages[name]["state"] == "cached" for name in ("detection", "ocr", "translation"))

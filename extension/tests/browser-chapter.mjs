@@ -12,7 +12,7 @@ const reportDir=path.resolve('.cache/stage1-reports-'+Date.now());
 let mockServer,mockRenders=0,mockRefreshes=0,persistentCache=false,mockConfiguration='f'.repeat(64),extensionPath=path.resolve('extension/dist');
 const mockSeries=[{id:'global',label:'Global'}],mockTerms=[],translationCalls=[];
 let experimentalCapabilities=false,failProfileOnce=false;
-let mockRenderOnly=0,mockStudyCalls=0,nextSlow=0,failFontOnce=false,overflowFontOnce=false,failReadiness=false,initializingReadiness=false;
+let mockAnalyses=0,mockRenderOnly=0,mockStudyCalls=0,nextSlow=0,failFontOnce=false,overflowFontOnce=false,failReadiness=false,initializingReadiness=false;
 const mockFontScales=[],mockJobs=new Map();
 if(mocked) {
   extensionPath=path.resolve('.cache/stage1-browser-extension');
@@ -91,6 +91,19 @@ if(mocked) {
       }
       const width=(bytes[16]*2**24+bytes[17]*65536+bytes[18]*256+bytes[19])>>>0;
       const height=(bytes[20]*2**24+bytes[21]*65536+bytes[22]*256+bytes[23])>>>0;
+      if(req.url.startsWith('/api/v1/analyze-page')){
+        // Reading mode: two analyzed bubbles per page, JSON only (no rendered image).
+        mockAnalyses++;
+        const token=(surface,gloss)=>({surface,reading:null,lemma:surface,dictionary_form:surface,part_of_speech:'noun',conjugation_type:null,conjugation_form:null,
+          meanings:[{entry_id:1,glosses:[gloss],parts_of_speech:['noun'],spellings:[],readings:[],notes:[],labels:[]}]});
+        const box=(w,h,l,t,r,b)=>({left:Math.round(w*l),top:Math.round(h*t),right:Math.round(w*r),bottom:Math.round(h*b)});
+        const block=(id,bbox,text,translation)=>({id,region_ids:[id],bbox,orientation:'vertical',reading_order:id-1,original_text:text,translation,
+          tokens:[token(text,translation)],units:[],grammar:[],confidence:.9,category:'bubble',status:'success',error_message:null,provenance:{engine:'fixture'}});
+        res.setHeader('Content-Type','application/json');res.end(JSON.stringify({width,height,regions_detected:2,regions_filtered:0,
+          // Proportional boxes: screenshot-acquired pages arrive at displayed, not natural, size.
+          text_blocks:[block(1,box(width,height,.25,.11,.75,.27),'でも大丈夫','But it is okay.'),block(2,box(width,height,.25,.36,.75,.5),'猫です','It is a cat.')],
+          processing:{ocr_ms:1,translation_ms:1,analysis_ms:1,total_ms:3,detection_ms:1}}));return;
+      }
       const snapshot={schema_version:1,build:{version:'fixture',revision:null},image:{
         width,height,input_sha256:createHash('sha256').update(bytes).digest('hex')},models:{},regions:[],
         blocks:[{id:1,region_ids:[],bbox:{left:200,top:120,right:600,bottom:300},ocr:{status:'success',confidence:null},translation:{status:'success'},
@@ -178,7 +191,7 @@ try {
   await activate();await evaluate(session,"document.querySelector('#page-3').scrollIntoView()");await click("Translate Chapter");
   await until(async()=>(await panel()).includes("Page 3 processing"));report.checks.push("Visible page 3 prioritized before pages 1/2; avatars/logos excluded");
   if(mocked)await until(()=>mockRenders>0); // Stop after acquisition, while backend work is in flight.
-  await click("Stop Translation");
+  await click("Stop");
   await evaluate(session,"document.querySelector('#page-4').scrollIntoView()");
   await until(async()=>(await panel()).includes("1 / 5 pages translated"));
   report.checks.push("Stop cancels queued work; scrolling during in-flight processing works and its result is retained");
@@ -321,6 +334,54 @@ try {
   assert.ok(resizedWidth>oldBounds.width,JSON.stringify({oldBounds,cornerPoint,resizedWidth}));
   report.checks.push('Study Copy Japanese/English succeeds with clipboard user gesture; popup remains draggable/resizable');
   await call("Input.dispatchKeyEvent",{type:"keyDown",key:"Escape",code:"Escape",windowsVirtualKeyCode:27},session);
+  if(mocked){
+    // Reading mode: analyze pages without rendering, study bubbles by click and J/K, English per page.
+    await activate();const rendersBefore=mockRenders,analysesBefore=mockAnalyses;
+    await evaluate(session,"document.querySelector('#page-2').scrollIntoView()");
+    await click("Read Chapter");await until(async()=>(await panel()).includes("7 / 7 pages read"),120000);
+    assert.equal(mockRenders,rendersBefore,'Reading mode must not render pages');assert.ok(mockAnalyses>=analysesBefore+7);
+    assert.ok(await find(n=>n.attributes?.includes('reading')),'reading layer');
+    report.checks.push('Read Chapter analyzes every page as JSON without rendering');
+    const studyText=async()=>{const p=await find(byClass('panel'));return p?await invoke(p,"function(){return this.innerText}"):'';};
+    const key=async(letter)=>{for(const type of ['keyDown','keyUp'])await call('Input.dispatchKeyEvent',{type,key:letter,code:'Key'+letter.toUpperCase(),
+      windowsVirtualKeyCode:letter.toUpperCase().charCodeAt(0),...(type==='keyDown'?{text:letter}:{})},session);};
+    const firstPage=await evaluate(session,"(()=>{const r=document.querySelector('#page-2').getBoundingClientRect();return r.top})()");
+    await key('j');await until(async()=>(await studyText()).includes('bubble 1 of 2')&&(await studyText()).includes('でも大丈夫'),10000);
+    const started=Date.now();await key('j');
+    await until(async()=>(await studyText()).includes('bubble 2 of 2')&&(await studyText()).includes('猫です'),10000);
+    report.checks.push(`J / K opens study cards in reading order from retained analysis (${Date.now()-started} ms incl. polling)`);
+    const pageLine=async()=>(await studyText()).match(/Page (\d+) · bubble (\d) of 2/)?.slice(1).join('.');
+    const before=await pageLine();
+    await key('j');await until(async()=>{const now=await pageLine();return now&&now!==before&&now.endsWith('.1');},10000);
+    await key('j');await until(async()=>(await pageLine())?.endsWith('.2'),10000)
+      .catch(async()=>assert.fail(JSON.stringify({card:(await studyText()).slice(0,120),status:(await panel()).match(/Reading mode[^\n]*\n[^\n]*\n[^\n]*/)?.[0]})));
+    // The second bubble of the next page starts below the fold, so J scrolled the reader.
+    assert.notEqual(await evaluate(session,"document.querySelector('#page-2').getBoundingClientRect().top"),firstPage,'J scrolls to off-screen bubbles');
+    await key('k');await until(async()=>(await pageLine())?.endsWith('.1'),10000);
+    report.checks.push('J crosses to the next page and scrolls it into view; K steps back');
+    const lineBeforeEdit=await pageLine();await click('Edit text');
+    const editor=await until(()=>find(n=>n.nodeName==='TEXTAREA'));await invoke(editor,'function(){this.focus()}');
+    await key('j');await wait(300);
+    assert.equal(await pageLine(),lineBeforeEdit,'typing j in the OCR editor must not navigate');
+    assert.ok((await invoke(editor,'function(){return this.value}')).endsWith('j'));
+    report.checks.push('Typing J in the OCR editor edits text instead of navigating');
+    const bubble=await find(n=>n.nodeName==='BUTTON'&&n.attributes?.includes('bubble')&&n.attributes?.includes('1')&&
+      n.attributes?.[n.attributes.indexOf('class')+1]==='bubble'&&!n.attributes.includes('hidden'));
+    assert.ok(bubble,'clickable bubble');await invoke(bubble,'function(){this.click()}');
+    await until(async()=>(await studyText()).includes('猫です')&&(await studyText()).includes('It is a cat.'),10000);
+    assert.equal(mockRenders,rendersBefore);report.checks.push('Clicking an outlined bubble opens its study card without OCR or rendering');
+    await call("Input.dispatchKeyEvent",{type:"keyDown",key:"Escape",code:"Escape",windowsVirtualKeyCode:27},session);
+    const englishButton=async()=>(await find(n=>n.nodeName==='BUTTON'&&n.attributes?.[n.attributes.indexOf('class')+1]==='english'&&
+      !n.attributes?.includes('hidden')));
+    await invoke(await englishButton(),'function(){this.click()}');
+    await until(()=>mockRenders===rendersBefore+1,30000);
+    await until(async()=>(await evaluate(session,"(()=>{const h=document.querySelector('[data-yomiscan=overlays]');return !!h&&getComputedStyle(h).visibility==='visible'})()")),10000);
+    await until(async()=>(await invoke(await englishButton(),'function(){return this.textContent}'))==='Japanese',30000);
+    await invoke(await englishButton(),'function(){this.click()}');
+    await until(async()=>(await invoke(await englishButton(),'function(){return this.textContent}'))==='English',10000);
+    assert.equal(mockRenders,rendersBefore+1,'Hiding and re-showing English reuses the render');
+    report.checks.push('Per-page English toggle renders one page on demand and toggles back to Japanese');
+  }
   await activate();await click("Translate Chapter");await evaluate(session,"document.querySelector('#swap').click()");
   await until(async()=>await evaluate(offscreen,"testCalls.includes(99)"),30000);
   await until(async()=>(await panel()).includes("7 / 7 pages translated"));report.checks.push("Changed currentSrc invalidates only the replaced page's cached result");
@@ -477,7 +538,8 @@ try {
     await click('Translate Chapter');await until(async()=>(await panel()).includes('1 / 1 pages translated'));
     const fontSummary=await find(n=>n.nodeName==='SUMMARY'&&n.children?.some(c=>c.nodeValue==='Translation font'));
     await invoke(fontSummary,'function(){this.click()}');
-    const overlayURL=async()=>invoke(await find(n=>n.nodeName==='IMG'&&n.attributes?.includes('aria-hidden')),'function(){return this.src}');
+    // Overlays are created on the next animation frame after the panel reports completion.
+    const overlayURL=async()=>invoke(await until(()=>find(n=>n.nodeName==='IMG'&&n.attributes?.includes('aria-hidden'))),'function(){return this.src}');
     const previousURL=await overlayURL(),beforeFont=mockRenderOnly,beforeTranslation=mockRefreshes;
     nextSlow=1800;await invoke(await select('Translation font size'),"function(){this.value='1.5'}");await click('Apply Font');
     await until(()=>mockRenderOnly>beforeFont);assert.equal(await overlayURL(),previousURL);
@@ -535,10 +597,14 @@ try {
     await click('Inspect Regions');
     await call('Emulation.setDeviceMetricsOverride',{width:1000,height:900,deviceScaleFactor:1,mobile:false},session);
     await evaluate(session,"document.querySelector('main img').scrollIntoView()");await wait(150);
-    const regionBox=await find(n=>n.nodeName==='BUTTON'&&n.attributes?.includes('Inspect B2'));
-    const mapped=await invoke(regionBox,'function(){const r=this.getBoundingClientRect();return [r.left,r.top,r.width,r.height]}');
-    const expected=await evaluate(session,"(()=>{const i=document.querySelector('main img'),r=i.getBoundingClientRect();return [r.left+200*r.width/800,r.top+400*r.height/1100,400*r.width/800,150*r.height/1100]})()");
-    assert.ok(mapped.every((value,index)=>Math.abs(value-expected[index])<1));
+    // Region buttons follow resize/scroll on the next animation frame; wait for them to settle.
+    let mapped,expected;
+    await until(async()=>{
+      const regionBox=await find(n=>n.nodeName==='BUTTON'&&n.attributes?.includes('Inspect B2'));
+      mapped=await invoke(regionBox,'function(){const r=this.getBoundingClientRect();return [r.left,r.top,r.width,r.height]}');
+      expected=await evaluate(session,"(()=>{const i=document.querySelector('main img'),r=i.getBoundingClientRect();return [r.left+200*r.width/800,r.top+400*r.height/1100,400*r.width/800,150*r.height/1100]})()");
+      return mapped.every((value,index)=>Math.abs(value-expected[index])<1);
+    },5000).catch(()=>assert.fail(JSON.stringify({mapped,expected})));
     await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27},session);
     await until(async()=>!await find(byClass('inspect-panel')));
     report.checks.push('Region geometry follows CSS scaling/resize/scroll and Escape removes the inspection interaction');

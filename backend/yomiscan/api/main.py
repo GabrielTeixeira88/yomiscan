@@ -150,7 +150,12 @@ def analyze_upload(service: ImageAnalysisService, data: bytes, page: bool = Fals
                         "X-YomiScan-Processing-Ms": f"{result.analysis_processing.get('pipeline_total_ms', 0):.1f}",
                         "Cache-Control": "no-store",
                     })
-                return PageAnalysisResponse.from_result(service.analyze_page(image, options=options, cancel=cancel) if options is not None else service.analyze_page(image))
+                analysis_keywords: dict[str, object] = {}
+                if options is not None: analysis_keywords["options"] = options
+                if cancel is not None: analysis_keywords["cancel"] = cancel
+                if progress is not None: analysis_keywords["progress"] = progress
+                if refresh != "none": analysis_keywords["refresh"] = refresh
+                return PageAnalysisResponse.from_result(service.analyze_page(image, **analysis_keywords))
             except TranslationConfigurationChanged as exc:
                 raise HTTPException(409, "Glossary changed. Reload translation settings and start the chapter again.") from exc
             except ValueError as exc:
@@ -294,8 +299,13 @@ def create_app(
 
     @app.post("/api/v1/analyze-page", response_model=PageAnalysisResponse)
     async def analyze_page(request: Request, file: Annotated[UploadFile, File()],
-                           options_json: Annotated[str | None, Form(max_length=2048)] = None) -> PageAnalysisResponse:
-        return await handle_upload(request, file, page=True, options=parse_options(options_json))
+                           job_id: Annotated[str | None, Query(pattern=r"^[a-f0-9-]{36}$", max_length=36)] = None,
+                           refresh: Refresh = "none",
+                           options_json: Annotated[str | None, Form(max_length=2048)] = None,
+                           configuration: Annotated[str | None, Query(pattern=r"^[a-f0-9]{64}$", max_length=64)] = None) -> PageAnalysisResponse:
+        """Reading mode: page text and study analysis as JSON, without masking or typesetting."""
+        return await handle_upload(request, file, page=True, refresh=refresh, configuration=configuration,
+                                   options=parse_options(options_json), job_id=job_id)
 
     @app.post("/api/v1/render-page", response_class=Response,
               responses={200: {"content": {"image/png": {}, "application/zip": {}}}})

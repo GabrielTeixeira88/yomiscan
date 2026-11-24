@@ -46,6 +46,7 @@ export const styles = `
   .surface rt { font-size: 10px; font-weight: 400; color: #5d6b62; }
   textarea.editor { width: 100%; box-sizing: border-box; font: inherit; font-size: 15px; margin: 6px 0; }
   .metadata { font-size: 12px; color: #526071; }
+  .reading-context { margin: 0 0 4px; font-size: 12px; color: #526071; }
   ul { margin: 5px 0; padding-left: 20px; }
   li { margin: 4px 0; }
   summary { cursor: pointer; color: #356348; font-size: 12px; }
@@ -222,6 +223,9 @@ export class StudyPopup {
       const area = element("textarea", undefined, "editor");
       area.value = original; area.maxLength = 1000; area.rows = 3; area.lang = "ja";
       area.setAttribute("aria-label", "Corrected Japanese text");
+      // Typing belongs to the editor: page listeners (Reading mode J / K) cannot see inside this
+      // closed shadow root, so keys stop here. Escape still closes via the capture-phase listener.
+      area.addEventListener("keydown", event => event.stopPropagation(), {signal: this.listeners.signal});
       const run = element("button", "Analyze edited text", "action");
       run.lang = "en";
       const feedback = element("p", "", "copy-feedback"); feedback.setAttribute("role", "status"); feedback.lang = "en";
@@ -250,6 +254,12 @@ export class StudyPopup {
 
   show(data: Analysis): void {
     this.body.replaceChildren();
+    // Reading mode: where this bubble sits in the chapter, and how to move on without dragging.
+    const reading = data.provenance?.reading as {page?: unknown; bubble?: unknown; bubbles?: unknown} | undefined;
+    if (reading && [reading.page, reading.bubble, reading.bubbles].every(Number.isInteger)) {
+      const context = element("p", `Page ${reading.page} · bubble ${reading.bubble} of ${reading.bubbles} · J / K: next / previous`, "reading-context");
+      context.lang = "en"; this.body.append(context);
+    }
     const target=data.target_language??'en',targetName=['pt-BR','por_Latn'].includes(target)?'Portuguese':
       ['es','spa_Latn'].includes(target)?'Spanish':'English';
     // Dedicated original section is the future OCR-edit hook; read-only in Phase 4.
@@ -350,7 +360,9 @@ export class StudyPopup {
     const time = data.processing;
     if(data.provenance?.analysis_origin==='page')footer.append(element('p','Reused completed page analysis; no new screenshot or OCR.'));
     if(data.provenance?.analysis_origin==='edited')footer.append(element('p','Analyzed your edited text; no new screenshot or OCR.'));
-    footer.append(element("p", `Local processing · OCR ${Math.round(time.ocr_ms)} ms · Translation ${Math.round(time.translation_ms)} ms · Analysis ${Math.round(time.analysis_ms)} ms`));
+    // Retained page analysis carries no per-bubble timings; zeros would read as "free".
+    if (time.total_ms > 0 || time.ocr_ms > 0)
+      footer.append(element("p", `Local processing · OCR ${Math.round(time.ocr_ms)} ms · Translation ${Math.round(time.translation_ms)} ms · Analysis ${Math.round(time.analysis_ms)} ms`));
     this.body.append(footer);
     const save=element('button','Save to History','action'),saved=element('p','','copy-feedback');saved.setAttribute('role','status');
     save.addEventListener('click',()=>{save.disabled=true;void chrome.runtime.sendMessage({type:'study-history',operation:'save',payload:{analysis:data}}).then(reply=>{

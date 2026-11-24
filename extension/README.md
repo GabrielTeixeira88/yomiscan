@@ -36,13 +36,13 @@ downloads. No installer, automatic startup, native messaging or bundled Python e
 
 ## Use
 
-Click the action to open **Select Text / Translate Chapter** controls. Ctrl+Shift+Y
+Click the action to open **Select Text / Read Chapter / Translate Chapter** controls. Ctrl+Shift+Y
 (Command+Shift+Y on macOS) activates Select Text directly. Assign a shortcut at
 `chrome://extensions/shortcuts` if the suggestion conflicts. Drag in any direction
 around a visible bubble and release. Escape cancels selection. Loading is followed by
 one study popup with original Japanese, translation, readings, lemmas, dictionary forms,
 POS, conjugation and dictionary senses. Extra senses expand inside it. Close with ×
-or Escape. Original OCR is read-only; editing/reanalysis is future work.
+or Escape. **Edit text** corrects the recognized Japanese and re-analyzes it locally without new OCR.
 **Copy Japanese** / **Copy English** copy the displayed sentence with keyboard-accessible
 controls and brief success/failure feedback. Browser clipboard restrictions leave text
 selection/manual copying available; no permission was added.
@@ -62,6 +62,20 @@ The popup uses closed Shadow DOM, bounded dimensions and internal scrolling. Unt
 OCR/translation/dictionary strings use `textContent`, never HTML. Dictionary senses
 remain candidates, not meanings selected for the sentence's context.
 
+## Read Chapter (reading mode)
+
+**Read Chapter** reads every page in the background without changing it: visible pages
+first, then the next ones. Each detected bubble gets a faint outline that strengthens on
+hover. Click a bubble to open its study card from the retained page analysis, with no
+dragging, screenshot or new OCR. **J** / **K** open the next / previous bubble in reading
+order across pages and scroll it into view. They do nothing while you type in a field. A
+page that is still being read stops J / K with a message instead of being skipped. The
+**English** button at each page's top-right corner renders that page in English on
+demand, reusing the backend's cached OCR and translation; **Japanese** switches back.
+Bubbles stay clickable over the English image. **Stop**, **Retry**, **Retranslate Page**
+and **Clear Session** work as in Translate Chapter. Choosing the other mode starts a new
+session.
+
 ## Translate Chapter
 
 Post-MVP page actions: choose a page (or **Nearest viewport**) and **Retranslate Page**
@@ -79,7 +93,7 @@ one at a time, visible first, then immediately below/above, then distant pages. 
 reports known pages; observers remain active for appended/lazy-loaded images.
 
 - **Original / English:** immediate view change using cached translated PNGs.
-- **Stop Translation:** disconnect discovery observers, cancel queued work and acquisition;
+- **Stop:** disconnect discovery observers, cancel queued work and acquisition;
   backend rendering already submitted may finish. Translated pages remain available.
 - **Retry Failed / Skipped:** explicit retry; no unlimited automatic failure loops.
 - **Clear Session:** remove overlays, revoke result URLs, abort client work and clear state.
