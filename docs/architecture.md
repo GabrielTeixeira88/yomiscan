@@ -284,7 +284,14 @@ The `yomiscan` package lives under `backend/`. `ocr/base.py` defines a structura
 Protocol and a dataclass containing text, engine name, inference milliseconds, and
 optional metadata (an empty dictionary by default). It does not define bounding boxes.
 `ocr/manga_ocr.py` adapts manga-ocr, imports it lazily, initializes once per instance,
-and preserves third-party exceptions as causes of contextual errors. `ocr/cli.py`
+and preserves third-party exceptions as causes of contextual errors. It decodes greedily
+(one beam, no n-gram ban) instead of manga-ocr's published settings (4 beams,
+`no_repeat_ngram_size=3`, length penalty 2), which alter genuinely repeated text such as
+doubled words and laughter. On the Stage 2 corpus (225 production crops) this lowered
+normalized CER from 3.19% to 1.61% with no new failures, and the CPU median fell from 415 to
+310 ms per block. The OCR engine name `current-published` keeps the library's own call for
+comparisons. The decoding is part of the OCR cache identity, so results cached with the
+earlier decoding are not reused. `ocr/cli.py`
 validates input and formats results; `scripts/ocr_image.py` is its entry point.
 
 Inference runs locally. Initial dependency/model downloads require internet; cached

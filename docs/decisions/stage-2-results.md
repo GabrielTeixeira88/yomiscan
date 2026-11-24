@@ -99,8 +99,9 @@ page** on WebGPU (q4 + fp16 detector), **3.0 s** on WASM ×8 and **5.5–5.7 s**
 
 1. **The published manga-ocr decoding damages repeated text.** `no_repeat_ngram_size=3`
    forbids any repeated 3-token sequence, so doubled words and laughter lose or change a
-   character. Greedy decoding halves CER on this corpus (3.19% → 1.61%) and is about 2× faster.
-   This affects today's Python backend. It should be fixed on its own branch, with tests, independent of Stage 5a.
+   character. Greedy decoding halves CER on this corpus (3.19% → 1.61%); the JS port decodes about 2× faster.
+   **Fixed in the Python backend** (branch `fix/ocr-greedy-decoding`): measured on the same
+   crops, CER fell from 3.19% to 1.61% and the CPU median from 415 to 310 ms per block.
 2. fp16 conversion must use ONNX Runtime's converter. `onnxconverter-common` mistypes `Cast`
    nodes in both graphs, and the sessions fail to load.
 3. Transformers.js 4.3.2's local-model loader never requested tokenizer files from an
