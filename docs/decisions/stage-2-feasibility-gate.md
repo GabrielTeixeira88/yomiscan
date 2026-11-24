@@ -32,6 +32,23 @@ Can YomiScan's public build run text detection and OCR **inside the Chrome exten
   is available, the gate is **not applied**, and the owner decides whether a
   substitute machine is acceptable.
 
+## Owner deviation recorded before measuring (2026-11-24)
+
+The owner chose to apply the gate to the **23-page, 10-series Stage 1 corpus**
+(253 regions; 105 in the 9-page `held_out` split) instead of waiting for 40 pages. The owner
+accepted the draft annotations as they are; they were not checked line by line, and
+`annotations_complete` remains `false`. This replaces the corpus input above for this run
+only. Consequences fixed now, before any measurement:
+
+- **Resolution.** On the held-out split, one region is about 1 point. A G1 or G7
+  difference within **±2 points** of its threshold is reported as **inconclusive**, not
+  as a pass or fail. An inconclusive G1 or G7 becomes a fresh owner decision, the same way as
+  CONDITIONAL.
+- **Same references for both arms.** Reference errors affect both OCR arms equally, so
+  G1's *difference* stays meaningful even though absolute CER is a draft value.
+- **Scope.** G1, G2 and G7 are computed over all 23 pages and over held-out alone. Both
+  are reported, and the gate uses all 23 pages. G3–G6 and G8 do not depend on corpus size.
+
 ## Criteria
 
 | # | Criterion | Threshold | Measurement |
