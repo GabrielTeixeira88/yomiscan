@@ -12,7 +12,7 @@ interface PageRequestOptions {configuration?:string;translation?:ReaderTranslati
 
 /** Upload one page through the offscreen document (one job at a time across tabs) and collect
  * its reply: a rendered PNG ("render") or Reading mode's JSON text analysis ("analyze"). */
-async function pageRequest<T>(kind:'render'|'analyze',blob:Blob,signal:AbortSignal,options:PageRequestOptions,
+async function pageRequest<T>(kind:'render'|'analyze'|'browser',blob:Blob,signal:AbortSignal,options:PageRequestOptions,
   reply:(message:{type:string;[key:string]:unknown},parts:Uint8Array<ArrayBuffer>[],size:number)=>T|undefined):Promise<T> {
   if (blob.size > MAX_INPUT) throw new Error("Page exceeds the backend's 10 MiB limit");
   const ready = await chrome.runtime.sendMessage({type: "chapter-prepare"});
@@ -69,6 +69,8 @@ export async function renderPage(blob: Blob, signal: AbortSignal,
 
 /** Reading mode: detection, OCR and study analysis as JSON, without masking or typesetting.
  * The caller validates the payload with parseReadingPage. */
-export async function analyzePage(blob:Blob,signal:AbortSignal,options:Omit<PageRequestOptions,'renderOnly'|'fontScale'>={}):Promise<unknown> {
-  return pageRequest<{data:unknown}>('analyze',blob,signal,options,message=>message.type==='analysis'?{data:message.data}:undefined).then(r=>r.data);
+export async function analyzePage(blob:Blob,signal:AbortSignal,options:Omit<PageRequestOptions,'renderOnly'|'fontScale'>&{browser?:boolean}={}):Promise<unknown> {
+  // With `browser`, the in-browser engine (Stage 5a) reads the page instead of the backend.
+  const {browser,...rest}=options;
+  return pageRequest<{data:unknown}>(browser?'browser':'analyze',blob,signal,rest,message=>message.type==='analysis'?{data:message.data}:undefined).then(r=>r.data);
 }

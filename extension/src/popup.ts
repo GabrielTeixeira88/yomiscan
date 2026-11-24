@@ -360,6 +360,7 @@ export class StudyPopup {
     const time = data.processing;
     if(data.provenance?.analysis_origin==='page')footer.append(element('p','Reused completed page analysis; no new screenshot or OCR.'));
     if(data.provenance?.analysis_origin==='edited')footer.append(element('p','Analyzed your edited text; no new screenshot or OCR.'));
+    if(data.provenance?.engine_kind==='browser')footer.append(element('p','Processed by the browser engine in Chrome; no local backend involved.'));
     // Retained page analysis carries no per-bubble timings; zeros would read as "free".
     if (time.total_ms > 0 || time.ocr_ms > 0)
       footer.append(element("p", `Local processing · OCR ${Math.round(time.ocr_ms)} ms · Translation ${Math.round(time.translation_ms)} ms · Analysis ${Math.round(time.analysis_ms)} ms`));

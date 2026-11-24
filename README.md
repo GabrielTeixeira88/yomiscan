@@ -146,6 +146,14 @@ straight away: no dragging and no new OCR. Each page has an **English** button a
 top-right corner that renders that page's translation on demand, and **Japanese** switches
 back. See [reading mode](docs/architecture.md#stage-4-reading-mode).
 
+**Browser engine (Stage 5a preview).** Study, Read Chapter and Translate Chapter can run
+entirely inside Chrome with no Python backend: detection, OCR, JMdict word analysis and
+OPUS-MT translation. Install the pinned models once under **Advanced → Browser engine
+(preview)**, then choose **Browser engine**. It needs about 550–575 MiB and is English
+only. Translate Chapter then shows English as text over each bubble. During development the
+models are served by `scripts/serve_browser_artifacts.py`. See the
+[Stage 5a record](docs/decisions/stage-5a-browser-engine.md).
+
 Open an image-based chapter and click YomiScan → **Translate Chapter** to replace every
 page with English instead. Visible pages process first, one at a time. **Original /
 English** switches cached results immediately; close the controls with × to read

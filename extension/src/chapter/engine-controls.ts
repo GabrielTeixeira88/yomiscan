@@ -1,6 +1,7 @@
 // Setup for the browser engine (Stage 5a preview): shows the device path, the pinned
 // components this device needs and their sizes, and installs them only on an explicit click.
 import type {EngineStatus} from '../engine/engine';
+import {engineMode, setEngineMode} from '../engine-mode';
 
 export const ENGINE_SOURCE_KEY = 'engineArtifactSource';
 export const DEFAULT_ENGINE_SOURCE = 'http://127.0.0.1:47620/';
@@ -25,19 +26,33 @@ export class EngineControls {
   private output = document.createElement('p');
   private source = document.createElement('input');
   private timer = 0;
+  private radios: HTMLInputElement[] = [];
   constructor() {
     const summary = document.createElement('summary');summary.textContent = 'Browser engine (preview)';
     const help = document.createElement('small');
-    help.textContent = 'Runs text detection, OCR, word analysis (JMdict, grammar notes) and OPUS-MT translation inside Chrome, without the Python backend. Study and Read Chapter switch to it in a later preview. Each file is checked against a SHA-256 pinned in the extension.';
+    help.textContent = 'Runs text detection, OCR, word analysis (JMdict, grammar notes) and OPUS-MT translation inside Chrome, without the Python backend. Install the models once, then choose it below. Each file is checked against a SHA-256 pinned in the extension.';
     const label = document.createElement('label');label.textContent = 'Model source ';
     Object.assign(this.source, {type: 'url', value: DEFAULT_ENGINE_SOURCE});this.source.setAttribute('aria-label', 'Browser engine model source URL');
     label.append(this.source);
     const button = (text: string, operation: string) => {const b = document.createElement('button');b.textContent = text;b.onclick = () => {void this.request(operation);};return b;};
     this.output.setAttribute('role', 'status');this.output.style.whiteSpace = 'pre-wrap';
-    this.element.append(summary, help, label, button('Install Models', 'install'), button('Cancel', 'cancel'),
+    // Which engine serves Select Text, Edit text, Read Chapter and Translate Chapter.
+    const choice = document.createElement('fieldset'), legend = document.createElement('legend');
+    legend.textContent = 'Engine for Study and reading';choice.append(legend);
+    for (const [value, text] of [['local', 'Local backend (Python)'], ['browser', 'Browser engine (preview)']] as const) {
+      const row = document.createElement('label'), input = document.createElement('input');
+      input.type = 'radio';input.name = 'yomiscan-engine';input.value = value;input.dataset.purpose = 'engine-' + value;
+      input.addEventListener('change', () => {if (input.checked) void setEngineMode(value);});
+      this.radios.push(input);row.style.display = 'block';row.append(input, document.createTextNode(' ' + text));choice.append(row);
+    }
+    const note = document.createElement('small');
+    note.textContent = 'Browser engine: English only; translation settings and glossaries apply to the local backend. Translate Chapter shows English as text over each bubble.';
+    choice.append(note);
+    this.element.append(summary, help, choice, label, button('Install Models', 'install'), button('Cancel', 'cancel'),
       button('Remove Models', 'remove'), button('Check', 'status'), this.output);
     this.element.addEventListener('toggle', () => {
       if (this.element.open) {
+        void engineMode().then(mode => this.radios.forEach(r => {r.checked = r.value === mode;}));
         void chrome.storage.local.get(ENGINE_SOURCE_KEY).then(v => {if (typeof v[ENGINE_SOURCE_KEY] === 'string') this.source.value = v[ENGINE_SOURCE_KEY];});
         void this.request('status');
       } else clearTimeout(this.timer);

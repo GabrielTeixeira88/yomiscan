@@ -7,6 +7,7 @@ import type {Rect} from '../geometry';
 import {HistoryControls} from './history-controls';
 import {SetupControls} from './setup-controls';
 import {EngineControls} from './engine-controls';
+import {ENGINE_MODE_KEY,engineMode,parseEngineMode,type EngineMode} from '../engine-mode';
 
 export class ChapterControls {
   private host=document.createElement("div");
@@ -23,6 +24,7 @@ export class ChapterControls {
   private translationOptions=defaultTranslationOptions();
   private translationSettings:TranslationSettings;
   private fontScale=1;
+  private engine:EngineMode='local';
   constructor(selectText:()=>void,private showStudy:(data:Analysis,anchor:Rect)=>void=()=>{}) {
     this.host.dataset.yomiscan="controls";
     this.host.style.cssText="all:initial!important;position:fixed!important;top:12px!important;right:12px!important;z-index:2147483646!important;";
@@ -36,11 +38,14 @@ export class ChapterControls {
     header.append(title,button("×",()=>{this.showHost(false);}));panel.append(header);
     const heading=(text:string)=>{const h=document.createElement("h2");h.textContent=text;panel.append(h);};
     heading("Study");panel.append(button("Select Text",selectText));
+    // With the browser engine, Translate Chapter reads pages and draws their English over each bubble
+    // (the pixel renderer belongs to the local backend).
     heading("Reading");panel.append(button("Read Chapter",()=>{void this.current('read').start();}),
-      button("Translate Chapter",()=>{void this.current('translate').start();}),button("Stop",()=>this.session?.stop()));
+      button("Translate Chapter",()=>{void (this.engine==='browser'?this.current('read',true):this.current('translate')).start();}),
+      button("Stop",()=>this.session?.stop()));
     const readingHelp=document.createElement('small');
     readingHelp.textContent='Read Chapter keeps the Japanese: click an outlined bubble (or press J / K) to study it; each page’s English button shows its translation. Translate Chapter replaces every page with English.';
-    panel.append(readingHelp,document.createElement('br'));
+    readingHelp.style.display='block';panel.append(readingHelp);
     const permissionHelp=document.createElement('small');permissionHelp.textContent='Translate/Retry may ask Chrome for access to this reader’s image hosts. Screenshots and analysis stay local.';
     panel.append(permissionHelp);
     const scrollLabel=document.createElement('label'),scrollOption=document.createElement('input');scrollOption.type='checkbox';
@@ -124,15 +129,24 @@ export class ChapterControls {
     for(const name of ["pointerdown","pointerup","click","dblclick"])this.host.addEventListener(name,event=>event.stopPropagation());
     this.host.addEventListener("keydown",event=>{if(event.key==="Escape")this.showHost(false);event.stopPropagation();});
     window.addEventListener("pagehide",()=>{this.session?.dispose();this.session=null;});
+    // The engine choice (Setup → Browser engine) applies to the next session; a running one is cleared.
+    void engineMode().then(mode=>{this.engine=mode;});
+    chrome.storage.onChanged.addListener((changes,area)=>{
+      if(area!=='local'||!(ENGINE_MODE_KEY in changes))return;
+      this.engine=parseEngineMode(changes[ENGINE_MODE_KEY].newValue);
+      if(this.session){this.session.dispose();this.session=null;}
+    });
   }
   private showHost(visible:boolean):void {this.host.style.setProperty("display",visible?"block":"none","important");}
   private selectedPageId():number|undefined {return this.pageSelect.value?Number(this.pageSelect.value):undefined;}
   open():void {this.showHost(true);}
   /** The page's session; choosing the other mode replaces it (backend caches make re-reading pages cheap). */
-  private current(mode?:SessionMode):ChapterTranslationSession {
-    if(this.sessionURL!==location.href || this.session?.isDisposed || (mode&&this.session&&this.session.mode!==mode)){
+  private current(mode?:SessionMode,autoEnglish=false):ChapterTranslationSession {
+    if(this.sessionURL!==location.href || this.session?.isDisposed || (mode&&this.session&&(this.session.mode!==mode||this.session.autoEnglish!==autoEnglish)) ||
+      (this.session&&this.session.engine!==this.engine)){
       this.session?.dispose();this.session=null;this.sessionURL=location.href;}
-    if(!this.session)this.session=new ChapterTranslationSession(status=>this.show(status),hidden=>{this.host.style.setProperty("visibility",hidden?"hidden":"visible","important");},undefined,{...this.translationOptions},this.fontScale,this.showStudy,mode??'translate');
+    if(!this.session)this.session=new ChapterTranslationSession(status=>this.show(status),hidden=>{this.host.style.setProperty("visibility",hidden?"hidden":"visible","important");},undefined,{...this.translationOptions},this.fontScale,this.showStudy,mode??'translate',
+      this.engine,autoEnglish);
     this.session.allowStitch=this.stitchEnabled;
     return this.session;
   }

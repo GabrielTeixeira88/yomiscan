@@ -26,13 +26,24 @@ export function cropRGBA(rgba: Uint8ClampedArray, imageWidth: number, box: Box):
 
 export interface VisionModels {ort: typeof Ort; detector: Ort.InferenceSession; ocr: MangaOcr; thresholds?: DetectorThresholds}
 
+export async function detectBlocks(models: VisionModels, image: ImageData) {
+  const raw = await detectRegions(models.ort, models.detector, image.data, image.width, image.height, models.thresholds);
+  return {raw, ...blocksFromRegions(raw, image.width, image.height)};
+}
+
 export async function recognizePage(models: VisionModels, image: ImageData, signal?: AbortSignal): Promise<PageVision> {
-  const {width: w, height: h, data} = image;
   let t = performance.now();
-  const raw = await detectRegions(models.ort, models.detector, data, w, h, models.thresholds);
-  const {blocks, filtered} = blocksFromRegions(raw, w, h);
+  const {raw, blocks, filtered} = await detectBlocks(models, image);
   const detection_ms = performance.now() - t;
   t = performance.now();
+  const recognized = await recognizeBlocks(models, image, blocks, signal);
+  return {width: image.width, height: image.height, regions: raw.length, filtered: filtered.size, blocks: recognized,
+    timings: {detection_ms, ocr_ms: performance.now() - t}};
+}
+
+/** OCR each padded block crop in order; a failure is bound to its own block (PageAnalysisService). */
+export async function recognizeBlocks(models: VisionModels, image: ImageData, blocks: readonly DetectedBlock[], signal?: AbortSignal): Promise<RecognizedBlock[]> {
+  const {width: w, height: h, data} = image;
   const recognized: RecognizedBlock[] = [];
   for (const block of blocks) {
     signal?.throwIfAborted();
@@ -47,6 +58,5 @@ export async function recognizePage(models: VisionModels, image: ImageData, sign
       recognized.push({...block, text: '', status: 'error', error: 'OCR failed for this block.'});
     }
   }
-  return {width: w, height: h, regions: raw.length, filtered: filtered.size, blocks: recognized,
-    timings: {detection_ms, ocr_ms: performance.now() - t}};
+  return recognized;
 }

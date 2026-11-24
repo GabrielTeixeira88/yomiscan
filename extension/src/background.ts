@@ -1,5 +1,6 @@
 import {backendBase} from './backend';
-import { analyzeCrop, analyzeText } from "./api";
+import { analyzeCrop, analyzeText, parseAnalysis } from "./api";
+import {engineMode} from './engine-mode';
 import {installSourceFetch} from './chapter/source-fetch';
 import {CaptureThrottle} from './chapter/capture-throttle';
 import {cacheRequest} from './chapter/cache-client';
@@ -39,6 +40,18 @@ async function prepareTransport():Promise<void> {
       justification:"Transfer and process page image Blobs through the local renderer without service-worker fetch lifetime limits"});
   })().finally(()=>{preparing=null;});return preparing;
 }
+/** One request to the browser engine in the offscreen document (created on demand). */
+async function engineRequest(operation:string,extra:Record<string,unknown>={}):Promise<unknown>{
+  await prepareTransport();
+  const reply=await chrome.runtime.sendMessage({target:'offscreen-engine',operation,...extra});
+  if(!reply?.ok)throw new Error(reply?.error??'Browser engine unavailable. Reload the extension.');
+  return reply.data;
+}
+async function base64(blob:Blob):Promise<string>{
+  const bytes=new Uint8Array(await blob.arrayBuffer());let binary='';
+  for(let i=0;i<bytes.length;i+=8192)binary+=String.fromCharCode(...bytes.subarray(i,i+8192));
+  return btoa(binary);
+}
 async function pageCapture(request:CaptureRequest,tab:chrome.tabs.Tab):Promise<unknown> {
   if(!request.rect || !request.viewport || !validSelection(request.rect,request.viewport) || request.viewport.scale!==1)throw new Error("Invalid page capture rectangle");
   const verify=async()=>{
@@ -77,7 +90,8 @@ async function capture(request: CaptureRequest, tab: chrome.tabs.Tab): Promise<u
     const valid = await chrome.tabs.sendMessage(tabId, {type: "verify-capture", id: request.id}, {frameId: 0});
     if (valid !== true) throw new Error("The page moved during capture. Select the region again.");
   };
-  const timer = setTimeout(() => controller.abort(), 25_000);
+  // The browser engine may load its models on the first request; allow it longer.
+  const timer = setTimeout(() => controller.abort(), await engineMode() === "browser" ? 120_000 : 25_000);
   try {
     const screenshot = await captures.run(async()=>{await verify();return chrome.tabs.captureVisibleTab(tab.windowId, {format: "png"});});
     await verify();
@@ -97,6 +111,7 @@ async function capture(request: CaptureRequest, tab: chrome.tabs.Tab): Promise<u
     if (crop.size > 10 * 1024 * 1024) throw new Error("Select a smaller region (maximum 10 MiB).");
     await verify();
     await chrome.tabs.sendMessage(tabId, {type: "captured", id: request.id}, {frameId: 0});
+    if (await engineMode() === "browser") return parseAnalysis(await engineRequest("study", {data: await base64(crop), mime: "image/png"}));
     return await analyzeCrop(crop, controller.signal);
   } finally {
     clearTimeout(timer);
@@ -110,9 +125,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // Browser engine setup (Stage 5a). Page recognition is not exposed to content scripts here.
     if(!['status','install','cancel','remove'].includes(message.operation)||(message.operation==='install'&&typeof message.base!=='string')){
       sendResponse({ok:false,error:'Invalid browser engine request'});return;}
-    void prepareTransport().then(()=>chrome.runtime.sendMessage({target:'offscreen-engine',operation:message.operation,base:message.base}))
-      .then(reply=>sendResponse(reply??{ok:false,error:'Browser engine unavailable'}),
-        error=>sendResponse({ok:false,error:error instanceof Error?error.message:'Browser engine unavailable'}));
+    void engineRequest(message.operation,{base:message.base}).then(data=>sendResponse({ok:true,data}),
+      error=>sendResponse({ok:false,error:error instanceof Error?error.message:'Browser engine unavailable'}));
     return true;
   }
   if(message?.type==='chapter-readiness'){
@@ -127,7 +141,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if(message?.type==='study-reanalyze'){
     if(typeof message.text!=='string'||message.text.length>1000){sendResponse({ok:false,error:'Edited text must be 1 to 1,000 characters.'});return;}
     const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),25_000);
-    void analyzeText(message.text,controller.signal).then(data=>sendResponse({ok:true,data}),
+    void engineMode().then(mode=>mode==='browser'?engineRequest('analyze-text',{text:message.text.trim(),translate:true}).then(parseAnalysis):
+      analyzeText(message.text,controller.signal)).then(data=>sendResponse({ok:true,data}),
       error=>sendResponse({ok:false,error:error instanceof Error?error.message:'Local analysis failed'})).finally(()=>clearTimeout(timer));
     return true;
   }
