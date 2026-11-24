@@ -148,7 +148,7 @@ to process only that page again. Its previous translation remains usable until a
 replacement arrives. Stop cancels refresh while retaining that result; normal chapter
 Stop still lets the current initial page finish.
 
-**Export Page Report** downloads a local ZIP for that page without rerunning analysis.
+**Export Page Report** (under **Advanced**) downloads a local ZIP for that page without rerunning analysis.
 Metadata is the default. Expand **Report inclusions** to explicitly include OCR/translation
 text, original pixels or the translated image. Review these before sharing. No upload
 occurs; source URLs, raw exceptions, credentials and local paths are excluded. Original
@@ -221,7 +221,7 @@ uv run yomiscan-prepare-defaults
 uv run uvicorn yomiscan.api.main:app --host 127.0.0.1 --port 47615 --reload
 ```
 
-The API starts while required resources initialize. Open **Setup & readiness** to
+The API starts while required resources initialize. Open **Advanced → Setup & readiness** to
 distinguish initializing, ready and missing resources; `/health` stays unavailable
 until initialization succeeds. Run preparation/import commands and restart after setup
 failures. Startup never silently downloads weights. Set
@@ -314,7 +314,7 @@ other programs on your machine. The extension sends analysis only to loopback
 **Backend port.** The default is **47615** (`yomiscan-server` and the extension). It is
 deliberately not 8765, AnkiConnect's default port, which earlier YomiScan versions used.
 To use another port, start `uv run yomiscan-server --port 8790` and enter the same number
-in **Setup & readiness → Backend port → Save Port**. Ports below 1024 are rejected.
+in **Advanced → Setup & readiness → Backend port → Save Port**. Ports below 1024 are rejected.
 Use one Uvicorn worker to avoid duplicating
 model memory. See [extension instructions](extension/README.md) and
 [Phase 4 validation/checklist](docs/phase-4-validation.md).

@@ -66,7 +66,9 @@ remain candidates, not meanings selected for the sentence's context.
 
 Post-MVP page actions: choose a page (or **Nearest viewport**) and **Retranslate Page**
 to refresh only its result, retaining the previous translation on failure/cancellation.
-**Export Page Report** downloads a metadata-only ZIP by default; optional OCR/translation
+The panel keeps reading controls visible. Maintenance tools (page reports, region
+inspector, processing cache, Setup & readiness, processing details, developer diagnostics)
+are folded under **Advanced**. **Export Page Report** downloads a metadata-only ZIP by default; optional OCR/translation
 text and original/translated pixels require explicit checkboxes. No upload/inference is
 performed during export. Recent originals and diagnostics live in bounded session memory;
 Clear/navigation releases them. See [report details and model-free browser validation](../docs/post-mvp-reliability-qol.md).

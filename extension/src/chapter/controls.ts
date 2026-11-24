@@ -51,6 +51,9 @@ export class ChapterControls {
     this.pageSelect.setAttribute('aria-label','Chapter page');
     pageLabel.append(this.pageSelect);panel.append(pageLabel,
       button('Retranslate Page',()=>this.current().refreshPage(this.selectedPageId())));
+    // Developer and maintenance tools stay available but fold away from the reading controls.
+    const advanced=document.createElement('details'),advancedTitle=document.createElement('summary');
+    advanced.className='advanced';advancedTitle.textContent='Advanced: reports, cache, setup, diagnostics';advanced.append(advancedTitle);
     const inclusions={text:false,original:false,rendered:false};
     const reportOptions=document.createElement('details'),reportTitle=document.createElement('summary');
     reportTitle.textContent='Report inclusions (metadata only by default)';reportOptions.append(reportTitle);
@@ -68,7 +71,7 @@ export class ChapterControls {
       this.exportButton.disabled=true;
       void this.current().exportPageReport(this.selectedPageId(),{...inclusions}).finally(()=>{this.exportButton.disabled=false;});
     });
-    panel.append(this.exportButton,reportOptions,button('Inspect Regions',()=>this.current().inspectRegions(this.selectedPageId())));
+    advanced.append(this.exportButton,reportOptions,button('Inspect Regions',()=>this.current().inspectRegions(this.selectedPageId())));
     const cacheDetails=document.createElement('details'),cacheTitle=document.createElement('summary');cacheTitle.textContent='Local processing cache';
     const cacheInfo=document.createElement('p'),cacheLabel=document.createElement('label'),persistent=document.createElement('input');
     persistent.type='checkbox';persistent.disabled=true;
@@ -90,7 +93,7 @@ export class ChapterControls {
     persistent.addEventListener('change',()=>{void cacheAction('settings');});
     cacheDetails.addEventListener('toggle',()=>{if(cacheDetails.open)void cacheAction('read');});
     cacheDetails.append(cacheTitle,cacheLabel,cacheHelp,cacheInfo,button('Refresh Cache Usage',()=>{void cacheAction('read');}),
-      button('Clear Persistent Cache',()=>{void cacheAction('clear');}));panel.append(cacheDetails);
+      button('Clear Persistent Cache',()=>{void cacheAction('clear');}));advanced.append(cacheDetails);
     this.translationSettings=new TranslationSettings((options,invalidate=false)=>{
       const identity=(value:ReaderTranslationOptions)=>JSON.stringify({...value,series_id:value.glossary_enabled?value.series_id:null,
         glossary_version:value.glossary_enabled?value.glossary_version:null});
@@ -98,10 +101,10 @@ export class ChapterControls {
       this.translationOptions=options;this.english.textContent=targetLabel(options.target_language);
     });panel.append(this.translationSettings.element);
     panel.append(new HistoryControls(data=>this.showStudy(data,{x:16,y:16,width:0,height:0})).element);
-    panel.append(new SetupControls().element);
+    advanced.append(new SetupControls().element);
     const resources=document.createElement('details'),resourceTitle=document.createElement('summary'),resourceText=document.createElement('p');
     resourceTitle.textContent='Processing details';resources.append(resourceTitle,resourceText);
-    resources.addEventListener('toggle',()=>{if(resources.open)resourceText.textContent=this.session?.resourceSummary()??'No processed page retained.';});panel.append(resources);
+    resources.addEventListener('toggle',()=>{if(resources.open)resourceText.textContent=this.session?.resourceSummary()??'No processed page retained.';});advanced.append(resources);
     const fontDetails=document.createElement('details'),fontTitle=document.createElement('summary');fontTitle.textContent='Translation font';
     const scale=document.createElement('select');scale.setAttribute('aria-label','Translation font size');
     for(const value of [.75,1,1.25,1.5])scale.add(new Option(`${Math.round(value*100)}%`,String(value)));scale.value='1';
@@ -110,7 +113,8 @@ export class ChapterControls {
     fontDetails.append(fontTitle,scale,button('Apply Font',applyFont),button('Reset Font',()=>{scale.value='1';applyFont();}),fontHelp);panel.append(fontDetails);
     const help=document.createElement("small");help.textContent="Selected pages stay on this machine. CPU processing may take time.";panel.append(help);
     const details=document.createElement("details"),summary=document.createElement("summary");summary.textContent="Developer diagnostics";
-    details.append(summary,button("Log discovery / states",()=>this.current().diagnostics()));panel.append(details);
+    details.append(summary,button("Log discovery / states",()=>this.current().diagnostics()));advanced.append(details);
+    panel.append(advanced);
     this.root.append(style,panel);this.showHost(false);document.documentElement.append(this.host);
     for(const name of ["pointerdown","pointerup","click","dblclick"])this.host.addEventListener(name,event=>event.stopPropagation());
     this.host.addEventListener("keydown",event=>{if(event.key==="Escape")this.showHost(false);event.stopPropagation();});
