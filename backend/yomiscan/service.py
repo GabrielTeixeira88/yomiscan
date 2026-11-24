@@ -9,7 +9,7 @@ from time import perf_counter
 
 from PIL import Image
 
-from .analysis import ImageAnalysisResult, TextAnalyzer, analyze_image, analyze_recognized_blocks
+from .analysis import ImageAnalysisResult, TextAnalysisResult, TextAnalyzer, analyze_image, analyze_recognized_blocks
 from .dictionary import SQLiteDictionary
 from .nlp import FugashiTokenizer
 from .ocr import MangaOCREngine, OCREngine, OCRResult
@@ -160,6 +160,22 @@ class ImageAnalysisService:
         return {"ocr": {"loaded": True}, "translation": {"loaded": translation.get("device") not in (None, "unloaded"),
             "device": translation.get("device")}, "detection": {"loaded": detector is not None},
             "processing_cache": {"persistent_enabled": self.cache.enabled}, "glossary_open": self._glossaries is not None}
+
+    def select_translation_engine(self, name: str) -> None:
+        """Load `name` and make it the sentence translator for Study and pages (owning worker only).
+
+        The new engine is created first, so a failure leaves the current one in place. The
+        configuration ID changes, so chapter sessions restart rather than mix engines.
+        """
+        translator = create_translation_engine(name, device=self._device)
+        previous = self._analyzer.replace_translator(translator)
+        close = getattr(previous, "close", None)
+        if callable(close):
+            close()
+
+    def analyze_text(self, text: str) -> TextAnalysisResult:
+        """Study text the user corrected after OCR: lexical analysis and sentence translation only."""
+        return self._analyzer.analyze(text)
 
     def analyze_image(self, image: Image.Image) -> ImageAnalysisResult:
         """Study a selection: read every detected text block, or the whole selection.

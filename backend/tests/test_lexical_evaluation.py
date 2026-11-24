@@ -19,17 +19,18 @@ def test_committed_golden_set_is_well_formed():
     assert sum(len(case.expect) for case in cases) >= 130
 
 
-def test_pass_fail_missing_and_pending_outcomes(dictionary_path):
+def test_pass_fail_missing_token_and_unit_outcomes(dictionary_path):
     cases = [GoldenCase("T1", "猫を食べた", (Expectation("猫", spelling="猫", pos="noun", gloss="cat"),
                                            Expectation("食べ", spelling="食べる"),
                                            Expectation("猫", gloss="dog"),
                                            Expectation("犬", gloss="dog")),
-                        ({"text": "食べた", "gloss": "ate"},))]
+                        # A single token can already be the whole unit; an unknown unit is a miss.
+                        ({"text": "食べる", "gloss": "eat"}, {"text": "食べた", "gloss": "ate"}))]
     with SQLiteDictionary(dictionary_path) as dictionary:
         report = evaluate(TextAnalyzer(FugashiTokenizer(), dictionary), cases)
-    assert [outcome.status for outcome in report.outcomes] == ["pass", "pass", "fail", "missing_token", "pending_unit"]
+    assert [outcome.status for outcome in report.outcomes] == ["pass", "pass", "fail", "missing_token", "pass", "missing_unit"]
     assert "dog" in report.outcomes[2].detail
-    assert report.summary() == {"scored": 4, "pass": 2, "fail": 1, "missing_token": 1, "pending_units": 1, "pass_rate": 0.5}
+    assert report.summary() == {"scored": 6, "pass": 3, "fail": 1, "missing_token": 1, "missing_unit": 1, "pass_rate": 0.5}
 
 
 @pytest.mark.parametrize("line,message", [

@@ -1,4 +1,5 @@
-import type { Analysis, Meaning } from "./api";
+import { parseAnalysis, type Analysis, type Meaning } from "./api";
+import {furigana} from "./furigana";
 import { constrainPopup, popupPosition, resizePopup, type Point, type Rect, type ResizeEdge } from "./geometry";
 
 export async function copyStudyText(text:string,write:(text:string)=>Promise<void>=value=>navigator.clipboard.writeText(value)):Promise<string> {
@@ -42,6 +43,8 @@ export const styles = `
     background: repeating-linear-gradient(135deg, transparent 0 3px, #7d9385 3px 5px, transparent 5px 7px);
     clip-path: polygon(100% 0, 100% 100%, 0 100%); }
   .surface { font-size: 18px; font-weight: 650; color: #244e34; }
+  .surface rt { font-size: 10px; font-weight: 400; color: #5d6b62; }
+  textarea.editor { width: 100%; box-sizing: border-box; font: inherit; font-size: 15px; margin: 6px 0; }
   .metadata { font-size: 12px; color: #526071; }
   ul { margin: 5px 0; padding-left: 20px; }
   li { margin: 4px 0; }
@@ -62,6 +65,18 @@ export function element<K extends keyof HTMLElementTagNameMap>(tag: K, text?: st
   if (text !== undefined) node.textContent = text;
   if (className) node.className = className;
   return node;
+}
+
+/** Word with furigana over its kanji runs, built as DOM nodes (never HTML strings). */
+function appendFurigana(parent: HTMLElement, surface: string, reading: string | null): void {
+  for (const segment of furigana(surface, reading)) {
+    if (!segment.reading) { parent.append(segment.text); continue; }
+    const ruby = document.createElement("ruby");
+    const rt = document.createElement("rt");
+    rt.textContent = segment.reading;
+    ruby.append(segment.text, rt);
+    parent.append(ruby);
+  }
 }
 
 function appendMeaning(list: HTMLElement, meaning: Meaning): void {
@@ -173,6 +188,61 @@ export class StudyPopup {
     this.listeners.abort();
   }
 
+  /** Ranked candidates, best first: the best entry's first senses, the rest folded so another
+   * word's senses never appear as if they belonged to this one. */
+  private appendMeanings(row: HTMLElement, meanings: Meaning[]): void {
+    const best = meanings.filter(meaning => meaning.entry_id === meanings[0]?.entry_id);
+    const others = meanings.slice(best.length);
+    const list = element("ul");
+    best.slice(0, 3).forEach(meaning => appendMeaning(list, meaning));
+    row.append(list);
+    const folded = best.slice(3).length, otherEntries = new Set(others.map(meaning => meaning.entry_id)).size;
+    if (!folded && !otherEntries) return;
+    const details = element("details");
+    details.append(element("summary", [folded ? `${folded} more senses` : "",
+      otherEntries ? `${otherEntries} other dictionary ${otherEntries === 1 ? "entry" : "entries"}` : ""].filter(Boolean).join(" · ")));
+    const more = element("ul");
+    best.slice(3).forEach(meaning => appendMeaning(more, meaning));
+    let entry: number | null = null;
+    for (const meaning of others) {
+      if (meaning.entry_id !== entry) { entry = meaning.entry_id; more.append(element("li", "Other entry", "entry-divider")); }
+      appendMeaning(more, meaning);
+    }
+    details.append(more);
+    details.addEventListener("toggle", () => this.position());
+    row.append(details);
+  }
+
+  /** "Edit text": correct OCR mistakes, then re-analyze the edited text locally (no new screenshot). */
+  private appendEditor(section: HTMLElement, original: string): void {
+    const edit = element("button", "Edit text", "copy");
+    edit.lang = "en";
+    edit.setAttribute("aria-label", "Edit the recognized Japanese text");
+    edit.addEventListener("click", () => {
+      const area = element("textarea", undefined, "editor");
+      area.value = original; area.maxLength = 1000; area.rows = 3; area.lang = "ja";
+      area.setAttribute("aria-label", "Corrected Japanese text");
+      const run = element("button", "Analyze edited text", "action");
+      run.lang = "en";
+      const feedback = element("p", "", "copy-feedback"); feedback.setAttribute("role", "status"); feedback.lang = "en";
+      run.addEventListener("click", () => {
+        run.disabled = true; feedback.textContent = "Analyzing locally…";
+        void chrome.runtime.sendMessage({type: "study-reanalyze", text: area.value}).then(reply => {
+          if (this.listeners.signal.aborted || !section.isConnected) return;
+          if (!reply?.ok) { feedback.textContent = reply?.error ?? "Local analysis failed."; run.disabled = false; return; }
+          this.show(parseAnalysis(reply.data));
+        }, () => {
+          if (this.listeners.signal.aborted) return;
+          feedback.textContent = "Analysis unavailable. Reload the extension."; run.disabled = false;
+        });
+      });
+      edit.replaceWith(area, run, feedback);
+      area.focus();
+      this.position();
+    });
+    section.append(edit);
+  }
+
   status(message: string, error = false): void {
     this.body.replaceChildren(element("p", message, `status${error ? " error" : ""}`));
     this.position();
@@ -202,7 +272,45 @@ export class StudyPopup {
         window.setTimeout(()=>{if(feedback.textContent===message)feedback.textContent='';},3000);
       });});
       section.append(copy,feedback);
-      if (className === "original") section.lang = "ja";
+      if (className === "original") { section.lang = "ja"; this.appendEditor(section, data.original_text); }
+      this.body.append(section);
+    }
+    const units = data.units ?? [];
+    if (units.length) {
+      // Multi-word expressions first: their meaning differs from their parts (かもしれない).
+      const expressions = element("section");
+      expressions.append(element("h2", "Expressions"));
+      const list = element("div", undefined, "words");
+      for (const unit of units) {
+        const row = element("article");
+        const surface = element("div", unit.surface, "surface");
+        surface.lang = "ja";
+        row.append(surface);
+        if (unit.dictionary_form !== unit.surface) row.append(element("p", `Dictionary form: ${unit.dictionary_form}`, "metadata"));
+        const parts = data.tokens.slice(unit.start_token, unit.end_token).map(token => token.surface);
+        row.append(element("p", `Words: ${parts.join(" + ")}`, "metadata"));
+        this.appendMeanings(row, unit.meanings);
+        list.append(row);
+      }
+      expressions.append(list);
+      this.body.append(expressions);
+    }
+    const grammar = data.grammar ?? [];
+    if (grammar.length) {
+      // Constructions the dictionary does not list (〜てしまう, 〜だろう), with the words they span.
+      const section = element("section");
+      section.append(element("h2", "Grammar"));
+      const list = element("ul", undefined, "grammar");
+      for (const note of grammar) {
+        const item = element("li");
+        const name = element("strong", note.name);
+        name.lang = "ja";
+        const span = element("span", data.tokens.slice(note.start_token, note.end_token).map(token => token.surface).join(""), "metadata");
+        span.lang = "ja";
+        item.append(name, " ", span, element("div", note.meaning));
+        list.append(item);
+      }
+      section.append(list);
       this.body.append(section);
     }
     const breakdown = element("section");
@@ -214,37 +322,17 @@ export class StudyPopup {
     if (!tokens.length) breakdown.append(element("p", "No word breakdown available."));
     for (const token of tokens) {
       const row = element("article");
-      const surface = element("div", token.surface, "surface");
+      const surface = element("div", undefined, "surface");
       surface.lang = "ja";
+      appendFurigana(surface, token.surface, token.reading);
       row.append(surface, element("p", `Reading: ${token.reading ?? "unavailable"}`, "metadata"));
       row.append(element("p", `Lemma: ${token.lemma ?? "unavailable"}`, "metadata"));
       if (token.dictionary_form && token.dictionary_form !== token.lemma) row.append(element("p", `Dictionary form: ${token.dictionary_form}`, "metadata"));
       row.append(element("p", `POS: ${token.part_of_speech ?? "unavailable"}`, "metadata"));
+      if (token.inflection?.length) row.append(element("p", `Form: ${token.inflection.join(" · ")}`, "metadata"));
       if (token.conjugation_type || token.conjugation_form) row.append(element("p", `Conjugation: ${[token.conjugation_type, token.conjugation_form].filter(Boolean).join(" / ")}`, "metadata"));
       if (!token.meanings.length) row.append(element("p", "No dictionary match", "metadata"));
-      // Candidates arrive ranked best-first. Show the best entry's first senses; fold the
-      // rest so another word's senses never appear as if they belonged to this one.
-      const best = token.meanings.filter(meaning => meaning.entry_id === token.meanings[0]?.entry_id);
-      const others = token.meanings.slice(best.length);
-      const list = element("ul");
-      best.slice(0, 3).forEach(meaning => appendMeaning(list, meaning));
-      row.append(list);
-      const folded = best.slice(3).length, otherEntries = new Set(others.map(meaning => meaning.entry_id)).size;
-      if (folded || otherEntries) {
-        const details = element("details");
-        details.append(element("summary", [folded ? `${folded} more senses` : "",
-          otherEntries ? `${otherEntries} other dictionary ${otherEntries === 1 ? "entry" : "entries"}` : ""].filter(Boolean).join(" · ")));
-        const more = element("ul");
-        best.slice(3).forEach(meaning => appendMeaning(more, meaning));
-        let entry: number | null = null;
-        for (const meaning of others) {
-          if (meaning.entry_id !== entry) { entry = meaning.entry_id; more.append(element("li", "Other entry", "entry-divider")); }
-          appendMeaning(more, meaning);
-        }
-        details.append(more);
-        details.addEventListener("toggle", () => this.position());
-        row.append(details);
-      }
+      this.appendMeanings(row, token.meanings);
       words.append(row);
     }
     this.body.append(breakdown);
@@ -261,6 +349,7 @@ export class StudyPopup {
     footer.append(attribution);
     const time = data.processing;
     if(data.provenance?.analysis_origin==='page')footer.append(element('p','Reused completed page analysis; no new screenshot or OCR.'));
+    if(data.provenance?.analysis_origin==='edited')footer.append(element('p','Analyzed your edited text; no new screenshot or OCR.'));
     footer.append(element("p", `Local processing · OCR ${Math.round(time.ocr_ms)} ms · Translation ${Math.round(time.translation_ms)} ms · Analysis ${Math.round(time.analysis_ms)} ms`));
     this.body.append(footer);
     const save=element('button','Save to History','action'),saved=element('p','','copy-feedback');saved.setAttribute('role','status');

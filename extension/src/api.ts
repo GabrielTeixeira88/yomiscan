@@ -7,11 +7,23 @@ export interface Token {
   surface: string; reading: string | null; lemma: string | null; dictionary_form: string | null;
   part_of_speech: string | null; conjugation_type: string | null; conjugation_form: string | null;
   meanings: Meaning[];
+  /** Learner labels for a verb/adjective head, e.g. ["negative", "past"]; absent from older servers. */
+  inflection?: string[];
+}
+/** A multi-token meaning unit (かもしれない) covering tokens[start_token, end_token). */
+export interface Unit {
+  surface: string; dictionary_form: string; start_token: number; end_token: number; meanings: Meaning[];
+}
+/** A grammar note (〜てしまう) covering tokens[start_token, end_token). */
+export interface GrammarNote {
+  id: string; name: string; meaning: string; start_token: number; end_token: number;
 }
 export interface Analysis {
   original_text: string; translation: string | null;
   processing: {ocr_ms: number; translation_ms: number; analysis_ms: number; total_ms: number};
   tokens: Token[];
+  units?: Unit[];
+  grammar?: GrammarNote[];
   target_language?:string;dictionary_language?:string;
   provenance?:Record<string,unknown>;
 }
@@ -32,10 +44,30 @@ export function parseAnalysis(value: unknown): Analysis {
     && Number((value.processing as Record<string, unknown>)[key]) >= 0)) {
     throw new Error("Invalid processing times from local server.");
   }
+  const validMeanings = (meanings: unknown[]) => meanings.every(meaning => record(meaning) && Number.isInteger(meaning.entry_id)
+    && ["glosses", "parts_of_speech", "spellings", "readings", "notes", "labels"].every(k => strings(meaning[k])));
+  if (value.units !== undefined) {
+    // Older servers omit units; when present they must address real tokens.
+    if (!Array.isArray(value.units)) throw new Error("Invalid expression data from local server.");
+    for (const unit of value.units) {
+      if (!record(unit) || typeof unit.surface !== "string" || typeof unit.dictionary_form !== "string"
+        || !Number.isInteger(unit.start_token) || !Number.isInteger(unit.end_token)
+        || Number(unit.start_token) < 0 || Number(unit.end_token) <= Number(unit.start_token)
+        || Number(unit.end_token) > value.tokens.length || !Array.isArray(unit.meanings) || !validMeanings(unit.meanings))
+        throw new Error("Invalid expression data from local server.");
+    }
+  }
+  const span = (item: Record<string, unknown>) => Number.isInteger(item.start_token) && Number.isInteger(item.end_token)
+    && Number(item.start_token) >= 0 && Number(item.end_token) > Number(item.start_token) && Number(item.end_token) <= (value.tokens as unknown[]).length;
+  if (value.grammar !== undefined) {
+    if (!Array.isArray(value.grammar) || !value.grammar.every(note => record(note) && span(note)
+      && ["id", "name", "meaning"].every(k => typeof note[k] === "string"))) throw new Error("Invalid grammar data from local server.");
+  }
   for (const token of value.tokens) {
     if (!record(token) || typeof token.surface !== "string"
       || !["reading", "lemma", "dictionary_form", "part_of_speech", "conjugation_type", "conjugation_form"].every(k => nullableString(token[k]))
-      || !Array.isArray(token.meanings)) throw new Error("Invalid token data from local server.");
+      || !Array.isArray(token.meanings)
+      || (token.inflection !== undefined && !strings(token.inflection))) throw new Error("Invalid token data from local server.");
     for (const meaning of token.meanings) {
       if (!record(meaning) || !Number.isInteger(meaning.entry_id)
         || !["glosses", "parts_of_speech", "spellings", "readings", "notes", "labels"].every(k => strings(meaning[k]))) {
@@ -73,4 +105,29 @@ export async function analyzeCrop(blob: Blob, signal: AbortSignal): Promise<Anal
   try { value = await response.json(); }
   catch { throw new Error("The local server returned invalid JSON."); }
   return parseAnalysis(value);
+}
+
+/** Re-analyze OCR text the user corrected in the popup (no screenshot, no OCR). */
+export async function analyzeText(text: string, signal: AbortSignal): Promise<Analysis> {
+  const value = text.trim();
+  if (!value) throw new Error("Enter some Japanese text to analyze.");
+  if (value.length > 1000) throw new Error("Edited text is limited to 1,000 characters.");
+  const base = await backendBase();
+  let response: Response;
+  try {
+    response = await fetch(`${base}/api/v1/analyze-text`, {
+      method: "POST", headers: {"X-YomiScan-Client": "study-extension-v1", "Content-Type": "application/json"},
+      body: JSON.stringify({text: value}), signal, credentials: "omit", redirect: "error", cache: "no-store",
+    });
+  } catch (error) {
+    if (signal.aborted) throw new Error("Analysis was cancelled or timed out; the backend may still be finishing.");
+    throw new Error(`Cannot reach YomiScan. Start the local server at ${base.replace("http://", "")} and try again.`, {cause: error});
+  }
+  if (response.status === 404) throw new Error("This backend cannot analyze edited text yet. Update and restart the local server.");
+  if (response.status === 413 || response.status === 422) throw new Error("Edited text must be 1 to 1,000 characters.");
+  if (!response.ok) throw new Error(httpError(response.status));
+  let data: unknown;
+  try { data = await response.json(); }
+  catch { throw new Error("The local server returned invalid JSON."); }
+  return parseAnalysis(data);
 }

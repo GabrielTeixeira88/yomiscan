@@ -34,7 +34,9 @@ def test_deduplicates_entries_and_queries(dictionary_path):
         result = TextAnalyzer(FugashiTokenizer(), wrapped).analyze("猫 猫")
         assert len(result.tokens) == 2
         assert len(result.dictionary_entries) == 1
-        wrapped.lookup.assert_called_once_with("猫")
+        # Each distinct form is queried once; the only other query is the unit span 猫猫.
+        assert [call.args[0] for call in wrapped.lookup.call_args_list] == ["猫", "猫猫"]
+        assert result.units == ()
 
 
 def test_combined_pipeline_with_mock_ocr(dictionary_path):

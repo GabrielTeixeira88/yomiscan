@@ -29,7 +29,66 @@ kanji-lemma agreement, then first-sense/later-sense POS agreement (UniDic `pos1`
 JMdict labels), headword, reading, JMdict "common" tags, `nfXX` band, and entry ID.
 Particles and auxiliaries drop non-agreeing homophones when an agreeing entry exists.
 Sense order within an entry is unchanged. The lexical cache key includes the ranking
-module. Multi-token expressions (しょうがない) and grammar notes remain Stage 3 work.
+module.
+
+**Multi-token units (Stage 3).** `lexical_units.py` finds expressions that span tokens
+(かもしれない, しょうがねえ → しょうがない, 主導権を握る) by longest JMdict match. Each candidate is tried
+as written, then ending in the last token's dictionary form, then with colloquial
+variants. Selection is global, so a longer unit beats an earlier, shorter, overlapping one.
+The rules are data in `resources/lexical/units.json`, in a format the browser build can
+read too:
+- **variants:** colloquial-to-standard spellings;
+- **interjections:** allowed only at the start of a clause (しまった in 食べてしまった is not "oh no");
+- **particle/auxiliary edges:** only functional entries count (expression, particle,
+  conjunction, auxiliary, copula, interjection, pronoun; common adverbs), so は+と is not
+  "pigeon" and し+て is not "doer";
+- **verb spans:** a span containing a verb is never a bare particle or a pronoun;
+- **forbidden starts:** a unit never starts on た, て or を.
+
+Units are an extra layer (`TextAnalysisResult.units`, `units` in API responses). Token
+analysis is unchanged, and the Study popup lists them under "Expressions" above the word
+breakdown. Known limit: a single-entry でも mid-sentence still shows "but" first.
+
+**Grammar notes (Stage 3).** `grammar_patterns.py` matches constructions that JMdict does
+not list (〜てしまう, 〜ている, 〜だろう, 〜ことができる, passive/potential, causative, the two
+meanings of 〜そうだ, and about 30 more). The patterns are data in
+`resources/lexical/grammar.json`. A pattern is a sequence of token steps (`surface`, `base`, `pos`,
+conjugation `form`), with an optional `after` step for the preceding token. The て-patterns
+require a verb, adjective or auxiliary before them, so 僕でも is not 〜ても. At one start,
+the longest match wins; a match nested inside another is dropped (ば inside
+なければならない). Matches are `TextAnalysisResult.grammar` and `grammar` in API responses
+(id, name, short learner meaning, token span), and the popup lists them under "Grammar". The
+evaluator accepts a grammar note whose forms include an expected unit (てしまう, だろう).
+
+**Inflection labels and furigana (Stage 3).** `inflection.py` names how a verb or
+adjective is inflected, from rule data in `resources/lexical/inflections.json`. For each
+head it reads the head's own form (imperative, volitional), then the auxiliaries and
+て/で/ば that follow it, in order: 食べなかった = negative, past; 行きませんでした = polite,
+negative, past; 高くなかった = negative, past. An unknown auxiliary such as the copula だ ends
+the word. Labels attach to the head (`AnalyzedToken.inflection`, `inflection` in the API),
+and the popup shows them as "Form: negative · past". Furigana is aligned in the extension
+(`extension/src/furigana.ts`, pure, so a browser engine can reuse it). Kana runs anchor the
+reading and each kanji run takes the reading between them (食べ → 食(た)べ). An unalignable
+reading is shown over the whole word instead of a wrong split. The word breakdown renders
+it as DOM `<ruby>` nodes.
+
+**Correcting OCR in Study (Stage 3).** The popup's "Edit text" button opens a text area
+with the recognized text. "Analyze edited text" sends it (1–1,000 characters) through the
+background worker to `POST /api/v1/analyze-text`. That endpoint runs
+`ImageAnalysisService.analyze_text` on the same single worker and busy guard as images. It
+does lexical analysis and sentence translation only, with no screenshot and no OCR. The
+security guard bounds its body to 8 KiB. The response is the usual Study JSON with
+`analysis_origin: "edited"`, and the popup re-renders in place.
+
+**Choosing the translation engine (Stage 3).** The Setup panel lists translation engines
+that readiness reports as installed with their runtime available, and offers "Use" for each.
+`POST /api/v1/translation-engine` validates the catalog ID and checks the artifacts on the
+model worker. `ImageAnalysisService.select_translation_engine` then creates the new engine
+before swapping it into the shared `TextAnalyzer`, so a load failure keeps the previous one,
+and the previous engine is closed. The configuration ID changes, so open chapter sessions
+restart instead of mixing engines. The cache identity already includes the engine. The
+choice lasts until restart; `YOMISCAN_TRANSLATION_ENGINE` remains the startup default.
+OPUS stays the default: the Stage 2 blind ratings that would choose another are not done yet.
 
 **Configurable loopback port.** `extension/src/backend.ts` owns the backend address:
 `http://127.0.0.1:<port>`, default 47615 (not AnkiConnect's 8765), with an optional
@@ -343,9 +402,10 @@ token, matched query, and entry IDs. This avoids copying large entries for repea
 words. `ImageAnalysisResult` combines the OCR result with text analysis. The text CLI
 does not construct an OCR engine; the image CLI constructs it once per invocation.
 
-Full candidate entries are exposed, including restrictions. This version does not
-select a context-specific sense, filter homophones by POS, join multi-token expressions,
-or apply restrictions as a grammatical interpretation. Those limitations are visible
+Full candidate entries are exposed, including restrictions. (Phase 2 record: this version
+did not select a context-specific sense, filter homophones by POS, join multi-token
+expressions, or apply restrictions as a grammatical interpretation. Ranking and units were
+added post-MVP; see the sections above.) Those limitations are visible
 in CLI output. Source XML/databases live in ignored `data/`; they are never committed.
 
 ## Phase 4: implemented study mode

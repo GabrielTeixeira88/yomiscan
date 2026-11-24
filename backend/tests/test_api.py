@@ -79,6 +79,31 @@ def test_health_and_repeated_analysis_reuses_service(api):
     assert len(threads) == 3  # one initialization, two requests
 
 
+def test_edited_text_is_analyzed_without_ocr(api):
+    client, ocr, translator, _ = api
+    translator.translate.return_value = TranslationResult("猫を食べた", "I ate a cat", "fake", "fake", 3)
+    response = client.post("/api/v1/analyze-text", json={"text": " 猫を食べた "})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["original_text"] == "猫を食べた" and data["translation"] == "I ate a cat"
+    assert data["processing"]["ocr_ms"] == 0 and data["provenance"]["analysis_origin"] == "edited"
+    assert any(token["inflection"] == ["past"] for token in data["tokens"])
+    ocr.recognize.assert_not_called()
+
+
+@pytest.mark.parametrize("body,status", [({"text": "   "}, 422), ({"text": "猫" * 1001}, 422), ({"text": "猫", "extra": 1}, 422), ({}, 422)])
+def test_edited_text_is_validated(api, body, status):
+    client, *_ = api
+    assert client.post("/api/v1/analyze-text", json=body).status_code == status
+
+
+def test_edited_text_body_is_bounded(api):
+    client, *_ = api
+    response = client.post("/api/v1/analyze-text", content=b'{"text": "' + b"a" * 9000 + b'"}',
+                           headers={"Content-Type": "application/json"})
+    assert response.status_code == 413
+
+
 @pytest.mark.parametrize("format", ["PNG", "JPEG", "WEBP"])
 def test_image_formats(api, format):
     client, *_ = api
@@ -243,3 +268,24 @@ def test_cancelled_client_does_not_release_running_model():
                 assert (await http.get("/health")).json() == {"status": "ok"}
 
     asyncio.run(run())
+
+
+def test_translation_engine_switch_validates_and_swaps(api, monkeypatch):
+    client, _, translator, _ = api
+    from yomiscan import service as service_module
+    from yomiscan import readiness
+    replacement = Mock()
+    replacement.translate.return_value = TranslationResult("猫", "A cat (new engine)", "fake2", "fake2", 1)
+    created = []
+    monkeypatch.setattr(service_module, "create_translation_engine", lambda name, device: created.append(name) or replacement)
+    assert client.post("/api/v1/translation-engine", json={"engine": "nope"}).status_code == 422
+    assert client.post("/api/v1/translation-engine", json={"engine": "Bad Name"}).status_code == 422
+    monkeypatch.setattr(readiness, "local_artifacts", lambda spec, environment: ([], False))
+    missing = client.post("/api/v1/translation-engine", json={"engine": "nllb-600m"})
+    assert missing.status_code == 409 and "yomiscan-prepare-translation" in missing.json()["detail"]
+    monkeypatch.setattr(readiness, "local_artifacts", lambda spec, environment: ([], True))
+    assert client.post("/api/v1/translation-engine", json={"engine": "nllb-600m"}).json() == {"selected": "nllb-600m"}
+    assert created == ["nllb-600m"]
+    translator.close.assert_called_once()  # the previous engine is released
+    text = client.post("/api/v1/analyze-text", json={"text": "猫"}).json()
+    assert text["translation"] == "A cat (new engine)"

@@ -201,6 +201,10 @@ try {
   await click("Retry Failed / Skipped");await until(async()=>(await panel()).includes("5 / 5 pages translated"),60000);
   report.checks.push("Explicit retry recovers failed page");
   if(mocked){
+    // Maintenance tools live in the collapsed Advanced section, as a user would open it.
+    const advancedSummary=await find(n=>n.nodeName==='SUMMARY'&&n.children?.some(c=>c.nodeValue?.startsWith('Advanced:')));
+    assert.ok(advancedSummary,'Advanced section');await invoke(advancedSummary,'function(){this.click()}');
+    report.checks.push("Developer tools fold into the Advanced section");
     const cacheSummary=await find(n=>n.nodeName==='SUMMARY'&&n.children?.some(c=>c.nodeValue==='Local processing cache'));
     await invoke(cacheSummary,'function(){this.click()}');
     await until(async()=>(await panel()).includes('Disk 0.0 / 512.0 MiB'));

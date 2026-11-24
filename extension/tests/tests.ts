@@ -1,9 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { analyzeCrop, httpError, parseAnalysis } from "../src/api";
+import { analyzeCrop, analyzeText, httpError, parseAnalysis } from "../src/api";
 import { constrainPopup, resizePopup, popupPosition, sameViewport, screenshotRect, selectionRect, validSelection } from "../src/geometry";
 import {copyStudyText} from '../src/popup';
+import {selectTranslationEngine} from "../src/chapter/readiness-client";
 import "./chapter-tests";
 import "./acquisition-tests";
 import "./coverage-tests";
@@ -11,6 +12,7 @@ import "./report-tests";
 import "./translation-tests";
 import "./reader-tests";
 import "./backend-tests";
+import "./furigana-tests";
 
 const viewport = {width: 800, height: 600};
 test("study copy writes exact Japanese/English and reports clipboard failures safely",async()=>{
@@ -90,6 +92,42 @@ test("response validates nested types and nullable translation", () => {
   assert.equal(parseAnalysis({...response(), original_text: text}).original_text, text); // UI must render as textContent.
 });
 
+test("expression units are optional, validated and must address real tokens", () => {
+  const meaning = {entry_id: 7, glosses: ["maybe"], parts_of_speech: ["expressions"], spellings: [], readings: [], notes: [], labels: []};
+  const unit = {surface: "猫", dictionary_form: "猫", start_token: 0, end_token: 1, meanings: [meaning]};
+  assert.equal(parseAnalysis(response()).units, undefined); // older servers omit units
+  assert.deepEqual(parseAnalysis({...response(), units: [unit]}).units, [unit]);
+  assert.throws(() => parseAnalysis({...response(), units: {}}), /expression/);
+  assert.throws(() => parseAnalysis({...response(), units: [{...unit, end_token: 0}]}), /expression/);
+  assert.throws(() => parseAnalysis({...response(), units: [{...unit, end_token: response().tokens.length + 1}]}), /expression/);
+  assert.throws(() => parseAnalysis({...response(), units: [{...unit, meanings: [{...meaning, glosses: [1]}]}]}), /expression/);
+});
+
+test("grammar notes are optional, validated and must address real tokens", () => {
+  const note = {id: "te-iru", name: "〜ている", meaning: "ongoing", start_token: 0, end_token: 1};
+  assert.deepEqual(parseAnalysis({...response(), grammar: [note]}).grammar, [note]);
+  assert.throws(() => parseAnalysis({...response(), grammar: [{...note, meaning: 3}]}), /grammar/);
+  assert.throws(() => parseAnalysis({...response(), grammar: [{...note, end_token: 99}]}), /grammar/);
+});
+
+test("token inflection labels are optional string lists", () => {
+  const token = response().tokens[0];
+  assert.deepEqual(parseAnalysis({...response(), tokens: [{...token, inflection: ["negative", "past"]}]}).tokens[0].inflection, ["negative", "past"]);
+  assert.throws(() => parseAnalysis({...response(), tokens: [{...token, inflection: [1]}]}), /token/);
+});
+
+test("translation engine switch posts the engine and surfaces backend guidance", async context => {
+  const mocked = context.mock.method(globalThis, "fetch", async (url: string, init: RequestInit) => {
+    assert.equal(url, "http://127.0.0.1:47615/api/v1/translation-engine");
+    assert.equal(init.body, JSON.stringify({engine: "nllb-600m"}));
+    return new Response(JSON.stringify({selected: "nllb-600m"}));
+  });
+  assert.deepEqual(await selectTranslationEngine("nllb-600m"), {selected: "nllb-600m"});
+  mocked.mock.mockImplementation(async () => new Response(JSON.stringify({detail: "nllb-600m is not installed. Setup: x"}), {status: 409}));
+  await assert.rejects(selectTranslationEngine("nllb-600m"), /not installed/);
+  await assert.rejects(selectTranslationEngine("../etc"), /Invalid engine/);
+});
+
 test("friendly HTTP messages never require raw server errors", () => {
   assert.match(httpError(503), /models or dictionary/);
   assert.match(httpError(429), /another crop/);
@@ -106,6 +144,18 @@ test("request sends only crop to fixed localhost endpoint and parses JSON", asyn
     return new Response(JSON.stringify(response()), {status: 200});
   });
   assert.equal((await analyzeCrop(new Blob(["crop"]), new AbortController().signal)).translation, "Cat");
+});
+
+test("edited text is posted as JSON and validated on both sides", async context => {
+  const calls: RequestInit[] = [];
+  const mocked = context.mock.method(globalThis, "fetch", async (_url: string, init: RequestInit) => { calls.push(init); return new Response(JSON.stringify(response())); });
+  assert.equal((await analyzeText(" 猫 ", new AbortController().signal)).original_text, response().original_text);
+  assert.equal(calls[0].body, JSON.stringify({text: "猫"}));
+  assert.equal((calls[0].headers as Record<string, string>)["X-YomiScan-Client"], "study-extension-v1");
+  await assert.rejects(analyzeText("  ", new AbortController().signal), /Enter some Japanese/);
+  await assert.rejects(analyzeText("猫".repeat(1001), new AbortController().signal), /1,000/);
+  mocked.mock.mockImplementation(async () => new Response("", {status: 404}));
+  await assert.rejects(analyzeText("猫", new AbortController().signal), /Update and restart/);
 });
 
 test("offline, invalid JSON, invalid schema, and HTTP errors are handled", async context => {

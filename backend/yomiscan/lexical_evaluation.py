@@ -5,8 +5,9 @@ the best entry's spelling, its first sense's part of speech, or a gloss substrin
 the senses the Study popup shows unfolded (the first three). Expectations describe the
 correct answer, not current output, so failures are real defects.
 
-`units` are multi-token meaning units (しょうがない, かもしれない). Token-level analysis
-cannot produce them yet; they are reported as pending until longest-match lookup exists.
+`units` are multi-token meaning units (しょうがない, かもしれない). A unit passes when the
+analysis has a unit whose surface or dictionary form equals its text and whose top entry
+shows the gloss among the visible senses.
 """
 
 from collections.abc import Iterable
@@ -40,7 +41,7 @@ class GoldenCase:
 class Outcome:
     case: str
     surface: str
-    status: str  # "pass", "fail", "missing_token" or "pending_unit"
+    status: str  # "pass", "fail", "missing_token" or "missing_unit"
     detail: str = ""
 
 
@@ -53,7 +54,7 @@ class Report:
 
     @property
     def scored(self) -> int:
-        return self.count("pass") + self.count("fail") + self.count("missing_token")
+        return self.count("pass") + self.count("fail") + self.count("missing_token") + self.count("missing_unit")
 
     @property
     def pass_rate(self) -> float:
@@ -61,7 +62,7 @@ class Report:
 
     def summary(self) -> dict[str, object]:
         return {"scored": self.scored, "pass": self.count("pass"), "fail": self.count("fail"),
-                "missing_token": self.count("missing_token"), "pending_units": self.count("pending_unit"),
+                "missing_token": self.count("missing_token"), "missing_unit": self.count("missing_unit"),
                 "pass_rate": round(self.pass_rate, 4)}
 
 
@@ -113,8 +114,31 @@ def evaluate_result(case: GoldenCase, result: TextAnalysisResult) -> list[Outcom
         top = result.dictionary_entries[token.entry_ids[0]] if token.entry_ids else None
         problem = check(expectation, top)
         outcomes.append(Outcome(case.id, expectation.surface, "fail" if problem else "pass", problem))
-    outcomes.extend(Outcome(case.id, unit["text"], "pending_unit", "multi-token unit; needs longest-match lookup")
-                    for unit in case.units)
+    for expected in case.units:
+        text = expected["text"]
+        # A unit covers the expectation when its surface or dictionary form equals the text, or
+        # when a larger unit contains it (そうかもしれない covers かもしれない). A single token
+        # that already is the whole expression (だろう) also counts.
+        unit = next((item for item in result.units if text in (item.surface, item.lookup_form)), None) or next(
+            (item for item in result.units if text in item.surface), None)
+        if unit is None:
+            # A grammar note whose forms include the text (てしまう) explains the unit instead.
+            from .grammar_patterns import pattern_by_id
+            note = next((pattern_by_id(m.pattern) for m in result.grammar if text in pattern_by_id(m.pattern).forms), None)
+            if note is not None:
+                gloss = expected.get("gloss")
+                ok = not gloss or gloss.lower() in note.meaning.lower()
+                outcomes.append(Outcome(case.id, text, "pass" if ok else "fail", "" if ok else f"grammar note '{note.meaning}' lacks {gloss}"))
+                continue
+        ids = unit.entry_ids if unit else next((item.entry_ids for item in result.tokens
+                                                 if text in (item.token.surface, item.lookup_form)), None)
+        if ids is None:
+            found = [item.surface for item in result.units]
+            outcomes.append(Outcome(case.id, text, "missing_unit", f"units {found}"))
+            continue
+        top = result.dictionary_entries[ids[0]] if ids else None
+        problem = check(Expectation(text, gloss=expected.get("gloss")), top)
+        outcomes.append(Outcome(case.id, text, "fail" if problem else "pass", problem))
     return outcomes
 
 
@@ -127,6 +151,10 @@ def evaluate(analyzer: TextAnalyzer, cases: Iterable[GoldenCase]) -> Report:
 
 def main(argv: list[str] | None = None) -> int:
     import argparse
+    import sys
+    for stream in (sys.stdout, sys.stderr):  # Japanese detail lines on Windows consoles and pipes
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description="Score dictionary candidate ranking against the lexical golden set (local JMdict, no models)")
     parser.add_argument("--dictionary", type=Path, default=Path("data/jmdict.sqlite3"))
     parser.add_argument("--dataset", type=Path, default=Path("benchmarks/lexical-golden.jsonl"))
@@ -140,7 +168,7 @@ def main(argv: list[str] | None = None) -> int:
         report = evaluate(TextAnalyzer(FugashiTokenizer(), dictionary), cases)
         schema = dictionary.schema_version
     for outcome in report.outcomes:
-        if outcome.status in ("fail", "missing_token"):
+        if outcome.status in ("fail", "missing_token", "missing_unit"):
             print(f"{outcome.status.upper():14} {outcome.case} {outcome.surface}: {outcome.detail}")
     summary = {**report.summary(), "cases": len(cases), "dictionary_schema": schema}
     print(json.dumps(summary, ensure_ascii=False))

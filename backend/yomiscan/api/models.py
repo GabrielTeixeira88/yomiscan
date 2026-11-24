@@ -31,6 +31,31 @@ class TokenResponse(BaseModel):
     conjugation_type: str | None
     conjugation_form: str | None
     meanings: list[Meaning]
+    inflection: list[str] = []  # learner labels for verb/adjective heads, e.g. ["negative", "past"]
+
+
+class UnitResponse(BaseModel):
+    """A multi-token meaning unit (かもしれない) over tokens[start_token:end_token]."""
+    surface: str
+    dictionary_form: str
+    start_token: int
+    end_token: int
+    meanings: list[Meaning]
+
+
+class GrammarResponse(BaseModel):
+    """A grammar note (〜てしまう) over tokens[start_token:end_token], from resources/lexical/grammar.json."""
+    id: str
+    name: str
+    meaning: str
+    start_token: int
+    end_token: int
+
+
+def grammar_responses(analysis: TextAnalysisResult) -> list[GrammarResponse]:
+    from yomiscan.grammar_patterns import pattern_by_id
+    return [GrammarResponse(id=match.pattern, name=(pattern := pattern_by_id(match.pattern)).name, meaning=pattern.meaning,
+                            start_token=match.start, end_token=match.end) for match in analysis.grammar]
 
 
 class ImageAnalysisResponse(BaseModel):
@@ -38,6 +63,8 @@ class ImageAnalysisResponse(BaseModel):
     translation: str | None
     processing: ProcessingTimes
     tokens: list[TokenResponse]
+    units: list[UnitResponse] = []
+    grammar: list[GrammarResponse] = []
     target_language: str = "en"
     dictionary_language: str = "en"
     provenance: dict[str, object] = {}
@@ -72,10 +99,18 @@ class ImageAnalysisResponse(BaseModel):
                 part_of_speech=item.token.part_of_speech,
                 conjugation_type=item.token.conjugation_type,
                 conjugation_form=item.token.conjugation_form,
+                inflection=list(item.inflection),
                 meanings=[Meaning(entry_id=entry_id, **sense.__dict__)
                           for entry_id in item.entry_ids
                           for sense in analysis.dictionary_entries[entry_id].senses],
             ) for item in analysis.tokens],
+            units=[UnitResponse(
+                surface=unit.surface, dictionary_form=unit.lookup_form, start_token=unit.start, end_token=unit.end,
+                meanings=[Meaning(entry_id=entry_id, **sense.__dict__)
+                          for entry_id in unit.entry_ids
+                          for sense in analysis.dictionary_entries[entry_id].senses],
+            ) for unit in analysis.units],
+            grammar=grammar_responses(analysis),
         )
 
 
@@ -95,6 +130,8 @@ class BlockResponse(BaseModel):
     original_text: str
     translation: str | None
     tokens: list[TokenResponse]
+    units: list[UnitResponse] = []
+    grammar: list[GrammarResponse] = []
     confidence: float | None
     category: str
     status: str
@@ -125,7 +162,9 @@ class PageAnalysisResponse(BaseModel):
                 id=block.id, region_ids=list(block.region_ids), bbox=BoxResponse(**block.bbox.__dict__),
                 orientation=block.orientation, reading_order=block.reading_order,
                 original_text=block.original_text, translation=analysis.translation if analysis else None,
-                tokens=analysis.tokens if analysis else [], confidence=block.confidence,
+                tokens=analysis.tokens if analysis else [], units=analysis.units if analysis else [],
+                grammar=analysis.grammar if analysis else [],
+                confidence=block.confidence,
                 category=block.category, status=block.status, error_message=block.error_message,
             ))
         return cls(width=result.width, height=result.height, regions_detected=len(result.regions),

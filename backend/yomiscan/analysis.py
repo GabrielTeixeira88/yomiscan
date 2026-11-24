@@ -22,6 +22,9 @@ from .cache_identity import component_identity, algorithm, result_metadata
 from pydantic import TypeAdapter, ValidationError
 from .glossary import GlossaryEntry, applicable_terms
 from .lexical_ranking import choose_matches
+from .lexical_units import LexicalUnit, find_units
+from .grammar_patterns import GrammarMatch, find_grammar
+from .inflection import inflection_labels
 from .translation.options import TranslationOptions, validate_options, capabilities
 from .translation.structured import PageTranslationRequest, TranslationSegment, CONTRACT_VERSION, StructuredTranslationError
 from .translation.base import TranslationContext
@@ -36,6 +39,8 @@ class AnalyzedToken:
     token: JapaneseToken
     lookup_form: str | None
     entry_ids: tuple[int, ...]
+    # Learner labels for a verb/adjective head (inflection.py): ("negative", "past").
+    inflection: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -45,6 +50,11 @@ class TextAnalysisResult:
     dictionary_entries: dict[int, DictionaryEntry]
     translation: TranslationResult | None = None
     processing_time_ms: float = 0.0
+    # Multi-token meaning units over `tokens` (lexical_units.py); empty for results cached
+    # before units existed, whose cache keys no longer match anyway.
+    units: tuple[LexicalUnit, ...] = ()
+    # Grammar notes (grammar_patterns.py) over `tokens`.
+    grammar: tuple[GrammarMatch, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -72,6 +82,11 @@ class TextAnalyzer:
         self._dictionary = dictionary
         self._translator = translator
 
+    def replace_translator(self, translator: TranslationEngine) -> TranslationEngine | None:
+        """Swap the sentence translator (owning worker only); returns the previous one to close."""
+        previous, self._translator = self._translator, translator
+        return previous
+
     def translation_metadata(self) -> dict[str, object]:
         describe = getattr(self._translator, "diagnostic_metadata", None)
         metadata = describe() if callable(describe) else {}
@@ -86,7 +101,9 @@ class TextAnalyzer:
         results: list[TextAnalysisResult | Exception] = []
         for text in texts:
             try:
-                lexical_key = cache.key("lexical", text, lexical_identity, algorithm("analysis.py", "lexical_ranking.py")) if cache and all(
+                lexical_key = cache.key("lexical", text, lexical_identity, algorithm("analysis.py", "lexical_ranking.py", "lexical_units.py", "resources/lexical/units.json",
+                                                                       "grammar_patterns.py", "resources/lexical/grammar.json",
+                                                                       "inflection.py", "resources/lexical/inflections.json")) if cache and all(
                     item is not None for item in lexical_identity) else None
                 payload = cache.get("lexical", lexical_key) if cache else None
                 lexical = None
@@ -225,12 +242,17 @@ class TextAnalyzer:
             if form not in cache:
                 cache[form] = self._dictionary.lookup(form)
             return cache[form]
-        for token in self._tokenizer.tokenize(text):
+        raw = self._tokenizer.tokenize(text)
+        for token, labels in zip(raw, inflection_labels(raw), strict=True):
             matched_form, matches = choose_matches(token, lookup_candidates(token), lookup)
             entries.update((entry.entry_id, entry) for entry in matches)
-            tokens.append(AnalyzedToken(token, matched_form, tuple(e.entry_id for e in matches)))
+            tokens.append(AnalyzedToken(token, matched_form, tuple(e.entry_id for e in matches), labels))
+        units = []
+        for unit, matches in find_units(raw, lookup):
+            entries.update((entry.entry_id, entry) for entry in matches)
+            units.append(unit)
         return TextAnalysisResult(
-            text, tuple(tokens), entries, translation, (perf_counter() - start) * 1000,
+            text, tuple(tokens), entries, translation, (perf_counter() - start) * 1000, tuple(units), find_grammar(raw),
         )
 
 
@@ -271,6 +293,13 @@ def analyze_recognized_blocks(blocks: Sequence[OCRResult], analyzer: TextAnalyze
     combined_text = "\n".join(texts)
     ocr = OCRResult(combined_text, blocks[0].engine, sum(block.processing_time_ms for block in blocks),
                     {"study_ocr": {"mode": "blocks", "blocks": len(blocks)}})
+    # Unit token indexes are per block; shift them into the combined token sequence.
+    units, grammar, offset = [], [], 0
+    for item in results:
+        units.extend(replace(unit, start=unit.start + offset, end=unit.end + offset) for unit in item.units)
+        grammar.extend(replace(match, start=match.start + offset, end=match.end + offset) for match in item.grammar)
+        offset += len(item.tokens)
     analysis = TextAnalysisResult(combined_text, tuple(token for item in results for token in item.tokens),
-                                  entries, translation, sum(item.processing_time_ms for item in results))
+                                  entries, translation, sum(item.processing_time_ms for item in results), tuple(units),
+                                  tuple(grammar))
     return ImageAnalysisResult(ocr, analysis)

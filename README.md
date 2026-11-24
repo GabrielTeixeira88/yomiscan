@@ -148,7 +148,7 @@ to process only that page again. Its previous translation remains usable until a
 replacement arrives. Stop cancels refresh while retaining that result; normal chapter
 Stop still lets the current initial page finish.
 
-**Export Page Report** downloads a local ZIP for that page without rerunning analysis.
+**Export Page Report** (under **Advanced**) downloads a local ZIP for that page without rerunning analysis.
 Metadata is the default. Expand **Report inclusions** to explicitly include OCR/translation
 text, original pixels or the translated image. Review these before sharing. No upload
 occurs; source URLs, raw exceptions, credentials and local paths are excluded. Original
@@ -221,7 +221,7 @@ uv run yomiscan-prepare-defaults
 uv run uvicorn yomiscan.api.main:app --host 127.0.0.1 --port 47615 --reload
 ```
 
-The API starts while required resources initialize. Open **Setup & readiness** to
+The API starts while required resources initialize. Open **Advanced → Setup & readiness** to
 distinguish initializing, ready and missing resources; `/health` stays unavailable
 until initialization succeeds. Run preparation/import commands and restart after setup
 failures. Startup never silently downloads weights. Set
@@ -274,6 +274,14 @@ only if clicked.
   failure. Fix setup and restart; see terminal diagnostics.
 - `POST /api/v1/analyze-image`: multipart upload named **`file`**, plus header
   **`X-YomiScan-Client: study-extension-v1`**. Supports still PNG, JPEG and WebP.
+- `POST /api/v1/analyze-text`: JSON `{"text": "..."}` (1–1,000 characters, same header).
+  It returns the same JSON for text the user corrected in the Study popup ("Edit text"),
+  without OCR. `provenance.analysis_origin` is `"edited"`.
+- `POST /api/v1/translation-engine`: JSON `{"engine": "<catalog id>"}`. Switches the sentence
+  translator to another *installed* translation engine until the backend restarts.
+  Unknown engines return 422; engines that are not installed return 409 with their setup command.
+  If the new engine fails to load, the previous one stays active (503). The extension's
+  Setup panel offers this as "Translation engine → Use".
 - API schema: `http://127.0.0.1:47615/docs`. POST clients must supply the client header;
   the curl example is the simplest manual request.
 
@@ -283,8 +291,9 @@ curl.exe -H "X-YomiScan-Client: study-extension-v1" -F "file=@samples/test.png" 
 ```
 
 JSON contains `original_text`, separate `translation`, `processing` times, and ordered
-`tokens` with readings, lemmas, dictionary forms, POS, conjugation, and grouped senses
-with restrictions. The extension never needs to know which translation model is used.
+`tokens` with readings, lemmas, dictionary forms, POS, conjugation, learner `inflection`
+labels, and grouped senses with restrictions. `units` (multi-word expressions) and
+`grammar` (construction notes) refer to token ranges. The extension never needs to know which translation model is used.
 Limits: **10 MiB image**, **12 megapixels**, one analysis at a time. Overlapping requests
 return 429. The extension times out after 25 seconds. Client cancellation does not
 interrupt ongoing model inference; wait before selecting again.
@@ -305,7 +314,7 @@ other programs on your machine. The extension sends analysis only to loopback
 **Backend port.** The default is **47615** (`yomiscan-server` and the extension). It is
 deliberately not 8765, AnkiConnect's default port, which earlier YomiScan versions used.
 To use another port, start `uv run yomiscan-server --port 8790` and enter the same number
-in **Setup & readiness → Backend port → Save Port**. Ports below 1024 are rejected.
+in **Advanced → Setup & readiness → Backend port → Save Port**. Ports below 1024 are rejected.
 Use one Uvicorn worker to avoid duplicating
 model memory. See [extension instructions](extension/README.md) and
 [Phase 4 validation/checklist](docs/phase-4-validation.md).
@@ -566,8 +575,10 @@ by the upstream engine. Each CLI invocation loads a new engine, so wall-clock ru
 includes startup even though the displayed inference time does not.
 
 UniDic-lite is an older dictionary and can split expressions differently from JMdict.
-There is no multi-token phrase reconstruction, grammar explanation, word-sense
-disambiguation, or tokenizer comparison yet. Kana normalization can merge homophones;
+Multi-token expressions are matched as units (かもしれない, しょうがない), and about 37
+common grammar constructions get short notes (〜てしまう, 〜ている, 〜だろう); see
+[architecture](docs/architecture.md). There is no word-sense disambiguation or tokenizer
+comparison yet, and grammar notes are short learner hints, not full explanations. Kana normalization can merge homophones;
 candidate lists can be verbose. Reading and sense restrictions are preserved and
 displayed, not used to claim a context-specific sense. OCR errors propagate into NLP.
 

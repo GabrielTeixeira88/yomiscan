@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "description": "Multi-token meaning units (longest match against JMdict). Shared rule data: the Python analyzer reads it today and a browser engine can read the same file. Variants map colloquial spellings to the standard forms JMdict lists; they are tried only when the written form has no entry. Units whose best entry's first sense has a part of speech listed in clause_initial_only_pos (e.g. しまった 'oh no') are accepted only at the start of a clause, so 食べてしまった is not read as an interjection. Conjunctions are not restricted, because clause-linking ones (のに, けど) belong mid-sentence; a single-entry でも mid-sentence still shows 'but' first (known limitation). When a span begins or ends with a particle or auxiliary token, only entries whose first sense is functional (function_edge_entry_pos), or common entries with a function_edge_common_pos, count; は+と is not 'pigeon' and し+て is not 'doer'. Part-of-speech names match JMdict labels by prefix (\"particle\" does not match \"nouns which may take the genitive case particle\"). A span containing a verb or adjective token is never read as a bare particle (verb し + て is not the particle して). Units never start on a token in never_initial_surfaces: the past ending た, the connective て and the object marker を only close or link words (た+し is not 'want to', を+して is not the causative particle). Mid-clause, entries whose first sense is in clause_initial_preferred_pos rank after the others (でも in 僕でも is 'even', not 'but').",
+  "max_tokens": 6,
+  "variants": [
+    {
+      "colloquial": "ねえ",
+      "standard": "ない"
+    },
+    {
+      "colloquial": "ねぇ",
+      "standard": "ない"
+    },
+    {
+      "colloquial": "ねー",
+      "standard": "ない"
+    },
+    {
+      "colloquial": "なきゃ",
+      "standard": "なければ"
+    },
+    {
+      "colloquial": "なくちゃ",
+      "standard": "なくては"
+    },
+    {
+      "colloquial": "ちゃう",
+      "standard": "てしまう"
+    },
+    {
+      "colloquial": "ちゃった",
+      "standard": "てしまった"
+    },
+    {
+      "colloquial": "じゃう",
+      "standard": "でしまう"
+    },
+    {
+      "colloquial": "じゃった",
+      "standard": "でしまった"
+    },
+    {
+      "colloquial": "じゃ",
+      "standard": "では"
+    },
+    {
+      "colloquial": "だろ",
+      "standard": "だろう"
+    },
+    {
+      "colloquial": "んだ",
+      "standard": "のだ"
+    },
+    {
+      "colloquial": "んです",
+      "standard": "のです"
+    }
+  ],
+  "clause_initial_only_pos": [
+    "interjection"
+  ],
+  "function_edge_entry_pos": [
+    "expression",
+    "particle",
+    "conjunction",
+    "auxiliary",
+    "copula",
+    "interjection",
+    "pronoun"
+  ],
+  "function_edge_common_pos": [
+    "adverb"
+  ],
+  "verb_span_excluded_pos": [
+    "particle",
+    "pronoun"
+  ],
+  "never_initial_surfaces": [
+    "た",
+    "て",
+    "を"
+  ],
+  "clause_initial_preferred_pos": [
+    "conjunction"
+  ]
+}

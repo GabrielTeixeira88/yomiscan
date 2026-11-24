@@ -7,7 +7,7 @@ needs model downloads in CI. Copyrighted pages and their text never enter Git.
 
 | Set | Location | Status |
 |---|---|---|
-| Lexical golden set | `benchmarks/lexical-golden.jsonl` (committed) | **60 sentences, 138 token expectations, 14 multi-token units** |
+| Lexical golden set | `benchmarks/lexical-golden.jsonl` (committed) | **60 sentences, 138 token expectations, 14 multi-token units (scored since Stage 3)** |
 | Page corpus (detection/OCR/rendering) | `samples/vision/` (ignored) + manifest | **23 pages, 10 series, 253 regions; draft annotations, owner review pending** |
 | Translation set | `benchmarks/manga-dialogue.jsonl` (53 lines, committed) | Expansion with real lines waits for the page corpus |
 
@@ -22,8 +22,10 @@ Each line names tokens of a sentence by surface, with the **correct** top-ranked
 Expectations describe the right answer, not current output. A mistaken expectation is
 corrected only when the expectation itself is linguistically wrong; one was corrected
 (会え → 会う, the potential form's dictionary entry). `units` are meaning units spanning
-several tokens (しょうがない, かもしれない). They are reported as pending until Stage 3
-adds longest-match lookup.
+several tokens (しょうがない, かもしれない). Since Stage 3 they are scored. A unit passes when
+the analysis has a unit whose surface or dictionary form equals the text, or a larger
+unit containing it, or a single token that already is the expression, and when its top
+entry shows the gloss.
 
 ```powershell
 uv run python scripts/evaluate_lexical.py                                   # data/jmdict.sqlite3
@@ -46,11 +48,27 @@ UniDic/SudachiPy comparison, not a ranking rule to special-case. Schema 2 change
 some rankings that this set does not cover (e.g., しょう: "show" → "chapter"; both are
 wrong until しょうがない is matched as a unit).
 
+### Stage 3 units (2026-11-24, same dictionary)
+
+| Analyzer | Scored | Pass | Fail | Missing unit | Pass rate |
+|---|---:|---:|---:|---:|---:|
+| Stage 3 units, tokens and units scored | 152 | 145 | 6 | 1 | 95.4% |
+| Stage 3 units + grammar notes | 152 | 147 | 5 | 0 | **96.7%** |
+
+Units match the expected expression in 13 of 14 cases. With grammar notes, all 14 are
+found; てしまう and だろう come from notes, since they are constructions, not JMdict headwords. Four of the six failures
+have the right meaning in different words ("that might be so" for "maybe", "have to do"
+for "must", "and yet" for "although", "to be able" for "can"); by the correction rule
+above, they stay failures. だろう is one token that looks up the copula だ, a grammar-pattern
+case, and 金 is the tokenizer error. On the 209 corpus lines, 170 units were found after
+the false merges seen in the first run were removed by rule. Remaining known errors are
+child-spelled kana (けんきうしてる) and a mid-sentence でも shown as "but".
+
 **Limits.** The set was written by the same agent that wrote the ranking rules, in
 the same session. It is therefore not an independent test, and 99% means "no known
 regressions on these cases", not a general accuracy rate. Add your own sentences,
 especially from real pages, before treating the number as meaningful. Stage 3's
-target (≥90%) applies to an expanded set that includes pending units.
+target (≥90%) applies to the set with units scored, which the Stage 3 results above meet.
 
 ## Page corpus (owner-supplied)
 
