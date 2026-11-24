@@ -42,13 +42,22 @@ def source_images(corpus: Path = Path("samples/vision/pages.json")) -> dict[str,
     return {page["id"]: page["image"] for page in json.loads(corpus.read_text(encoding="utf-8"))["pages"]}
 
 
-# The rater's sheet adds the source image and region next to the translation; unblind drops them.
-SHEET_COLUMNS = [*COLUMNS[:5], "image", "region", *COLUMNS[5:]]
+def official_lines(path: Path = ROOT / "official.jsonl") -> dict[str, str]:
+    """Owner-supplied official English for some lines (local, copyrighted, never committed)."""
+    if not path.exists():
+        return {}
+    return {row["id"]: row["official"] for row in map(json.loads, path.read_text(encoding="utf-8").splitlines()) if row}
+
+
+# The rater's sheet adds the official line (when known), the source image and the region next to
+# the translation; unblind drops them.
+SHEET_COLUMNS = [*COLUMNS[:5], "official", "image", "region", *COLUMNS[5:]]
 
 
 def make() -> None:
     rng = random.Random(20261124)
     images = source_images()
+    official = official_lines()
     rows, key = [], {}
     for case_id, group in candidates().items():
         if len(group) != 4:
@@ -59,7 +68,7 @@ def make() -> None:
             key[f"{case_id}/{label}"] = candidate["engine"]
             rows.append({**{c: "" for c in SHEET_COLUMNS}, "engine": label, "case_id": case_id, "line": candidate["line"],
                          "source": candidate["source"], "translation": candidate["translation"],
-                         "image": images[page_id], "region": region_id})
+                         "official": official.get(case_id, ""), "image": images[page_id], "region": region_id})
     with (ROOT / "blind-ratings.csv").open("w", encoding="utf-8-sig", newline="") as handle:
         writer = csv.DictWriter(handle, SHEET_COLUMNS)
         writer.writeheader()

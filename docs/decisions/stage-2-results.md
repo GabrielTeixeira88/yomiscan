@@ -112,6 +112,38 @@ page** on WebGPU (q4 + fp16 detector), **3.0 s** on WASM ×8 and **5.5–5.7 s**
 ratings. `research/stage-2/blind_ratings.py unblind` and `scripts/summarize_translation_ratings.py`
 then summarize the ratings. No winner is chosen without ratings.
 
+### Against official English (42 lines, 9 pages, 4 series)
+
+The owner supplied official English pages for 9 corpus pages. Their lines were transcribed
+per region and kept local. They appear as an `official` column in the rating sheet, and
+`research/stage-2/score_official.py` scores them. Official localizations rephrase freely,
+so chrF/BLEU are rough signals. Meaning errors (flipped negation, wrong person, invented or
+missing key content, gibberish) were marked by the AI assistant, not blind and not the
+owner.
+
+| Engine | chrF++ | BLEU | Lines with a major meaning error | Offensive hallucinations |
+|---|---:|---:|---:|---:|
+| Hy-MT2 manga v5 (GPU, companion) | 31.9 | 13.8 | 14 / 42 | 2 |
+| Chrome built-in Translator (optional) | 29.2 | 9.1 | **11 / 42** | 0 |
+| OPUS, Python (beam 6, current backend) | 24.2 | 6.6 | 19 / 42 | 0 |
+| OPUS, browser (q8, greedy) | 22.5 | 5.6 | **28 / 42** | 1 |
+
+Findings:
+- **Browser OPUS as measured is the weakest option.** Greedy decoding plus 8-bit weights
+  add about 9 meaning errors over Python's beam search. Before it ships as the browser
+  default, OPUS needs beam search in JavaScript (the Stage 2 OCR port already has a
+  transformers-exact beam implementation) and a re-check of fp16 against q8.
+- **Every engine fails the same hard cases:** katakana robot speech, all-hiragana child
+  speech, implied subjects that only context supplies (Japanese often omits who is
+  speaking or acting), and puns. These lines need context-aware translation (future work)
+  more than a different model.
+- **Name handling is poor everywhere.** The Stage 3/4 glossary work matters for every engine.
+- **The Chrome Translator made the fewest meaning errors on this sample.** It remains
+  optional and experimental by owner decision; whether its role should change is the
+  owner's call.
+- **Hy-MT2 scored best on overlap but produced two offensive misreadings** of
+  child speech. Its use in the companion engine needs a safety review.
+
 ## Limitations
 
 - 23-page draft corpus (see the gate deviation). G1/G7 differences of 2 points or less would have been
