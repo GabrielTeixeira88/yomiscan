@@ -29,7 +29,10 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
       }
       case 'analyze-text':
         if (typeof message.text !== 'string' || !message.text.trim() || message.text.length > 1000) throw new Error('Text must be 1 to 1,000 characters');
-        return current.analyzeText(message.text);
+        return current.analyzeText(message.text, {translate: message.translate === true});
+      case 'translate':
+        if (typeof message.text !== 'string' || !message.text.trim() || message.text.length > 1000) throw new Error('Text must be 1 to 1,000 characters');
+        return current.translate(message.text);
       default: throw new Error('Unknown browser engine operation');
     }
   })().then(data => respond({ok: true, data}), error => respond({ok: false, error: error instanceof Error ? error.message : 'Browser engine failed'}));

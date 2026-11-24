@@ -1,6 +1,6 @@
 # Stage 5a: browser-first engine
 
-Status: **in progress**. Increments 1 and 2 of 5 are done. Follows the [Stage 2 results](stage-2-results.md),
+Status: **in progress**. Increments 1–3 of 5 are done. Follows the [Stage 2 results](stage-2-results.md),
 where every hard gate passed and the owner chose browser-first even when it is slower or
 CPU-only. The Python backend stays available as the optional "local engine" (GPU, Hy-MT2).
 
@@ -18,7 +18,7 @@ Each increment is merged only with its tests and a real-model measurement.
 |---|---|---|
 | 1 | **Engine foundation and vision.** Cross-origin isolated offscreen document running ONNX Runtime Web 1.31.1. Pinned artifact manifest, verified install into Cache Storage, a Setup section. Detector, production grouping/ordering and greedy manga-ocr ported to TypeScript, plus a parity harness against the backend. | Done (see measurements) |
 | 2 | **Lexical engine.** lindera-wasm-unidic tokenizer and JMdict SQLite (sqlite-wasm). TypeScript ports of the ranking rules plus the Stage 3 data files (`units.json`, `grammar.json`, `inflections.json`). The lexical golden set is run against the browser engine (target: the Python 96.7%). | Done (see measurements) |
-| 3 | **Translation.** OPUS-MT fp16 with transformers-exact beam search (Stage 2: 99/100 lines identical to Python). The Chrome Translator stays optional and experimental. | Planned |
+| 3 | **Translation.** OPUS-MT fp16 with transformers-exact beam search (Stage 2: 99/100 lines identical to Python). The Chrome Translator stays optional and experimental. | Done (see measurements) |
 | 4 | **Integration.** An engine setting (Browser / Local backend). Study selection, Read Chapter and the edit-text re-analysis run through the browser engine. English in browser mode is HTML text boxes over the page; the pixel renderer stays in the local engine. | Planned |
 | 5 | **Release readiness.** First-run onboarding with sizes and consent, storage-pressure handling, laptop measurements (integrated GPU, 4-core CPU, 8 GB), and docs. | Planned |
 
@@ -106,6 +106,39 @@ tokenizer and dictionary loaded; after that the median was 6 ms per block.
 **Not yet measured:** memory with the dictionary and tokenizer loaded alongside the vision
 models (G8 was measured for vision only). An OPFS-backed database would avoid holding the
 119 MiB copy in the WASM heap if memory turns out to be tight.
+
+## Increment 3: translation
+
+**Design.** `engine/translation.ts` contains the Stage 2 transformers-exact beam search and
+the OPUS-MT decoder, which reuses its key/value cache and reorders it by parent beam. It is
+configured exactly as `MarianTranslationEngine`:
+- whitespace collapsed;
+- no truncation, so an input over 512 tokens is an error;
+- 4 beams, length penalty 1, no early stopping, at most 511 new tokens;
+- pad token banned and logits renormalized;
+- output without an end token is an error, and the output is stripped.
+
+The Marian tokenizer comes from `@huggingface/tokenizers` 0.2.0 (Apache-2.0, 36 KB). It is
+the standalone package that Transformers.js 4.3.2 uses, so Transformers.js and its second
+ONNX Runtime are not bundled. The model is the Xenova fp16 export (210.4 MiB, CC-BY-4.0),
+the sixth pinned component. It always runs on WASM threads: Stage 2 found WebGPU slower for
+this decoder and less exact. A full install is now about 550–575 MiB uncompressed, within
+the 1 GB budget.
+
+**Real browser, 10 sample pages.** Each block that both engines read identically was
+translated in Chrome and compared with the backend's own OPUS output for that block:
+
+| Path | Lines compared | Identical to backend | First line (incl. model load) | Median / p95 per line |
+|---|---:|---:|---:|---:|
+| WebGPU bundle (OPUS on WASM ×8) | 86 | **86** | 1.7 s | 0.57 / 1.10 s |
+| CPU, WASM ×8 | 92 | **89** | 1.6 s | 0.54 / 1.11 s |
+
+The 3 differing lines are among the 6 that only the CPU path read identically. All three are
+weak OPUS outputs on hard input: a quoted letter, stretched kana, mismatched brackets. They
+differ because the backend runs fp32 in a padded page batch while the browser runs fp16 one
+line at a time. Neither engine's version is clearly better. This matches Stage 2's 99/100.
+OPUS remains the default because its quality limits are known. The engine choice and the
+optional Chrome Translator are unchanged.
 
 ## Owner decision needed (not blocking development)
 

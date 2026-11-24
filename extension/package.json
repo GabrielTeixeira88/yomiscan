@@ -16,6 +16,7 @@
     "typescript": "^5.9.2"
   },
   "dependencies": {
+    "@huggingface/tokenizers": "0.2.0",
     "@sqlite.org/sqlite-wasm": "3.54.1-build1",
     "lindera-wasm-unidic": "2.1.0",
     "onnxruntime-web": "1.31.1"

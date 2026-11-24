@@ -182,8 +182,10 @@ COOP `same-origin`) so WASM runs multi-threaded; the CSP adds only `'wasm-unsafe
 Increment 2 adds lexical analysis. `engine/lexical.ts` ports the analyzer, ranking, units,
 grammar and inflection over the backend's own rule JSON. `engine/lexicon.ts` adds JMdict
 SQLite (sqlite-wasm), the lindera UniDic tokenizer and the Study response. On the golden
-set it matches Python token for token and scores the same 96.7%. Translation and the
-engine switch follow. See the
+set it matches Python token for token and scores the same 96.7%. Increment 3 adds OPUS-MT
+(`engine/translation.ts`): fp16 on WASM threads with the backend's exact beam search and the
+standalone `@huggingface/tokenizers`. It matched the backend on 175 of 178 real lines. The
+engine switch for Study and Read Chapter follows. See the
 [Stage 5a record](decisions/stage-5a-browser-engine.md) for increments, measurements and
 the open hosting decision.
 
