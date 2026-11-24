@@ -29,7 +29,26 @@ kanji-lemma agreement, then first-sense/later-sense POS agreement (UniDic `pos1`
 JMdict labels), headword, reading, JMdict "common" tags, `nfXX` band, and entry ID.
 Particles and auxiliaries drop non-agreeing homophones when an agreeing entry exists.
 Sense order within an entry is unchanged. The lexical cache key includes the ranking
-module. Multi-token expressions (しょうがない) and grammar notes remain Stage 3 work.
+module.
+
+**Multi-token units (Stage 3).** `lexical_units.py` finds expressions that span tokens
+(かもしれない, しょうがねえ → しょうがない, 主導権を握る) by longest JMdict match. Each candidate is tried
+as written, then ending in the last token's dictionary form, then with colloquial
+variants. Selection is global, so a longer unit beats an earlier, shorter, overlapping one.
+The rules are data in `resources/lexical/units.json`, in a format the browser build can
+read too:
+- **variants:** colloquial-to-standard spellings;
+- **interjections:** allowed only at the start of a clause (しまった in 食べてしまった is not "oh no");
+- **particle/auxiliary edges:** only functional entries count (expression, particle,
+  conjunction, auxiliary, copula, interjection, pronoun; common adverbs), so は+と is not
+  "pigeon" and し+て is not "doer";
+- **verb spans:** a span containing a verb is never a bare particle or a pronoun;
+- **forbidden starts:** a unit never starts on た, て or を.
+
+Units are an extra layer (`TextAnalysisResult.units`, `units` in API responses). Token
+analysis is unchanged, and the Study popup lists them under "Expressions" above the word
+breakdown. Known limit: a single-entry でも mid-sentence still shows "but" first. Grammar
+notes are the next Stage 3 step.
 
 **Configurable loopback port.** `extension/src/backend.ts` owns the backend address:
 `http://127.0.0.1:<port>`, default 47615 (not AnkiConnect's 8765), with an optional
@@ -343,9 +362,10 @@ token, matched query, and entry IDs. This avoids copying large entries for repea
 words. `ImageAnalysisResult` combines the OCR result with text analysis. The text CLI
 does not construct an OCR engine; the image CLI constructs it once per invocation.
 
-Full candidate entries are exposed, including restrictions. This version does not
-select a context-specific sense, filter homophones by POS, join multi-token expressions,
-or apply restrictions as a grammatical interpretation. Those limitations are visible
+Full candidate entries are exposed, including restrictions. (Phase 2 record: this version
+did not select a context-specific sense, filter homophones by POS, join multi-token
+expressions, or apply restrictions as a grammatical interpretation. Ranking and units were
+added post-MVP; see the sections above.) Those limitations are visible
 in CLI output. Source XML/databases live in ignored `data/`; they are never committed.
 
 ## Phase 4: implemented study mode

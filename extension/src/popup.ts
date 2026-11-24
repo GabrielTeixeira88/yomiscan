@@ -173,6 +173,31 @@ export class StudyPopup {
     this.listeners.abort();
   }
 
+  /** Ranked candidates, best first: the best entry's first senses, the rest folded so another
+   * word's senses never appear as if they belonged to this one. */
+  private appendMeanings(row: HTMLElement, meanings: Meaning[]): void {
+    const best = meanings.filter(meaning => meaning.entry_id === meanings[0]?.entry_id);
+    const others = meanings.slice(best.length);
+    const list = element("ul");
+    best.slice(0, 3).forEach(meaning => appendMeaning(list, meaning));
+    row.append(list);
+    const folded = best.slice(3).length, otherEntries = new Set(others.map(meaning => meaning.entry_id)).size;
+    if (!folded && !otherEntries) return;
+    const details = element("details");
+    details.append(element("summary", [folded ? `${folded} more senses` : "",
+      otherEntries ? `${otherEntries} other dictionary ${otherEntries === 1 ? "entry" : "entries"}` : ""].filter(Boolean).join(" · ")));
+    const more = element("ul");
+    best.slice(3).forEach(meaning => appendMeaning(more, meaning));
+    let entry: number | null = null;
+    for (const meaning of others) {
+      if (meaning.entry_id !== entry) { entry = meaning.entry_id; more.append(element("li", "Other entry", "entry-divider")); }
+      appendMeaning(more, meaning);
+    }
+    details.append(more);
+    details.addEventListener("toggle", () => this.position());
+    row.append(details);
+  }
+
   status(message: string, error = false): void {
     this.body.replaceChildren(element("p", message, `status${error ? " error" : ""}`));
     this.position();
@@ -205,6 +230,26 @@ export class StudyPopup {
       if (className === "original") section.lang = "ja";
       this.body.append(section);
     }
+    const units = data.units ?? [];
+    if (units.length) {
+      // Multi-word expressions first: their meaning differs from their parts (かもしれない).
+      const expressions = element("section");
+      expressions.append(element("h2", "Expressions"));
+      const list = element("div", undefined, "words");
+      for (const unit of units) {
+        const row = element("article");
+        const surface = element("div", unit.surface, "surface");
+        surface.lang = "ja";
+        row.append(surface);
+        if (unit.dictionary_form !== unit.surface) row.append(element("p", `Dictionary form: ${unit.dictionary_form}`, "metadata"));
+        const parts = data.tokens.slice(unit.start_token, unit.end_token).map(token => token.surface);
+        row.append(element("p", `Words: ${parts.join(" + ")}`, "metadata"));
+        this.appendMeanings(row, unit.meanings);
+        list.append(row);
+      }
+      expressions.append(list);
+      this.body.append(expressions);
+    }
     const breakdown = element("section");
     if(targetName!=='English')breakdown.append(element('p','Dictionary definitions remain English.'));
     breakdown.append(element("h2", "Word breakdown"));
@@ -222,29 +267,7 @@ export class StudyPopup {
       row.append(element("p", `POS: ${token.part_of_speech ?? "unavailable"}`, "metadata"));
       if (token.conjugation_type || token.conjugation_form) row.append(element("p", `Conjugation: ${[token.conjugation_type, token.conjugation_form].filter(Boolean).join(" / ")}`, "metadata"));
       if (!token.meanings.length) row.append(element("p", "No dictionary match", "metadata"));
-      // Candidates arrive ranked best-first. Show the best entry's first senses; fold the
-      // rest so another word's senses never appear as if they belonged to this one.
-      const best = token.meanings.filter(meaning => meaning.entry_id === token.meanings[0]?.entry_id);
-      const others = token.meanings.slice(best.length);
-      const list = element("ul");
-      best.slice(0, 3).forEach(meaning => appendMeaning(list, meaning));
-      row.append(list);
-      const folded = best.slice(3).length, otherEntries = new Set(others.map(meaning => meaning.entry_id)).size;
-      if (folded || otherEntries) {
-        const details = element("details");
-        details.append(element("summary", [folded ? `${folded} more senses` : "",
-          otherEntries ? `${otherEntries} other dictionary ${otherEntries === 1 ? "entry" : "entries"}` : ""].filter(Boolean).join(" · ")));
-        const more = element("ul");
-        best.slice(3).forEach(meaning => appendMeaning(more, meaning));
-        let entry: number | null = null;
-        for (const meaning of others) {
-          if (meaning.entry_id !== entry) { entry = meaning.entry_id; more.append(element("li", "Other entry", "entry-divider")); }
-          appendMeaning(more, meaning);
-        }
-        details.append(more);
-        details.addEventListener("toggle", () => this.position());
-        row.append(details);
-      }
+      this.appendMeanings(row, token.meanings);
       words.append(row);
     }
     this.body.append(breakdown);

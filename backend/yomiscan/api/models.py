@@ -33,11 +33,21 @@ class TokenResponse(BaseModel):
     meanings: list[Meaning]
 
 
+class UnitResponse(BaseModel):
+    """A multi-token meaning unit (かもしれない) over tokens[start_token:end_token]."""
+    surface: str
+    dictionary_form: str
+    start_token: int
+    end_token: int
+    meanings: list[Meaning]
+
+
 class ImageAnalysisResponse(BaseModel):
     original_text: str
     translation: str | None
     processing: ProcessingTimes
     tokens: list[TokenResponse]
+    units: list[UnitResponse] = []
     target_language: str = "en"
     dictionary_language: str = "en"
     provenance: dict[str, object] = {}
@@ -76,6 +86,12 @@ class ImageAnalysisResponse(BaseModel):
                           for entry_id in item.entry_ids
                           for sense in analysis.dictionary_entries[entry_id].senses],
             ) for item in analysis.tokens],
+            units=[UnitResponse(
+                surface=unit.surface, dictionary_form=unit.lookup_form, start_token=unit.start, end_token=unit.end,
+                meanings=[Meaning(entry_id=entry_id, **sense.__dict__)
+                          for entry_id in unit.entry_ids
+                          for sense in analysis.dictionary_entries[entry_id].senses],
+            ) for unit in analysis.units],
         )
 
 
@@ -95,6 +111,7 @@ class BlockResponse(BaseModel):
     original_text: str
     translation: str | None
     tokens: list[TokenResponse]
+    units: list[UnitResponse] = []
     confidence: float | None
     category: str
     status: str
@@ -125,7 +142,8 @@ class PageAnalysisResponse(BaseModel):
                 id=block.id, region_ids=list(block.region_ids), bbox=BoxResponse(**block.bbox.__dict__),
                 orientation=block.orientation, reading_order=block.reading_order,
                 original_text=block.original_text, translation=analysis.translation if analysis else None,
-                tokens=analysis.tokens if analysis else [], confidence=block.confidence,
+                tokens=analysis.tokens if analysis else [], units=analysis.units if analysis else [],
+                confidence=block.confidence,
                 category=block.category, status=block.status, error_message=block.error_message,
             ))
         return cls(width=result.width, height=result.height, regions_detected=len(result.regions),

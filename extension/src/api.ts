@@ -8,10 +8,15 @@ export interface Token {
   part_of_speech: string | null; conjugation_type: string | null; conjugation_form: string | null;
   meanings: Meaning[];
 }
+/** A multi-token meaning unit (かもしれない) covering tokens[start_token, end_token). */
+export interface Unit {
+  surface: string; dictionary_form: string; start_token: number; end_token: number; meanings: Meaning[];
+}
 export interface Analysis {
   original_text: string; translation: string | null;
   processing: {ocr_ms: number; translation_ms: number; analysis_ms: number; total_ms: number};
   tokens: Token[];
+  units?: Unit[];
   target_language?:string;dictionary_language?:string;
   provenance?:Record<string,unknown>;
 }
@@ -31,6 +36,19 @@ export function parseAnalysis(value: unknown): Analysis {
     && Number.isFinite((value.processing as Record<string, unknown>)[key])
     && Number((value.processing as Record<string, unknown>)[key]) >= 0)) {
     throw new Error("Invalid processing times from local server.");
+  }
+  const validMeanings = (meanings: unknown[]) => meanings.every(meaning => record(meaning) && Number.isInteger(meaning.entry_id)
+    && ["glosses", "parts_of_speech", "spellings", "readings", "notes", "labels"].every(k => strings(meaning[k])));
+  if (value.units !== undefined) {
+    // Older servers omit units; when present they must address real tokens.
+    if (!Array.isArray(value.units)) throw new Error("Invalid expression data from local server.");
+    for (const unit of value.units) {
+      if (!record(unit) || typeof unit.surface !== "string" || typeof unit.dictionary_form !== "string"
+        || !Number.isInteger(unit.start_token) || !Number.isInteger(unit.end_token)
+        || Number(unit.start_token) < 0 || Number(unit.end_token) <= Number(unit.start_token)
+        || Number(unit.end_token) > value.tokens.length || !Array.isArray(unit.meanings) || !validMeanings(unit.meanings))
+        throw new Error("Invalid expression data from local server.");
+    }
   }
   for (const token of value.tokens) {
     if (!record(token) || typeof token.surface !== "string"

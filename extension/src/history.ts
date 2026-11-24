@@ -16,6 +16,9 @@ export function historyAnalysis(value:unknown):Analysis {
       part_of_speech:t.part_of_speech,conjugation_type:t.conjugation_type,conjugation_form:t.conjugation_form,
       meanings:t.meanings.map(m=>({entry_id:m.entry_id,glosses:[...m.glosses],parts_of_speech:[...m.parts_of_speech],
         spellings:[...m.spellings],readings:[...m.readings],notes:[...m.notes],labels:[...m.labels]}))}))};
+  if(data.units)result.units=data.units.map(u=>({surface:u.surface,dictionary_form:u.dictionary_form,start_token:u.start_token,
+    end_token:u.end_token,meanings:u.meanings.map(m=>({entry_id:m.entry_id,glosses:[...m.glosses],parts_of_speech:[...m.parts_of_speech],
+      spellings:[...m.spellings],readings:[...m.readings],notes:[...m.notes],labels:[...m.labels]}))}));
   if(data.provenance){const allowed=['engine','model','revision','expected_revision','requested_target','target_language','grammar_contract','translation_mode','context_policy','glossary_application','analysis_origin'];
     result.provenance=Object.fromEntries(Object.entries(data.provenance).filter(([k,v])=>allowed.includes(k)&&typeof v==='string'&&v.length<=160&&/^[\w.-]+(?:\/[\w.-]+)?$/.test(v)));
   }

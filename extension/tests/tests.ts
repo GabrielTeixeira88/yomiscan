@@ -90,6 +90,17 @@ test("response validates nested types and nullable translation", () => {
   assert.equal(parseAnalysis({...response(), original_text: text}).original_text, text); // UI must render as textContent.
 });
 
+test("expression units are optional, validated and must address real tokens", () => {
+  const meaning = {entry_id: 7, glosses: ["maybe"], parts_of_speech: ["expressions"], spellings: [], readings: [], notes: [], labels: []};
+  const unit = {surface: "猫", dictionary_form: "猫", start_token: 0, end_token: 1, meanings: [meaning]};
+  assert.equal(parseAnalysis(response()).units, undefined); // older servers omit units
+  assert.deepEqual(parseAnalysis({...response(), units: [unit]}).units, [unit]);
+  assert.throws(() => parseAnalysis({...response(), units: {}}), /expression/);
+  assert.throws(() => parseAnalysis({...response(), units: [{...unit, end_token: 0}]}), /expression/);
+  assert.throws(() => parseAnalysis({...response(), units: [{...unit, end_token: response().tokens.length + 1}]}), /expression/);
+  assert.throws(() => parseAnalysis({...response(), units: [{...unit, meanings: [{...meaning, glosses: [1]}]}]}), /expression/);
+});
+
 test("friendly HTTP messages never require raw server errors", () => {
   assert.match(httpError(503), /models or dictionary/);
   assert.match(httpError(429), /another crop/);

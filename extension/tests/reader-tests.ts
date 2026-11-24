@@ -46,6 +46,14 @@ test('history stores only whitelisted processing and provenance fields',()=>{
     provenance:{engine:'current',artifact:'C:/private',model:'/home/private/file'},source_url:'https://private'});
   assert.ok(!JSON.stringify(saved).includes('private'));assert.deepEqual(saved.provenance,{engine:'current'});
 });
+test('history keeps expression units and drops their unknown fields',()=>{
+  const meaning={entry_id:7,glosses:['maybe'],parts_of_speech:['expressions'],spellings:[],readings:[],notes:[],labels:[]};
+  const token={surface:'猫',reading:'ねこ',lemma:'猫',dictionary_form:'猫',part_of_speech:'名詞',conjugation_type:null,conjugation_form:null,meanings:[]};
+  const base={...analysis(),tokens:[token]},unit={surface:'猫',dictionary_form:'猫',start_token:0,end_token:1,meanings:[meaning]};
+  const saved=historyAnalysis({...base,units:[{...unit,private:'C:/x'}]});
+  assert.deepEqual(saved.units,[unit]);
+  assert.equal(historyAnalysis(base).units,undefined);
+});
 test('history byte quota evicts oldest sentences before the count limit',async()=>{
   const disk=storage(),history=new StudyHistory(disk);
   await history.request('enabled',{enabled:true});
