@@ -4,10 +4,46 @@ import {readRenderResponse} from './chapter/render-response';
 import {imageHash} from './chapter/reports';
 import {validateTranslationOptions,type ReaderTranslationOptions} from './chapter/translation-options';
 import {fontScale} from './chapter/font-settings';
+import {MAX_READING_JSON} from './chapter/reading';
 
 // Serialize across chapter tabs too. Study requests still use the backend busy guard.
 let tail: Promise<void> = Promise.resolve();
 let ports = 0;
+type Send=(message:unknown)=>void;
+const HEADERS={'X-YomiScan-Client':'study-extension-v1'};
+
+/** Poll the job's stage status until stopped. Status is optional; the page response stays authoritative. */
+function pollProgress(backend:string,job:string|undefined,signal:AbortSignal,send:Send,connected:()=>boolean):AbortController {
+  const stop=new AbortController();
+  if(job)void (async()=>{
+    while(!stop.signal.aborted&&connected()&&!signal.aborted){
+      try{const response=await fetch(backend+'/api/v1/jobs/'+job,{method:'GET',headers:HEADERS,
+        signal:AbortSignal.any([signal,AbortSignal.timeout(2000)]),credentials:'omit',redirect:'error',cache:'no-store'});
+        if(response.ok){const text=await response.text();if(text.length<=16*1024&&!stop.signal.aborted)send({type:'progress',data:JSON.parse(text)});}
+      }catch{/* Missing or expired status never fails the page. */}
+      if(!stop.signal.aborted)await new Promise(resolve=>setTimeout(resolve,800));
+    }
+  })();
+  return stop;
+}
+
+/** Reading mode: POST analyze-page and return its bounded JSON as one message. */
+async function analyzeRequest(backend:string,form:FormData,job:string|undefined,configuration:string|undefined,refresh:boolean,
+  signal:AbortSignal,send:Send,connected:()=>boolean):Promise<unknown> {
+  const query=new URLSearchParams();
+  if(configuration)query.set('configuration',configuration);
+  if(refresh)query.set('refresh','translation');
+  if(job)query.set('job_id',job);
+  const polling=pollProgress(backend,job,signal,send,connected);
+  const response=await fetch(backend+'/api/v1/analyze-page?'+query,{method:'POST',body:form,headers:HEADERS,signal,
+    credentials:'omit',redirect:'error',cache:'no-store'}).finally(()=>polling.abort());
+  if(response.status===409)return {type:'error',code:'configuration_changed',error:'Backend settings changed. Start Read Chapter again.'};
+  if(!response.ok)throw new Error(response.status===429?'Backend is busy. Retry after the current operation finishes.':
+    response.status===503?'Backend resources unavailable. Check the server terminal.':`Local page analysis failed (HTTP ${response.status}).`);
+  const text=await response.text();
+  if(text.length>MAX_READING_JSON)throw new Error('Page analysis exceeds the memory limit');
+  return {type:'analysis',data:JSON.parse(text)};
+}
 chrome.runtime.onConnect.addListener(port => {
   if (port.name !== "yomiscan-page-render" || port.sender?.id !== chrome.runtime.id || port.sender.frameId !== 0 || !port.sender.tab) return;
   if (ports >= 8) { port.postMessage({type:"error",error:"Too many active chapter tabs"}); return; }
@@ -17,6 +53,7 @@ chrome.runtime.onConnect.addListener(port => {
   let scale=1,renderOnly=false;
   let job:string|undefined;
   let translation:ReaderTranslationOptions|undefined;
+  let kind:'render'|'analyze'='render';
   const controller = new AbortController();
   const timer = setTimeout(()=>controller.abort(),300_000);
   const send = (message: unknown) => { if(connected) port.postMessage(message); };
@@ -39,6 +76,8 @@ chrome.runtime.onConnect.addListener(port => {
         renderOnly=message.renderOnly===true;
         if(message.job_id!==undefined){if(typeof message.job_id!=='string'||!/^[a-f0-9-]{36}$/.test(message.job_id))throw new Error('Invalid job identity');job=message.job_id;}
         if(message.translation!==undefined)translation=validateTranslationOptions(message.translation);
+        if(message.kind!==undefined&&message.kind!=='render'&&message.kind!=='analyze')throw new Error('Invalid page request kind');
+        kind=message.kind??'render';
       } else if(message.type === "chunk") {
         if(!expected) throw new Error("Missing image header");
         const data=decodeChunk(message.data); size+=data.length;
@@ -54,6 +93,7 @@ chrome.runtime.onConnect.addListener(port => {
             controller.signal.throwIfAborted();
             const form=new FormData(); form.append("file",blob,mime==='image/jpeg'?'page.jpg':mime==='image/webp'?'page.webp':'page.png');
             if(translation)form.append('options_json',JSON.stringify(translation));
+            if(kind==='analyze'){send(await analyzeRequest(backend,form,job,configuration,refresh,controller.signal,send,()=>connected));return;}
             const inputHash=await imageHash(blob);
             const query=new URLSearchParams({diagnostics:'true'});
             if(renderOnly)query.set('refresh','render');else if(refresh)query.set('refresh','translation');
@@ -61,20 +101,9 @@ chrome.runtime.onConnect.addListener(port => {
             if(configuration)query.set('configuration',configuration);
             if(job)query.set('job_id',job);
             const responsePromise=fetch(backend+"/api/v1/render-page?"+query,{method:"POST",body:form,
-              headers:{"X-YomiScan-Client":"study-extension-v1"},signal:controller.signal,credentials:"omit",redirect:"error",cache:"no-store"});
-            let polling=true;
-            const poll=async()=>{
-              while(polling&&connected&&!controller.signal.aborted){
-                try{const response=await fetch(backend+'/api/v1/jobs/'+job,{method:'GET',
-                  headers:{'X-YomiScan-Client':'study-extension-v1'},signal:AbortSignal.any([controller.signal,AbortSignal.timeout(2000)]),
-                  credentials:'omit',redirect:'error',cache:'no-store'});
-                  if(response.ok){const text=await response.text();if(text.length<=16*1024&&polling)send({type:'progress',data:JSON.parse(text)});}
-                }catch{/* Status is optional; the render response remains authoritative. */}
-                if(polling)await new Promise(resolve=>setTimeout(resolve,800));
-              }
-            };
-            if(job)void poll();
-            const response=await responsePromise.finally(()=>{polling=false;});
+              headers:HEADERS,signal:controller.signal,credentials:"omit",redirect:"error",cache:"no-store"});
+            const polling=pollProgress(backend,job,controller.signal,send,()=>connected);
+            const response=await responsePromise.finally(()=>polling.abort());
             if(response.status===409){send({type:'error',code:'configuration_changed',error:'Backend settings changed. Start Translate Chapter again.'});return;}
             const page=await readRenderResponse(response,inputHash),result=page.blob;
             for(let offset=0; connected && offset<result.size; offset+=CHUNK) send({type:"chunk",data:await encodeChunk(result.slice(offset,offset+CHUNK))});

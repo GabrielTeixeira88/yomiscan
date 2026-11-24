@@ -6,15 +6,31 @@ import {fetchFromExtension} from './source-client';
 import {imageHost} from './source-fetch';
 import {stitchPage} from './stitching';
 import {validSelection,type Rect} from '../geometry';
-import {renderPage,ConfigurationChanged} from "./transport";
+import {renderPage,analyzePage,ConfigurationChanged} from "./transport";
+import {parseReadingPage,stepBubble,type ReadingPage} from './reading';
+import {ReadingLayer,bubbleRect,type ReadingLayerPage} from './reading-layer';
 import {createPageReport,type PageReportContext,type ReportOptions} from './reports';
 import {defaultTranslationOptions,validateProfile,type ReaderTranslationOptions} from './translation-options';
 import {fontScale as validateFontScale,retainsRenderedBlocks} from './font-settings';
 import {RegionInspector} from './region-inspector';
 import type {Analysis} from '../api';
 import {progressLabel} from './progress';
-export interface ChapterSummary { active:boolean; total:number; translated:number; failed:number; skipped:number; processing:number|null; message:string; view:ViewMode }
+/** "translate": render every page in English. "read": analyze pages for study (Reading mode);
+ * English is rendered per page on request, from the retained page pixels. */
+export type SessionMode='translate'|'read';
+export interface ChapterSummary { active:boolean; total:number; translated:number; failed:number; skipped:number; processing:number|null; message:string; view:ViewMode; mode?:SessionMode }
 const SESSION_BUDGET=128*1024*1024,FAILURE_REPORT_BUDGET=256*1024;
+type Page=PageRecord<MangaPageCandidate,PageImageResult>;
+/** Retained-memory estimate of a page's analysis (UTF-16 strings dominate). */
+const readingBytes=(reading:ReadingPage)=>JSON.stringify(reading).length*2;
+/** Scroll whichever container scrolls this page image: a reader's scroll box, else the window. */
+function scrollPageBy(image:HTMLElement,delta:number):void {
+  for(let node=image.parentElement;node&&node!==document.body&&node!==document.documentElement;node=node.parentElement){
+    if(/auto|scroll|overlay/.test(getComputedStyle(node).overflowY)&&node.scrollHeight>node.clientHeight+1){node.scrollBy({top:delta,behavior:'instant'});return;}
+  }
+  window.scrollBy({top:delta,behavior:'instant'});
+}
+const editable=(target:EventTarget|undefined)=>target instanceof HTMLElement&&(target.isContentEditable||['INPUT','TEXTAREA','SELECT'].includes(target.tagName));
 
 export class ChapterTranslationSession {
   readonly queue:ChapterQueue<MangaPageCandidate,PageImageResult>;
@@ -46,18 +62,33 @@ export class ChapterTranslationSession {
   private rerenders=new Set<object>();
   private inspector:RegionInspector|null=null;
   private stage='';
+  private reading:ReadingLayer|null=null;
+  /** Reading mode: pages whose English overlay is shown, and pages waiting for their English render. */
+  private englishShown=new Set<object>();
+  private englishRequests=new Set<object>();
+  private cursor:{key:object;bubble:number}|null=null;
+  private navigation=0;
   constructor(private changed:(status:ChapterSummary)=>void,private hideControls:(hidden:boolean)=>void,
               private discovery:PageDiscoveryStrategy=new GenericPageDiscovery(),
               private translation:ReaderTranslationOptions=defaultTranslationOptions(),private fontScale=1,
-              private showStudy:(data:Analysis,anchor:Rect)=>void=()=>{}) {
+              private showStudy:(data:Analysis,anchor:Rect)=>void=()=>{},readonly mode:SessionMode='translate') {
     this.queue=new ChapterQueue({process:(page,signal)=>this.process(page,signal),
       priority:page=>{const r=page.source.image.getBoundingClientRect();return viewportPriority(r.top,r.bottom,innerHeight);},
       cache:{budget:SESSION_BUDGET-FAILURE_REPORT_BUDGET,size:r=>r.bytes,protected:p=>{
         const r=p.source.image.getBoundingClientRect();return r.bottom>0&&r.top<innerHeight&&r.right>0&&r.left<innerWidth;
       }},
-      release:result=>{this.overlays.release(result.url);URL.revokeObjectURL(result.url);},changed:()=>this.update()});
+      release:result=>{if(result.url){this.overlays.release(result.url);URL.revokeObjectURL(result.url);}},changed:()=>this.update()});
     this.navigationTimer=window.setInterval(()=>{if(location.href!==this.url)this.dispose();},1000);
     window.addEventListener("pagehide",()=>this.dispose(),{once:true,signal:this.lifetime.signal});
+    if(mode==='read'){
+      this.reading=new ReadingLayer((key,bubble)=>{void this.studyBubble(key,bubble,false);},key=>this.toggleEnglish(key));
+      // J / K: next / previous bubble in reading order. Typing in a field never navigates.
+      document.addEventListener('keydown',event=>{
+        if(event.defaultPrevented||event.isComposing||event.ctrlKey||event.altKey||event.metaKey||event.repeat||editable(event.composedPath()[0]))return;
+        const key=event.key.toLowerCase();if(key!=='j'&&key!=='k')return;
+        event.preventDefault();void this.step(key==='j'?1:-1);
+      },{signal:this.lifetime.signal});
+    }
   }
   get isDisposed():boolean{return this.disposed;}
   get targetLanguage(){return this.translation.target_language;}
@@ -78,16 +109,83 @@ export class ChapterTranslationSession {
     const pages=[...this.queue.pages.values()];
     return {active:this.queue.active,total:pages.length,translated:pages.filter(p=>p.state==="translated"||p.state==="evicted").length,
       failed:pages.filter(p=>p.state==="failed").length,skipped:pages.filter(p=>p.state==="skipped").length,
-      processing:pages.find(p=>p.state==="processing")?.id??null,message:this.notice+(this.stage?'\n'+this.stage:''),view:this.queue.view};
+      processing:pages.find(p=>p.state==="processing")?.id??null,message:this.notice+(this.stage?'\n'+this.stage:''),view:this.queue.view,mode:this.mode};
   }
   private update():void {
     if(this.disposed) return;
     this.inspector?.refresh();
     if(this.notice.startsWith('Refreshing page') && ![...this.queue.pages.values()].some(p=>p.refreshing))
       this.notice='Page refresh finished; see any retained-result warning below.';
-    this.overlays.update([...this.queue.pages.values()],this.queue.view);
+    const pages=[...this.queue.pages.values()];
+    this.overlays.update(pages,this.mode==='read'?page=>this.englishShown.has(page.key):()=>this.queue.view==='english');
+    this.reading?.update(this.readingPages());
     this.changed(this.summary());
     if(this.debug) console.debug("YomiScan chapter",this.summary());
+  }
+  /** Read pages in document order, so J/K follows the reader's page order. */
+  private readingPages():ReadingLayerPage[] {
+    return this.orderedPages().flatMap(page=>{
+      const reading=page.result?.reading;if(!reading)return [];
+      const shown=this.englishShown.has(page.key),url=page.result?.url;
+      const pending=this.englishRequests.has(page.key)||(shown&&!url&&(page.state==='queued'||page.state==='processing'));
+      const english=pending?'loading':shown&&url?'on':'off';
+      return [{key:page.key,id:page.id,image:page.source.image,source:page.source.source,reading,english}];
+    });
+  }
+  private orderedPages():Page[] {
+    return [...this.queue.pages.values()].filter(p=>p.source.image.isConnected).sort((a,b)=>
+      a.source.image===b.source.image?0:a.source.image.compareDocumentPosition(b.source.image)&Node.DOCUMENT_POSITION_FOLLOWING?-1:1);
+  }
+  /** Reading mode: show or hide one page's English overlay, rendering it on first request. */
+  toggleEnglish(key:object):void {
+    const page=this.queue.pages.get(key);
+    if(this.disposed||this.mode!=='read'||!page?.result?.reading)return;
+    if(this.englishShown.has(key)&&page.result.url){this.englishShown.delete(key);this.update();return;}
+    this.englishShown.add(key);
+    if(!page.result.url&&!this.englishRequests.has(key)){
+      this.englishRequests.add(key);
+      if(!this.queue.refresh(key)){this.englishRequests.delete(key);this.englishShown.delete(key);
+        this.notice=`Page ${page.id} is busy; try English again when it finishes.`;}
+      else {this.observe();this.notice=`Rendering page ${page.id} in English; the Japanese stays clickable meanwhile.`;}
+    }
+    this.update();
+  }
+  /** J / K: open the next or previous bubble's study card, scrolling it into view. */
+  private async step(direction:1|-1):Promise<void> {
+    const pages=this.orderedPages();
+    const counts=pages.map(p=>p.result?.reading?p.result.reading.bubbles.length:
+      p.state==='queued'||p.state==='processing'||p.state==='evicted'?null:0);
+    const index=this.cursor?pages.findIndex(p=>p.key===this.cursor!.key):-1;
+    let next:ReturnType<typeof stepBubble>;
+    if(index>=0)next=stepBubble(counts,{page:index,bubble:this.cursor!.bubble},direction);
+    else {
+      // No card open yet: the first press opens the first bubble on screen in the nearest page.
+      const nearest=this.selectedPage(),at=nearest?pages.indexOf(nearest):-1;
+      const layer=nearest?this.readingPages().find(p=>p.key===nearest.key):undefined;
+      if(at>=0&&layer){
+        const first=layer.reading.bubbles.findIndex((_,i)=>{const r=bubbleRect(layer,i);return r!==null&&r.y+r.height>0&&r.y<innerHeight;});
+        next=first>=0?{page:at,bubble:first}:stepBubble(counts.map((n,i)=>i<at?0:n),null,1);
+      } else next=at>=0&&counts[at]===null?{waiting:at}:stepBubble(counts,null,direction);
+    }
+    if(!next){this.notice=direction===1?'Last bubble of the loaded pages.':'First bubble of the loaded pages.';this.update();return;}
+    if('waiting' in next){this.notice=`Page ${pages[next.waiting].id} is still being read; J / K continues when it is ready.`;this.update();return;}
+    await this.studyBubble(pages[next.page].key,next.bubble,true);
+  }
+  /** Open one bubble's study card from retained page analysis: no screenshot, OCR or request. */
+  private async studyBubble(key:object,bubble:number,scroll:boolean):Promise<void> {
+    const version=++this.navigation,find=()=>this.readingPages().find(p=>p.key===key);
+    let page=find();if(!page?.reading.bubbles[bubble])return;
+    let rect=bubbleRect(page,bubble);
+    if(!rect){this.notice='This page layout (transformed or bordered image) cannot be mapped; use Select Text.';this.update();return;}
+    if(scroll&&(rect.y<0||rect.y+rect.height>innerHeight)){
+      scrollPageBy(page.image,rect.y-innerHeight*.25);
+      await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+      if(this.disposed||version!==this.navigation)return;
+      page=find();rect=page?bubbleRect(page,bubble):null;if(!page||!rect)return;
+    }
+    this.cursor={key,bubble};this.reading?.highlight(this.cursor);
+    const data=page.reading.bubbles[bubble].analysis;
+    this.showStudy({...data,provenance:{...data.provenance,reading:{page:page.id,bubble:bubble+1,bubbles:page.reading.bubbles.length}}},rect);
   }
   async start(retry=false,permissionHandled=false):Promise<void> {
     const version=++this.startVersion;this.notice="Checking local backend…";this.update();
@@ -119,24 +217,35 @@ export class ChapterTranslationSession {
       const generation=(configuration??crypto.randomUUID())+'|'+JSON.stringify(effective);
       if(this.generation!==generation)this.queue.stop();
       this.configuration=configuration;this.generation=generation;
-      this.notice="Watching for pages";this.observe();this.scan();
+      this.notice=this.mode==='read'?'Reading pages: click an outlined bubble or press J to study it.':"Watching for pages";
+      this.reading?.suspend(false);this.observe();this.scan();
       if(retry)this.queue.retry();else this.queue.start();
     } catch(error) {if(!this.disposed && version===this.startVersion){this.notice=error instanceof Error?error.message:"Backend unavailable";this.update();}}
   }
   resumeAfterPermission(version:number,retry:boolean):void {
     if(!this.disposed && version===this.startVersion)void this.start(retry,true);
   }
-  stop():void {this.startVersion++;this.renderVersion++;this.rerenders.clear();this.queue.stop();this.acquiring?.abort();this.disconnect();this.notice="Stopped. The current page may finish; completed pages are retained.";this.update();}
+  stop():void {this.startVersion++;this.renderVersion++;this.rerenders.clear();
+    for(const key of this.englishRequests)this.englishShown.delete(key);this.englishRequests.clear();this.queue.stop();this.acquiring?.abort();this.disconnect();this.notice="Stopped. The current page may finish; completed pages are retained.";this.update();}
   async setFontScale(value:number):Promise<void> {
     const scale=validateFontScale(value);
     this.stop();const version=++this.renderVersion;
     await this.queue.idle();
     if(this.disposed||version!==this.renderVersion)return;
     this.fontScale=scale;this.observe();
-    for(const page of this.queue.pages.values())if(page.result){this.rerenders.add(page.key);this.queue.refresh(page.key);}
+    // Reading mode rerenders only the pages that already have an English render.
+    for(const page of this.queue.pages.values())if(this.mode==='read'?page.result?.url:page.result){
+      (this.mode==='read'?this.englishRequests:this.rerenders).add(page.key);this.queue.refresh(page.key);}
     this.notice=`Font ${Math.round(scale*100)}%: rerendering processed pages; previous images remain until replacement.`;this.update();
   }
-  setView(view:ViewMode):void {this.queue.setView(view);}
+  setView(view:ViewMode):void {
+    if(this.mode==='read'){
+      // Original hides every English page; English switches on every read page (rendering on demand).
+      if(view==='original'){this.englishShown.clear();this.update();}
+      else for(const page of this.queue.pages.values())if(page.result?.reading&&!this.englishShown.has(page.key))this.toggleEnglish(page.key);
+    }
+    this.queue.setView(view);
+  }
   pageOptions():{id:number;state:string;hasResult:boolean}[] {
     return [...this.queue.pages.values()].map(p=>({id:p.id,state:p.refreshing?'refreshing':p.state,hasResult:!!p.result}));
   }
@@ -187,7 +296,7 @@ export class ChapterTranslationSession {
       page_id:page.id,width:page.source.width,height:page.source.height,state:page.state,timings:{}};
     this.notice=`Preparing page ${page.id} report…`;this.update();
     try {
-      const rendered=options.rendered&&result?await(await fetch(result.url)).blob():undefined;
+      const rendered=options.rendered&&result?.url?await(await fetch(result.url)).blob():undefined;
       const report=await createPageReport({...context,session_cache:this.memoryStats()},result?.snapshot,options,
         {original:result?.original,rendered});
       if(!current())throw new Error('Page changed during report preparation; export cancelled.');
@@ -200,7 +309,8 @@ export class ChapterTranslationSession {
     finally {unpin();this.exporting=false;}
     this.update();
   }
-  async study():Promise<void> {this.stop();this.setView("original");this.notice="Finishing any current page before Select Text…";this.update();await this.queue.idle();}
+  /** Select Text: free the backend and keep outlines and overlays out of the screenshot. Starting again restores them. */
+  async study():Promise<void> {this.stop();this.setView("original");this.reading?.suspend(true);this.notice="Finishing any current page before Select Text…";this.update();await this.queue.idle();}
   diagnostics():void {
     this.debug=!this.debug;
     console.table(this.decisions.map(d=>({source:d.image.currentSrc||d.image.src,width:d.image.naturalWidth,height:d.image.naturalHeight,
@@ -263,21 +373,25 @@ export class ChapterTranslationSession {
     const context:PageReportContext={page_id:page.id,job_id:`${page.id}-${page.attempts}`,width:candidate.width,height:candidate.height,
       state:'processing',extension_version:chrome.runtime.getManifest().version,timings:{}};
     let failed=false;
-    const renderOnly=this.rerenders.delete(page.key),scale=this.fontScale;
-    this.stage='Acquiring page image';this.update();
+    const renderOnly=this.rerenders.delete(page.key),english=this.englishRequests.delete(page.key),scale=this.fontScale;
+    this.stage=english?'Rendering English':'Acquiring page image';this.update();
     const progress=(status:import('./progress').JobProgress)=>{if(!signal.aborted&&!this.disposed&&this.queue.pages.get(page.key)===page){this.stage=progressLabel(status);this.update();}};
     try {
       const previous=page.result;
+      if(this.mode==='read'){
+        if(english&&previous?.reading&&previous.original)return await this.renderEnglish(previous,previous.reading,previous.original,signal,context,scale,progress);
+        return await this.readPage(candidate,signal,context,page.refreshing===true,progress);
+      }
       const result=await this.processImage(candidate,signal,context,page.refreshing===true,renderOnly,scale,progress);
       if(renderOnly&&previous&&!retainsRenderedBlocks(previous,result)){
-        URL.revokeObjectURL(result.url);
+        if(result.url)URL.revokeObjectURL(result.url);
         this.notice='Font change could not preserve all previously rendered bubbles. Previous translation retained; try a smaller font or reset.';
         throw new Error(this.notice);
       }
       return result;
     }
     catch(error){
-      failed=true;
+      failed=true;if(english)this.englishShown.delete(page.key);
       if(error instanceof ConfigurationChanged){this.dispose();this.changed({...this.summary(),message:error.message});}
       context.state=signal.aborted||error instanceof SkipPage?'skipped':'failed';context.error_code=signal.aborted?'cancelled':
       error instanceof AcquisitionError?'acquisition_failed':'page_processing_failed';throw error;}
@@ -287,6 +401,33 @@ export class ChapterTranslationSession {
   }
   private async processImage(candidate:MangaPageCandidate,signal:AbortSignal,context:PageReportContext,refresh:boolean,renderOnly=false,scale=1,
     progress?:(status:import('./progress').JobProgress)=>void):Promise<PageImageResult> {
+    const pixels=await this.acquirePixels(candidate,signal,context);
+    return this.renderPixels(pixels,signal,context,{refresh,renderOnly,scale,progress});
+  }
+  /** Reading mode: analyze the page for study (no rendering) and keep its pixels for English on request. */
+  private async readPage(candidate:MangaPageCandidate,signal:AbortSignal,context:PageReportContext,refresh:boolean,
+    progress:(status:import('./progress').JobProgress)=>void):Promise<PageImageResult> {
+    const pixels=await this.acquirePixels(candidate,signal,context);
+    const start=performance.now();
+    this.stage='Reading page locally';this.update();
+    const data=await analyzePage(pixels.blob,signal,{refresh,configuration:this.configuration,translation:this.translation,progress}).finally(()=>{
+      context.timings.backend_roundtrip_ms=performance.now()-start;
+    });signal.throwIfAborted();
+    const reading=parseReadingPage(data,{width:pixels.width,height:pixels.height});
+    context.state='translated';
+    return {bytes:pixels.blob.size+readingBytes(reading)+new TextEncoder().encode(JSON.stringify(context)).length+1024,
+      rendered:0,skipped:0,reading,original:pixels.blob,reportContext:context};
+  }
+  /** Reading mode: render a read page in English from its retained pixels (no new acquisition).
+   * The backend reuses the cached detection, OCR and translation of the earlier analysis. */
+  private async renderEnglish(previous:PageImageResult,reading:ReadingPage,original:Blob,signal:AbortSignal,context:PageReportContext,
+    scale:number,progress:(status:import('./progress').JobProgress)=>void):Promise<PageImageResult> {
+    const pixels={blob:original,width:reading.width,height:reading.height};
+    context.acquisition=previous.reportContext?.acquisition;context.width=pixels.width;context.height=pixels.height;
+    const rendered=await this.renderPixels(pixels,signal,context,{refresh:false,renderOnly:false,scale,progress});
+    return {...rendered,reading,bytes:rendered.bytes+readingBytes(reading)};
+  }
+  private async acquirePixels(candidate:MangaPageCandidate,signal:AbortSignal,context:PageReportContext):Promise<PagePixels> {
     const acquisitionStart=performance.now();
     const style=getComputedStyle(candidate.image);
     if(style.transform!=='none' || [style.paddingLeft,style.paddingRight,style.paddingTop,style.paddingBottom,
@@ -320,6 +461,10 @@ export class ChapterTranslationSession {
     if(!candidate.image.isConnected || (candidate.image.currentSrc||candidate.image.src)!==candidate.source)
       throw new SkipPage('Image source changed during acquisition');
     if(Math.abs(pixels.width/pixels.height-candidate.width/candidate.height)>.02)throw new SkipPage('Source pixels do not match displayed image proportions');
+    return pixels;
+  }
+  private async renderPixels(pixels:{blob:Blob;width:number;height:number},signal:AbortSignal,context:PageReportContext,
+    {refresh,renderOnly,scale,progress}:{refresh:boolean;renderOnly:boolean;scale:number;progress?:(status:import('./progress').JobProgress)=>void}):Promise<PageImageResult> {
     const renderStart=performance.now();
     this.stage='Processing locally';this.update();
     const result=await renderPage(pixels.blob,signal,{refresh,renderOnly,fontScale:scale,configuration:this.configuration,translation:this.translation,progress}).finally(()=>{
@@ -346,9 +491,9 @@ export class ChapterTranslationSession {
       snapshot:result.snapshot,reportContext:context,original:pixels.blob};
   }
   private async captureWithUI(work:()=>Promise<PagePixels>):Promise<PagePixels> {
-    this.overlays.suspended=true;this.overlays.schedule();this.hideControls(true);
+    this.overlays.suspended=true;this.overlays.schedule();this.hideControls(true);this.reading?.suspend(true);
     try {return await work();}
-    finally {this.overlays.suspended=false;this.overlays.schedule();this.hideControls(false);}
+    finally {this.overlays.suspended=false;this.overlays.schedule();this.hideControls(false);this.reading?.suspend(false);}
   }
   private async screenshot(candidate:MangaPageCandidate,signal:AbortSignal,segment?:Rect):Promise<PagePixels> {
     signal.throwIfAborted();
@@ -382,8 +527,10 @@ export class ChapterTranslationSession {
   dispose():void {
     this.inspector?.dispose();
     if(this.disposed)return;this.disposed=true;this.startVersion++;this.disconnect();clearInterval(this.navigationTimer);this.lifetime.abort();this.queue.dispose();this.overlays.dispose();
+    this.reading?.dispose();this.reading=null;this.cursor=null;
     this.failureReports.clear();
     for(const url of this.downloads)URL.revokeObjectURL(url);this.downloads.clear();
-    this.changed({active:false,total:0,translated:0,failed:0,skipped:0,processing:null,view:"original",message:"Session cleared. Activate Translate Chapter for this reader."});
+    this.changed({active:false,total:0,translated:0,failed:0,skipped:0,processing:null,view:"original",mode:this.mode,
+      message:"Session cleared. Choose Read Chapter or Translate Chapter for this reader."});
   }
 }

@@ -136,6 +136,7 @@ class BlockResponse(BaseModel):
     category: str
     status: str
     error_message: str | None
+    provenance: dict[str, object] = {}  # translation engine/model, as in Study responses
 
 
 class PageProcessingTimes(ProcessingTimes):
@@ -166,6 +167,7 @@ class PageAnalysisResponse(BaseModel):
                 grammar=analysis.grammar if analysis else [],
                 confidence=block.confidence,
                 category=block.category, status=block.status, error_message=block.error_message,
+                provenance={key: value for key, value in analysis.provenance.items() if key != "analysis_origin"} if analysis else {},
             ))
         return cls(width=result.width, height=result.height, regions_detected=len(result.regions),
                    regions_filtered=len(result.filtered_regions), text_blocks=blocks,

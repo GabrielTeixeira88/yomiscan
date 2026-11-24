@@ -1,8 +1,9 @@
 import type {MangaPageCandidate} from "./discovery";
-import type {PageRecord, ViewMode} from "./model";
+import type {PageRecord} from "./model";
 import type {PageCoverage} from './coverage';
 import type {PageSnapshot,PageReportContext} from './reports';
-export interface PageImageResult { url: string; bytes: number; rendered: number; skipped: number; coverage?:PageCoverage; snapshot?:PageSnapshot;reportContext?:PageReportContext;original?:Blob }
+import type {ReadingPage} from './reading';
+export interface PageImageResult { /** Rendered page; absent for a Reading-mode page until English is requested. */ url?: string; bytes: number; rendered: number; skipped: number; coverage?:PageCoverage; snapshot?:PageSnapshot;reportContext?:PageReportContext;original?:Blob;reading?:ReadingPage }
 
 /** Fixed, pointer-transparent siblings: never rewrite the site's img/srcset/layout. */
 export class ChapterOverlays {
@@ -11,7 +12,7 @@ export class ChapterOverlays {
   private images = new Map<number, HTMLImageElement>();
   private frame = 0;
   private pages: PageRecord<MangaPageCandidate,PageImageResult>[] = [];
-  private view: ViewMode = "english";
+  private shown: (page:PageRecord<MangaPageCandidate,PageImageResult>)=>boolean = ()=>true;
   suspended = false;
   private events = new AbortController();
   private resize = new ResizeObserver(()=>this.schedule());
@@ -24,9 +25,11 @@ export class ChapterOverlays {
     document.addEventListener("load",()=>this.schedule(),{capture:true,signal:this.events.signal});
     visualViewport?.addEventListener("resize",()=>this.schedule(),{signal:this.events.signal});
   }
-  update(pages: PageRecord<MangaPageCandidate,PageImageResult>[],view:ViewMode):void {
-    this.pages=pages; this.view=view;
-    const ids=new Set(pages.filter(p=>p.result).map(p=>p.id));
+  /** `shown` decides per page: every page (Translate Chapter) or the pages switched to English (Reading mode). */
+  update(pages: PageRecord<MangaPageCandidate,PageImageResult>[],shown:(page:PageRecord<MangaPageCandidate,PageImageResult>)=>boolean):void {
+    this.pages=pages; this.shown=shown;
+    this.applyVisibility();
+    const ids=new Set(pages.filter(p=>p.result?.url).map(p=>p.id));
     for(const [id,image] of this.images) if(!ids.has(id)){image.remove();this.images.delete(id);}
     this.resize.disconnect();
     for(const page of pages) this.resize.observe(page.source.image);
@@ -40,10 +43,16 @@ export class ChapterOverlays {
       if(replacement && replacement!==url)image.src=replacement;else image.removeAttribute('src');
     }
   }
+  /** Hide the whole layer at once (not on the next frame) when nothing is shown or a capture runs. */
+  private applyVisibility():void {
+    const any=this.pages.some(page=>page.result?.url&&this.shown(page));
+    this.host.style.setProperty("visibility",this.suspended || !any ? "hidden" : "visible","important");
+  }
   private paint():void {
-    this.host.style.setProperty("visibility",this.suspended || this.view==="original" ? "hidden" : "visible","important");
+    this.applyVisibility();
     for(const page of this.pages) {
-      if(!page.result) continue;
+      const url=page.result?.url;
+      if(!url) continue;
       let overlay=this.images.get(page.id);
       if(!overlay) {
         overlay=document.createElement("img"); overlay.alt=""; overlay.setAttribute("aria-hidden","true");
@@ -53,10 +62,11 @@ export class ChapterOverlays {
       const source=page.source.image, r=source.getBoundingClientRect(), style=getComputedStyle(source);
       const visible=source.isConnected && (source.currentSrc||source.src)===page.source.source && source.naturalWidth===page.source.width && source.naturalHeight===page.source.height &&
         r.width>0 && r.height>0 && style.visibility==="visible" && style.display!=="none" && Number(style.opacity)>0;
-      overlay.style.display=visible?"block":"none";
-      // Release decoded bitmap surfaces for offscreen pages, retain compressed Blob URL.
-      if(!visible || this.view==="original" || r.bottom < -innerHeight || r.top > 2*innerHeight) {overlay.removeAttribute("src");continue;}
-      if(overlay.getAttribute("src")!==page.result.url) overlay.src=page.result.url;
+      const wanted=this.shown(page);
+      overlay.style.display=visible&&wanted?"block":"none";
+      // Release decoded bitmap surfaces for offscreen or hidden pages, retain compressed Blob URL.
+      if(!visible || !wanted || r.bottom < -innerHeight || r.top > 2*innerHeight) {overlay.removeAttribute("src");continue;}
+      if(overlay.getAttribute("src")!==url) overlay.src=url;
       let left=Math.max(0,r.left), top=Math.max(0,r.top), right=Math.min(innerWidth,r.right), bottom=Math.min(innerHeight,r.bottom);
       for(let parent=source.parentElement;parent;parent=parent.parentElement) {
         const css=getComputedStyle(parent), bounds=parent.getBoundingClientRect();

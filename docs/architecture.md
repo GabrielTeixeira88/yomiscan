@@ -127,6 +127,50 @@ against `benchmarks/lexical-golden.jsonl` without models. See
   `.venv` with `uv pip` works for experiments, but the next `uv sync` restores the locked CPU build.
 - *Expanded translation set:* waits for real lines from the page corpus.
 
+## Stage 4 reading mode
+
+**Read Chapter keeps the Japanese on the page.** It is the chapter session
+(`chapter/session.ts`) with `mode: "read"`. It reuses page discovery, the acquisition chain,
+viewport priority, the LRU budget and the single-job queue. Pages are still processed
+visible first, then the next pages, so upcoming pages are read before the user reaches
+them. Instead of `render-page`, each page goes through the offscreen transport with
+`kind: "analyze"` to `POST /api/v1/analyze-page`. That call does detection, OCR, ordering,
+lexical analysis and sentence translation, but no masking, inpainting or typesetting. It
+accepts the same `job_id` (stage progress), `configuration` (409 on a stale session),
+`refresh` and `options_json` as `render-page`. Each block also carries the translation
+`provenance`. `chapter/reading.ts` validates the JSON: dimensions must equal the acquired
+pixels, boxes must lie inside the page, and there are at most 256 blocks. Each successful
+block becomes a Study `Analysis` (`analysis_origin: "page"`), sorted by reading order.
+Filtered, failed and empty blocks are counted, not shown.
+
+**Text layer.** `chapter/reading-layer.ts` draws one faint outline button per bubble in a
+closed shadow root above the page. It maps boxes with `displayedRegion`, clips them to
+scroll containers, and refuses transformed or bordered images. Hovering strengthens the
+outline. Clicking opens the Study card from the retained analysis: no screenshot, OCR or
+request, so the card appears as soon as the page has been read. The layer stops pointer
+events at its host, so a bubble click never turns the reader's page. It is hidden
+synchronously during viewport captures and Select Text, so the outlines never enter a
+screenshot.
+
+**J / K.** A document `keydown` listener (ignored in inputs, text areas, editable content
+and with modifiers) steps through bubbles in reading order across pages in document order
+(`stepBubble`). It skips pages with no text, and stops with a message at a page that is
+still being read instead of jumping over it. Pressed with no card open, it opens the first
+bubble on screen in the nearest page. An off-screen bubble is scrolled to a quarter of the
+viewport height, in the reader's own scroll container when it has one. The card shows
+"Page N · bubble i of n".
+
+**English per page.** Each read page has an English / Japanese toggle at its top-right
+corner. The first request queues a refresh of that page. The worker renders it through
+`render-page` from the retained page pixels, with no new acquisition. The backend's stage
+cache supplies detection, OCR, ordering, lexical analysis and translation from the earlier
+analysis, so only rendering runs (measured 1.4 s on CPU against about 3 s for the analysis).
+The result keeps the reading data, so bubbles stay clickable over the English image.
+Hiding and showing English again reuses the render. The global Original / English buttons
+hide all pages or request every read page. Font changes rerender only pages that already
+have English. Switching between Read Chapter and Translate Chapter replaces the session;
+the backend caches make re-reading cheap.
+
 ## Post-MVP reader controls, readiness and distribution
 
 `rendering/settings.py` validates immutable font scale 0.75–1.5.

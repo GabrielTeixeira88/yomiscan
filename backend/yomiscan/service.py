@@ -244,8 +244,11 @@ class ImageAnalysisService:
             self._glossaries.close()
 
     def analyze_page(self, image: Image.Image, *, options: TranslationOptions | None = None,
-                     cancel: Event | None = None) -> PageAnalysisResult:
-        return self._analyze_page(image, CacheRequest(self.cache), options=options, cancel=cancel)
+                     cancel: Event | None = None, progress: Progress | None = None,
+                     refresh: Refresh = "none") -> PageAnalysisResult:
+        """Detection, OCR and analysis without rendering (Reading mode). Shares the stage cache, so
+        a later render of the same page reuses this work."""
+        return self._analyze_page(image, CacheRequest(self.cache, refresh, progress=progress), options=options, cancel=cancel)
 
     def _analyze_page(self, image: Image.Image, request: CacheRequest, *, options: TranslationOptions | None = None,
                       cancel: Event | None = None) -> PageAnalysisResult:
