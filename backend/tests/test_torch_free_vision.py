@@ -23,7 +23,7 @@ def test_local_pins_share_the_browser_commit_and_files():
     assert engine_models.default_source().startswith("https://huggingface.co/")
     browser = engine_models.load_bundle(extension / "artifact-manifest.json")
     local = engine_models.load_bundle()
-    assert sorted(local.components) == ["detector-fp32", "ocr-int8"]
+    assert sorted(local.components) == ["detector-fp32", "ocr-int8", "translation-opus-ja-en-fp32"]
     assert local.components["ocr-int8"] == browser.components["ocr-int8"]
     assert {f.path for f in local.components["detector-fp32"].files} == {"detector-fp32/detector.onnx"}
 

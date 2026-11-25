@@ -156,11 +156,16 @@ either engine or remove the models. The browser engine is English only, and Tran
 then shows English as text over each bubble. It currently needs about 2 GB of memory with
 every model loaded. See the [Stage 5a record](docs/decisions/stage-5a-browser-engine.md).
 
-**Torch-free local engine (Stage 5b, in progress).** The backend can run page detection and
-OCR without PyTorch, on the same pinned ONNX models (the detector optionally on any Windows GPU
-through DirectML). It is opt-in for now: `uv sync --extra vision`, then
-`uv run yomiscan-prepare-engine detector-fp32 ocr-int8` (275 MiB, from Hugging Face, each file
-SHA-256 checked), then start the server with `YOMISCAN_DETECTOR=pinned` and `YOMISCAN_OCR=pinned`.
+**Torch-free local engine (Stage 5b, in progress).** The backend can run page detection, OCR
+and OPUS-MT ja→en translation without PyTorch, on pinned ONNX models; the detector can also run
+on any Windows GPU through DirectML. It is opt-in for now:
+1. `uv sync --extra vision`
+2. `uv run yomiscan-prepare-engine detector-fp32 ocr-int8 translation-opus-ja-en-fp32`
+   (686 MiB from Hugging Face; each file is SHA-256 checked)
+3. Start the server with `YOMISCAN_DETECTOR=pinned`, `YOMISCAN_OCR=pinned` and
+   `YOMISCAN_TRANSLATION_ENGINE=opus-pinned`.
+
+Its translations are identical to the current translator on all 153 test lines.
 See the [Stage 5b record](docs/decisions/stage-5b-local-engine.md).
 
 Open an image-based chapter and click YomiScan → **Translate Chapter** to replace every

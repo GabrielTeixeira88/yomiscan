@@ -59,10 +59,11 @@ def model_catalog() -> tuple[ModelDescriptor, ...]:
             devices=("cpu",) if "onnx" in identifier else ("cpu", "cuda"), setup_command="yomiscan-prepare-vision "+key))
     from .engine_models import default_host, load_bundle
     host, bundle = default_host(), load_bundle()
-    for identifier, kind, component in (("detector-pinned", "detection", "detector-fp32"), ("ocr-pinned", "ocr", "ocr-int8")):
+    for identifier, kind, component in (("detector-pinned", "detection", "detector-fp32"), ("ocr-pinned", "ocr", "ocr-int8"),
+                                        ("opus-pinned", "translation", "translation-opus-ja-en-fp32")):
         catalog.append(ModelDescriptor(identifier, kind, host["repository"] or "loopback", host["revision"] or bundle.name,
             bundle.components[component].license, tuple(f.path for f in bundle.components[component].files),
-            experimental=True, dependency="onnxruntime", devices=("cpu",),
+            experimental=True, dependency="onnxruntime", devices=("cpu",), targets=("en",) if kind == "translation" else (),
             approximate_download_bytes=bundle.components[component].size,
             setup_command="yomiscan-prepare-engine "+component, engine_component=component))
     for name, spec in NMT_MODELS.items():

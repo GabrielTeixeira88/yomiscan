@@ -213,7 +213,14 @@ Torch-free vision, opt-in with `YOMISCAN_DETECTOR=pinned` and `YOMISCAN_OCR=pinn
 - `onnx_runtime.session` chooses the device: `YOMISCAN_ONNX_DEVICE=cpu` (default) or `directml`.
 
 On the 23-page corpus, 99.1% of blocks give identical text to the Torch path end to end. With
-DirectML, detection takes 143 ms per page instead of about 1 s. See the
+DirectML, detection takes 143 ms per page instead of about 1 s.
+
+Increment 2 adds Torch-free OPUS-MT ja→en (`YOMISCAN_TRANSLATION_ENGINE=opus-pinned`):
+- `translation/opus_onnx.py` runs the fp32 ONNX export with the merged decoder's key/value cache.
+- `translation/beam.py` ports transformers' beam search.
+- `translation/marian_sentencepiece.py` replaces `MarianTokenizer` with `sentencepiece`.
+
+It matches the Torch translator on all 153 lines of the translation set. See the
 [Stage 5b record](decisions/stage-5b-local-engine.md).
 
 ## Post-MVP reader controls, readiness and distribution

@@ -35,8 +35,8 @@ def test_builder_copies_exports_and_pins_size_and_sha256(tmp_path):
             assert entry["bytes"] == len(data) and entry["sha256"] == hashlib.sha256(data).hexdigest()
     local = json.loads((tmp_path / "local-manifest.json").read_text(encoding="utf-8"))
     assert local == json.loads((output / "local-manifest.json").read_text(encoding="utf-8"))
-    assert local["bundle"] == builder.LOCAL_BUNDLE and [c["id"] for c in local["components"]] == ["detector-fp32", "ocr-int8"]
-    assert local["components"][1] == manifest["components"][2]  # shared files keep identical pins
+    assert local["bundle"] == builder.LOCAL_BUNDLE and [c["id"] for c in local["components"]] == ["detector-fp32", "translation-opus-ja-en-fp32", "ocr-int8"]
+    assert local["components"][2] == manifest["components"][2]  # shared files keep identical pins
     assert (output / "detector-fp32" / "detector.onnx").is_file()
 
 
@@ -59,7 +59,7 @@ def test_builder_writes_the_model_card_and_license_texts(tmp_path):
     manifest = builder.build(paths["stage2"], output, tmp_path / "pinned.json", paths["dictionary"], paths["tokenizer"])
     card = (output / "README.md").read_text(encoding="utf-8")
     assert f"# YomiScan browser models ({manifest['bundle']})" in card and "$" not in card
-    assert card.count("\n| `") == len(manifest["components"]) + 1  # plus the local engine's fp32 detector
+    assert card.count("\n| `") == len(manifest["components"]) + 2  # plus the local engine's fp32 detector and translator
     assert "`detector-fp32` (fp32)" in card and builder.LOCAL_BUNDLE in card
     assert "CC BY-SA 4.0" in card and "UniDic Consortium" in card and "Electronic Dictionary Research" in card
     assert sorted(p.name for p in (output / "LICENSES").iterdir()) == ["Apache-2.0.txt", "UniDic-BSD-3-Clause.txt", "lindera-MIT.txt"]
