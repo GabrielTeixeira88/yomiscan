@@ -6,7 +6,7 @@ import path from 'node:path';
 import {initSync, TokenizerBuilder, getVersion} from 'lindera-wasm-unidic';
 import sqlite3InitModule from '@sqlite.org/sqlite-wasm';
 import {analyzeLexical} from '../src/engine/lexical';
-import {JmdictDatabase, fromLindera, type LinderaToken, type Sqlite3} from '../src/engine/lexicon';
+import {JmdictDatabase, fromLindera, toAnalysis, type LinderaToken, type Sqlite3} from '../src/engine/lexicon';
 
 const repo = path.resolve('..');
 initSync({module: await readFile('node_modules/lindera-wasm-unidic/lindera_wasm_unidic_bg.wasm')});
@@ -21,8 +21,10 @@ const sentences: Record<string, unknown> = {};
 for (const text of [...new Set(texts)]) {
   const tokens = (tokenizer.tokenize(text) as LinderaToken[]).map(fromLindera);
   const result = analyzeLexical(text, tokens, form => dictionary.lookup(form));
+  const study = toAnalysis(result, null);
   sentences[text] = {tokens, analysis: {tokens: result.tokens.map(t => ({lookup_form: t.lookup_form, entry_ids: t.entry_ids, inflection: t.inflection})),
-    units: result.units, grammar: result.grammar}};
+    units: result.units, grammar: result.grammar,
+    readings: {tokens: study.tokens.map(t => t.dictionary_reading ?? null), units: (study.units ?? []).map(u => u.dictionary_reading ?? null)}}};
 }
 const ms = performance.now() - started;
 await mkdir(path.join(repo, '.cache/stage5a'), {recursive: true});

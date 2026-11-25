@@ -133,7 +133,9 @@ is no all-sites content script or `<all_urls>` permission. The service worker ca
 with `chrome.tabs.captureVisibleTab`, verifies tab/viewport stability, crops through
 `OffscreenCanvas`, then posts PNG to `http://127.0.0.1:<port>/api/v1/analyze-image` (default port 47615).
 Only the crop is sent; the full screenshot stays transiently in extension memory and
-is never returned to webpage code. No screenshot/analysis history is stored.
+is never returned to webpage code. No screenshot is stored. Text and analysis are stored only
+when you click **Save word** or **Save sentence**, in the extension's own IndexedDB; the Saved
+page (YomiScan → Open Saved) shows, exports and deletes them.
 
 The additional `offscreen` permission provides an extension-origin Blob transport for
 long page-render requests. It calls only the fixed localhost render URL. Already-loaded

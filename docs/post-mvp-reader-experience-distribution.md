@@ -100,6 +100,10 @@ Status contains no OCR, URLs, images or raw exceptions. There is no telemetry.
 
 ## Local history and Study Bubble — P13
 
+> Superseded in Stage 6: Study history became saved words and sentences, and existing entries
+> move into saved sentences once. See the [Stage 6 record](decisions/stage-6-capture-release.md).
+> The text below records P13 as it was built.
+
 History is **off by default**. Enable **Study history**, then use the popup's
 **Save to History** for each desired sentence. Enabling alone records nothing.
 Entries retain selected Japanese, actual sentence target/translation, existing

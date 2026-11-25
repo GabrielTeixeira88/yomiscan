@@ -14,6 +14,7 @@ if (process.argv.includes("--test")) {
   await copyFile("manifest.json", "dist/manifest.json");
   await copyFile("offscreen.html", "dist/offscreen.html");
   await copyFile("image-access.html", "dist/image-access.html");
+  await copyFile("library.html", "dist/library.html");
   // Browser engine (Stage 5a): ONNX Runtime Web, loaded at runtime by the offscreen document.
   // ort.wasm uses the plain threaded build; ort.webgpu uses the asyncify build.
   await mkdir("dist/ort", {recursive: true});
@@ -28,6 +29,7 @@ if (process.argv.includes("--test")) {
     {entryPoints: ["src/content.ts"], outfile: "dist/content.js", format: "iife"},
     {entryPoints: ["src/offscreen.ts"], outfile: "dist/offscreen.js", format: "esm"},
     {entryPoints: ["src/image-access.ts"], outfile: "dist/image-access.js", format: "esm"},
+    {entryPoints: ["src/library-page.ts"], outfile: "dist/library.js", format: "esm"},
   ];
   for (const entry of options) {
     const settings = {...entry, bundle: true, target: "chrome120", sourcemap: !process.argv.includes('--release')};

@@ -15,7 +15,8 @@ import tomllib
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 ROOT = Path(__file__).resolve().parents[1]
-EXTENSION_FILES = ("manifest.json", "background.js", "content.js", "offscreen.js", "offscreen.html", "image-access.js", "image-access.html")
+EXTENSION_FILES = ("manifest.json", "background.js", "content.js", "offscreen.js", "offscreen.html", "image-access.js", "image-access.html",
+                   "library.js", "library.html")
 
 
 def run(arguments: list[str], *, cwd: Path = ROOT, environment: dict[str, str] | None = None) -> str:

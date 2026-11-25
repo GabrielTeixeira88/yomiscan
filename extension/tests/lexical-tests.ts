@@ -2,7 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {analyzeLexical, chooseMatches, findGrammar, findUnits, hiragana, inflectionLabels, loadGrammar, loadUnitRules, lookupCandidates,
   symbolic, type DictionaryEntry, type JapaneseToken} from "../src/engine/lexical";
-import {decodeEntry, fromLindera, toAnalysis} from "../src/engine/lexicon";
+import {decodeEntry, dictionaryReading, fromLindera, toAnalysis} from "../src/engine/lexicon";
+import headwordCases from "../../backend/tests/headword_cases.json";
 
 const token = (surface: string, pos: string | null, extra: Partial<JapaneseToken> = {}): JapaneseToken => ({surface, lemma: surface, reading: null,
   part_of_speech: pos, conjugation_type: null, conjugation_form: null, orthographic_base: surface, lemma_reading: null, ...extra});
@@ -77,4 +78,20 @@ test("lindera fields map to the backend token shape; JMdict payloads and the Stu
   assert.equal(analysis.tokens[0].dictionary_form, "食べる");
   assert.equal(analysis.tokens[0].meanings[0].glosses[0], "to eat");
   assert.equal(analysis.provenance?.engine_kind, "browser");
+});
+
+test("dictionary-form readings follow the shared cases (backend/tests/headword_cases.json)", () => {
+  for (const c of headwordCases.cases) {
+    const data = c.entry ? (headwordCases.entries as Record<string, {spellings: string[]; readings: {text: string; spellings: string[]; no_kanji: boolean}[]}>)[c.entry] : null;
+    const found: DictionaryEntry | undefined = data ? {entry_id: 1, spellings: data.spellings, readings: data.readings, senses: [], form_priority: {}} : undefined;
+    assert.equal(dictionaryReading(c.form, found, c.hints), c.expected, c.name);
+  }
+});
+
+test("browser Study responses carry dictionary-form readings like the backend", () => {
+  const taberu = entry(1, ["食べる"], ["たべる"], [["verb"]]);
+  const analysis = toAnalysis({original_text: "食べた", dictionary_entries: new Map([[1, taberu]]), units: [], grammar: [], tokens: [
+    {token: token("食べ", "動詞", {lemma: "食べる", reading: "たべ", orthographic_base: "食べる", lemma_reading: "たべる"}), lookup_form: "食べる", entry_ids: [1], inflection: []},
+    {token: token("た", "助動詞", {reading: "た"}), lookup_form: null, entry_ids: [], inflection: []}]}, null);
+  assert.deepEqual(analysis.tokens.map(t => t.dictionary_reading), ["たべる", "た"]);
 });

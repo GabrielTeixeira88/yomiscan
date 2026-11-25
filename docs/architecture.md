@@ -200,7 +200,7 @@ won't fit (`storageShortfall`) and reports quota errors per file.
 See the [Stage 5a record](decisions/stage-5a-browser-engine.md) for increments, measurements
 and the accepted memory footprint (about 2 GB with every model loaded).
 
-## Stage 5b local engine (in progress)
+## Stage 5b local engine
 
 Stage 5b packages a Torch-free local engine as an optional Windows companion. Increment 1 adds
 Torch-free vision, opt-in with `YOMISCAN_DETECTOR=pinned` and `YOMISCAN_OCR=pinned`:
@@ -251,6 +251,30 @@ Increment 5 adds the first start and the installer:
   runner. See the
 [Stage 5b record](decisions/stage-5b-local-engine.md).
 
+## Stage 6 capture and release (in progress)
+
+Increment 1 lets a learner keep words and sentences:
+- **Dictionary-form reading:** both engines add `dictionary_reading` to every token and unit of
+  a Study response (`headword.py`, mirrored by `dictionaryReading` in `engine/lexicon.ts`; shared
+  cases in `backend/tests/headword_cases.json`). It is the best JMdict entry's reading for the
+  dictionary form, chosen with the tokenizer's reading as the tie-break, so it always matches
+  the card's own reading line. Older servers omit the field; the extension then keeps a reading
+  only for uninflected words.
+- **Library:** `library.ts` holds the rules: word identity (`jmdict:<entry id>`, else the form and
+  reading), field-by-field validation, limits (50,000 words, 2,000 sentences of at most 128 KiB),
+  the sentence sanitizer (formerly `history.ts`), backup and restore, CSV, and the one-time move
+  of the old `chrome.storage.local` Study history into saved sentences. `library-idb.ts` stores
+  it in the extension's IndexedDB database `yomiscan-library`.
+- **Access:** content scripts reach the library only through the service worker's `library`
+  message (`libraryRequest`: saved-key lookup, save or delete a word, save a sentence, counts).
+  The Saved page (`library.html`, `library-page.ts`) is an extension page and opens the same
+  database directly. It reuses `StudyPopup` to reopen a saved sentence.
+- **Card:** `popup.ts` adds a Save toggle to every expression and word and **Save sentence** to
+  the original text, and marks saved words with one lookup per card.
+
+No page URL, image or screenshot is stored, and nothing is stored without a Save click. See the
+[Stage 6 record](decisions/stage-6-capture-release.md).
+
 ## Post-MVP reader controls, readiness and distribution
 
 `rendering/settings.py` validates immutable font scale 0.75–1.5.
@@ -288,11 +312,9 @@ wrong jobs/instances/versions and stale sources/sessions. The single executor re
 resource ownership after cancellation. New readiness/job GETs use existing host,
 origin and client-header protections.
 
-`history.ts` serializes background-owned `chrome.storage.local` operations. History
-defaults off and needs explicit Save, whitelists analysis/provenance fields, caps
-storage at 100 entries/2 MiB and rejects entries above 128 KiB. It owns no images,
-source URLs, processing caches or glossaries. Disable retains; Delete/Clear erase;
-Export is an explicit JSON download. Chrome Sync is unused.
+Study history (`history.ts`, opt-in, 100 entries) was replaced in Stage 6 by saved words and
+sentences (`library.ts`, see [Stage 6](#stage-6-capture-release-in-progress)); its entries move
+into saved sentences once. Chrome Sync is unused.
 
 `scripts/build_distribution.py` builds an exact runtime-file extension ZIP plus
 wheel/sdist from locked tooling, recording source commit, actual project-interpreter

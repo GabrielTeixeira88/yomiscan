@@ -116,4 +116,5 @@ def test_api_response_carries_units_with_meanings():
     response = ImageAnalysisResponse.from_analysis(result).model_dump()
     assert response["units"] == [{"surface": "かもしれない", "dictionary_form": "かもしれない", "start_token": 0, "end_token": 4,
                                   "meanings": [{"entry_id": 7, "glosses": ["maybe"], "parts_of_speech": [EXP], "spellings": [],
-                                                "readings": [], "notes": [], "labels": []}]}]
+                                                "readings": [], "notes": [], "labels": []}],
+                                  "dictionary_reading": "かもしれない"}]

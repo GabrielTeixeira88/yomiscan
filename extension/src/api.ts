@@ -9,10 +9,13 @@ export interface Token {
   meanings: Meaning[];
   /** Learner labels for a verb/adjective head, e.g. ["negative", "past"]; absent from older servers. */
   inflection?: string[];
+  /** The reading of dictionary_form (食べた -> たべる); absent from older servers. */
+  dictionary_reading?: string | null;
 }
 /** A multi-token meaning unit (かもしれない) covering tokens[start_token, end_token). */
 export interface Unit {
   surface: string; dictionary_form: string; start_token: number; end_token: number; meanings: Meaning[];
+  dictionary_reading?: string | null;
 }
 /** A grammar note (〜てしまう) covering tokens[start_token, end_token). */
 export interface GrammarNote {
@@ -53,7 +56,8 @@ export function parseAnalysis(value: unknown): Analysis {
       if (!record(unit) || typeof unit.surface !== "string" || typeof unit.dictionary_form !== "string"
         || !Number.isInteger(unit.start_token) || !Number.isInteger(unit.end_token)
         || Number(unit.start_token) < 0 || Number(unit.end_token) <= Number(unit.start_token)
-        || Number(unit.end_token) > value.tokens.length || !Array.isArray(unit.meanings) || !validMeanings(unit.meanings))
+        || Number(unit.end_token) > value.tokens.length || !Array.isArray(unit.meanings) || !validMeanings(unit.meanings)
+        || (unit.dictionary_reading !== undefined && !nullableString(unit.dictionary_reading)))
         throw new Error("Invalid expression data from local server.");
     }
   }
@@ -67,7 +71,8 @@ export function parseAnalysis(value: unknown): Analysis {
     if (!record(token) || typeof token.surface !== "string"
       || !["reading", "lemma", "dictionary_form", "part_of_speech", "conjugation_type", "conjugation_form"].every(k => nullableString(token[k]))
       || !Array.isArray(token.meanings)
-      || (token.inflection !== undefined && !strings(token.inflection))) throw new Error("Invalid token data from local server.");
+      || (token.inflection !== undefined && !strings(token.inflection))
+      || (token.dictionary_reading !== undefined && !nullableString(token.dictionary_reading))) throw new Error("Invalid token data from local server.");
     for (const meaning of token.meanings) {
       if (!record(meaning) || !Number.isInteger(meaning.entry_id)
         || !["glosses", "parts_of_speech", "spellings", "readings", "notes", "labels"].every(k => strings(meaning[k]))) {
