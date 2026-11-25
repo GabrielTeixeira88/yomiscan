@@ -48,13 +48,29 @@ let tail: Promise<void> = Promise.resolve();
 let ports = 0;
 type Send=(message:unknown)=>void;
 const HEADERS={'X-YomiScan-Client':'study-extension-v1'};
+// The local engine companion's per-launch token (Stage 5b), sent by the service worker before a
+// chapter upload. It is attached only to requests for that exact origin.
+let credentials:{origin:string;token:string}|null=null;
+chrome.runtime.onMessage.addListener((message, sender, respond) => {
+  if (sender.id !== chrome.runtime.id || sender.tab || sender.url !== chrome.runtime.getURL('background.js') || message?.target !== 'offscreen-credentials') return;
+  try {
+    const origin=parseBackendOrigin(message.origin);
+    if(message.token===null)credentials=null;
+    else if(typeof message.token==='string'&&/^[\w-]{32,128}$/.test(message.token))credentials={origin,token:message.token};
+    else throw new Error('Invalid engine token');
+    respond({ok:true});
+  } catch(error) {respond({ok:false,error:error instanceof Error?error.message:'Invalid credentials'});}
+});
+function headersFor(backend:string):Record<string,string> {
+  return credentials?.origin===backend?{...HEADERS,'X-YomiScan-Token':credentials.token}:HEADERS;
+}
 
 /** Poll the job's stage status until stopped. Status is optional; the page response stays authoritative. */
 function pollProgress(backend:string,job:string|undefined,signal:AbortSignal,send:Send,connected:()=>boolean):AbortController {
   const stop=new AbortController();
   if(job)void (async()=>{
     while(!stop.signal.aborted&&connected()&&!signal.aborted){
-      try{const response=await fetch(backend+'/api/v1/jobs/'+job,{method:'GET',headers:HEADERS,
+      try{const response=await fetch(backend+'/api/v1/jobs/'+job,{method:'GET',headers:headersFor(backend),
         signal:AbortSignal.any([signal,AbortSignal.timeout(2000)]),credentials:'omit',redirect:'error',cache:'no-store'});
         if(response.ok){const text=await response.text();if(text.length<=16*1024&&!stop.signal.aborted)send({type:'progress',data:JSON.parse(text)});}
       }catch{/* Missing or expired status never fails the page. */}
@@ -72,7 +88,7 @@ async function analyzeRequest(backend:string,form:FormData,job:string|undefined,
   if(refresh)query.set('refresh','translation');
   if(job)query.set('job_id',job);
   const polling=pollProgress(backend,job,signal,send,connected);
-  const response=await fetch(backend+'/api/v1/analyze-page?'+query,{method:'POST',body:form,headers:HEADERS,signal,
+  const response=await fetch(backend+'/api/v1/analyze-page?'+query,{method:'POST',body:form,headers:headersFor(backend),signal,
     credentials:'omit',redirect:'error',cache:'no-store'}).finally(()=>polling.abort());
   if(response.status===409)return {type:'error',code:'configuration_changed',error:'Backend settings changed. Start Read Chapter again.'};
   if(!response.ok)throw new Error(response.status===429?'Backend is busy. Retry after the current operation finishes.':
@@ -140,7 +156,7 @@ chrome.runtime.onConnect.addListener(port => {
             if(configuration)query.set('configuration',configuration);
             if(job)query.set('job_id',job);
             const responsePromise=fetch(backend+"/api/v1/render-page?"+query,{method:"POST",body:form,
-              headers:HEADERS,signal:controller.signal,credentials:"omit",redirect:"error",cache:"no-store"});
+              headers:headersFor(backend),signal:controller.signal,credentials:"omit",redirect:"error",cache:"no-store"});
             const polling=pollProgress(backend,job,controller.signal,send,()=>connected);
             const response=await responsePromise.finally(()=>polling.abort());
             if(response.status===409){send({type:'error',code:'configuration_changed',error:'Backend settings changed. Start Translate Chapter again.'});return;}

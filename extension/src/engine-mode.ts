@@ -1,6 +1,7 @@
-// Which engine serves Study and reading (Stage 5a). Unless the user picks one, the choice is
-// Automatic: the browser engine once its models are installed, otherwise a running local
-// backend, otherwise first-run setup (download the models, or start the backend).
+// Which engine serves Study and reading (Stage 5a, 5b). Unless the user picks one, the choice is
+// Automatic: the local engine companion when installed with its models, then the browser engine
+// once its models are installed, then a running developer backend, otherwise first-run setup.
+// "local" means the companion when it is ready, else the developer backend (local.ts).
 import host from './engine/artifact-host.json';
 
 export type EngineMode = 'local' | 'browser';
@@ -26,11 +27,14 @@ export async function setEngineChoice(choice: EngineChoice): Promise<void> {
   else await chrome.storage.local.set({[ENGINE_MODE_KEY]: choice});
 }
 
-/** Automatic prefers installed browser models, then a running backend. An explicit choice is kept,
- * except that the browser engine without its models needs setup. Checks run only when needed. */
+/** Automatic prefers the local engine companion when it is installed with its models (Stage 5b,
+ * owner decision: GPU and the pixel renderer), then installed browser models, then a running
+ * developer backend. An explicit choice is kept, except that the browser engine without its models
+ * needs setup. Checks run only when needed. */
 export async function resolveEngine(choice: EngineChoice, browserReady: () => Promise<boolean>,
-  backendRunning: () => Promise<boolean>): Promise<ResolvedEngine> {
+  backendRunning: () => Promise<boolean>, companionReady: () => Promise<boolean> = async () => false): Promise<ResolvedEngine> {
   if (choice === 'local') return 'local';
+  if (choice === 'auto' && await companionReady()) return 'local';
   if (await browserReady()) return 'browser';
   if (choice === 'browser') return 'setup';
   return await backendRunning() ? 'local' : 'setup';

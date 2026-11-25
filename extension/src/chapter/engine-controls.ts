@@ -2,6 +2,7 @@
 // this device needs with their sizes and storage, and install/remove on an explicit click.
 import type {EngineStatus} from '../engine/engine';
 import {DEFAULT_ENGINE_SOURCE, ENGINE_SOURCE_KEY, engineChoice, setEngineChoice} from '../engine-mode';
+import type {CompanionStatus} from '../companion';
 
 const mib = (bytes: number) => (bytes / 2 ** 20).toFixed(0);
 
@@ -19,6 +20,15 @@ export function engineSummary(status: EngineStatus): string {
     lines.push(`Installing ${install.progress.component}: ${mib(install.progress.loaded)} / ${mib(install.progress.total)} MiB`);
   else if (install.state === 'failed') lines.push(`Installation failed: ${install.error ?? 'unknown error'}`);
   return lines.join('\n');
+}
+
+/** The local engine companion (Stage 5b): installed, ready, or what it still needs. */
+export function companionSummary(status: CompanionStatus): string {
+  if (!status.installed) return 'Local engine: not installed.';
+  const name = `Local engine${status.version ? ` ${status.version}` : ''}`;
+  if (status.error) return `${name}: installed, but it did not answer (${status.error}).`;
+  if (!status.ready) return `${name}: installed; missing ${status.missing.join(', ')}. Run yomiscan-engine.exe --prepare, then check again.`;
+  return `${name}: installed with its models. Automatic uses it first.`;
 }
 
 export class EngineControls {
@@ -39,8 +49,8 @@ export class EngineControls {
     // Which engine serves Select Text, Edit text, Read Chapter and Translate Chapter.
     const choice = document.createElement('fieldset'), legend = document.createElement('legend');
     legend.textContent = 'Engine for Study and reading';choice.append(legend);
-    for (const [value, text] of [['auto', 'Automatic: browser engine when its models are installed, otherwise the local backend'],
-      ['local', 'Local backend (Python)'], ['browser', 'Browser engine']] as const) {
+    for (const [value, text] of [['auto', 'Automatic: the local engine when installed, then the browser engine, then a running local backend'],
+      ['local', 'Local engine (or the Python backend when it is not installed)'], ['browser', 'Browser engine']] as const) {
       const row = document.createElement('label'), input = document.createElement('input');
       input.type = 'radio';input.name = 'yomiscan-engine';input.value = value;input.dataset.purpose = 'engine-' + value;
       input.addEventListener('change', () => {if (input.checked) void setEngineChoice(value);});
@@ -68,10 +78,13 @@ export class EngineControls {
       else await chrome.storage.local.set({[ENGINE_SOURCE_KEY]: this.source.value});
     }
     if (operation === 'remove' && !confirm('Remove the browser engine models from this browser? They can be installed again later.')) return;
-    const reply = await chrome.runtime.sendMessage({type: 'engine', operation, base: this.source.value}).catch(() => null);
-    if (!reply?.ok) {this.output.textContent = reply?.error ?? 'Browser engine unavailable. Reload the extension.';return;}
+    const [reply, companion] = await Promise.all([
+      chrome.runtime.sendMessage({type: 'engine', operation, base: this.source.value}).catch(() => null),
+      operation === 'status' ? chrome.runtime.sendMessage({type: 'companion-status'}).catch(() => null) : Promise.resolve(null)]);
+    const companionLine = companion?.ok ? `${companionSummary(companion.data as CompanionStatus)}\n` : '';
+    if (!reply?.ok) {this.output.textContent = companionLine + (reply?.error ?? 'Browser engine unavailable. Reload the extension.');return;}
     const status = reply.data as EngineStatus;
-    this.output.textContent = engineSummary(status);
+    this.output.textContent = companionLine + engineSummary(status);
     // Poll while installing; the panel only reads status, the download runs in the engine.
     if (status.install.state === 'running' && this.element.open) this.timer = window.setTimeout(() => {void this.request('status');}, 700);
   }

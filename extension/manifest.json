@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "description": "Study Japanese and read or translate manga with models that run on your computer, in Chrome or a local backend.",
   "minimum_chrome_version": "120",
-  "permissions": ["activeTab", "scripting", "offscreen", "storage", "unlimitedStorage"],
+  "permissions": ["activeTab", "scripting", "offscreen", "storage", "unlimitedStorage", "nativeMessaging"],
   "host_permissions": ["http://127.0.0.1/*"],
   "optional_host_permissions": ["http://*/*", "https://*/*"],
   "background": {"service_worker": "background.js", "type": "module"},

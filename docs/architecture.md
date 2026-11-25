@@ -230,7 +230,16 @@ Increment 3 makes these engines the **defaults**:
 - **Build:** `scripts/build_engine.py` freezes it with `packaging/engine/yomiscan-engine.spec`.
 - **Readiness:** `readiness.ENGINE_DEFAULTS` lists the three default components, and
   `prepare_command()` names the right setup command for the developer backend or the frozen
-  engine. See the
+  engine.
+
+Increment 4 lets Chrome start that engine:
+- **Native host:** `launcher.py` runs inside the same executable. It starts or reuses a detached
+  engine on a random port with a per-launch token, and the engine exits when idle.
+- **Engine:** `api/security.py` requires the token when one is set, and
+  `engine_main.ActivityTracker` drives the idle exit.
+- **Extension:** `companion.ts` (native messaging, session-only token) and `local.ts`
+  (`localFetch`) route every local request. Automatic tries the companion first. The offscreen
+  page transport receives the token from the service worker, never from content scripts. See the
 [Stage 5b record](decisions/stage-5b-local-engine.md).
 
 ## Post-MVP reader controls, readiness and distribution

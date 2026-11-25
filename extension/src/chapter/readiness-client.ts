@@ -1,7 +1,6 @@
-import {backendBase} from '../backend';
+import {localFetch} from '../local';
 export async function readinessRequest():Promise<unknown> {
-  const response=await fetch(await backendBase()+'/api/v1/readiness',{headers:{'X-YomiScan-Client':'study-extension-v1'},
-    credentials:'omit',redirect:'error',cache:'no-store',signal:AbortSignal.timeout(5000)});
+  const response=await localFetch('/api/v1/readiness',{timeout:5000});
   if(!response.ok)throw new Error('Readiness unavailable. Start the updated backend with yomiscan-server.');
   const text=await response.text();if(new TextEncoder().encode(text).length>256*1024)throw new Error('Readiness response too large');
   return JSON.parse(text);
@@ -9,9 +8,8 @@ export async function readinessRequest():Promise<unknown> {
 /** Switch the backend's sentence translator to another installed engine (until it restarts). */
 export async function selectTranslationEngine(engine:string):Promise<{selected:string}> {
   if(!/^[a-z0-9-]{1,32}$/.test(engine))throw new Error('Invalid engine name');
-  const response=await fetch(await backendBase()+'/api/v1/translation-engine',{method:'POST',
-    headers:{'X-YomiScan-Client':'study-extension-v1','Content-Type':'application/json'},body:JSON.stringify({engine}),
-    credentials:'omit',redirect:'error',cache:'no-store',signal:AbortSignal.timeout(120_000)});
+  const response=await localFetch('/api/v1/translation-engine',{method:'POST',
+    headers:{'Content-Type':'application/json'},body:JSON.stringify({engine}),timeout:120_000});
   if(response.status===404)throw new Error('This backend cannot switch engines yet. Update and restart it.');
   if(response.status===429)throw new Error('YomiScan is busy. Switch engines after the current page finishes.');
   if(!response.ok){

@@ -1,6 +1,6 @@
 # Stage 5b: packaged local engine (optional companion)
 
-Status: **in progress**. Increments 1 (vision), 2 (translation) and 3 (engine profile and freezing) are done. Started on the owner's go-ahead (2026-11-25)
+Status: **in progress**. Increments 1–4 (vision, translation, engine profile and freezing, launcher) are done. Started on the owner's go-ahead (2026-11-25)
 after Stage 5a merged.
 
 ## Why this stage exists now
@@ -34,8 +34,8 @@ Each increment is merged only with its tests and a real-model measurement.
 |---|---|---|
 | 1 | **Torch-free vision.** Python readers for pinned ONNX exports of the production detector and manga-ocr (same Hugging Face repository and commit as the browser bundle), an explicit verified download into a per-user folder, and an ONNX Runtime device choice (CPU, DirectML). Parity against the Torch path on the sample corpus, plus CPU and GPU timings. | Done: 99.1% identical text end to end, detection 7× faster on DirectML (see increment 1) |
 | 2 | **Torch-free translation.** OPUS-MT ja→en (then pt-BR, es) without Torch: CTranslate2 and ONNX Runtime beam search compared with transformers on the Stage 3 translation set (identical lines, speed, memory). | Done for ja→en: 153/153 identical lines (see increment 2). The experimental pt-BR / es models stay Torch-only for now. |
-| 3 | **Engine profile and freezing.** Default composition uses the Torch-free engines; Torch, transformers and manga-ocr move to an optional reference extra. A PyInstaller one-folder build with the API tests run against it; measured size and startup. | Done: Torch-free defaults, frozen engine 462 MiB (89 MiB compressed), ready in about 4 s (see increment 3). The size gate is missed by the UniDic dictionary. |
-| 4 | **Launcher.** A native-messaging host that starts the frozen engine on a random loopback port with a per-launch token, hands both to the extension, and stops it after an idle period. The extension's engine choice gains the companion. | Planned |
+| 3 | **Engine profile and freezing.** Default composition uses the Torch-free engines; Torch, transformers and manga-ocr move to an optional reference extra. A PyInstaller one-folder build with the API tests run against it; measured size and startup. | Done: Torch-free defaults, frozen engine 462 MiB (89 MiB compressed), ready in about 4 s (see increment 3). |
+| 4 | **Launcher.** A native-messaging host that starts the frozen engine on a random loopback port with a per-launch token, hands both to the extension, and stops it after an idle period. The extension's engine choice gains the companion. | Done: real Chrome end to end, launch to first chapter in 12 s, idle exit and relaunch (see increment 4) |
 | 5 | **Installer and release.** Per-user Windows installer (native-messaging registration in HKCU, uninstall cleanup), first-start model download with consent, docs, a clean-machine check in Windows Sandbox. | Planned |
 
 ## Gates
@@ -44,7 +44,7 @@ Each increment is merged only with its tests and a real-model measurement.
 |---|---|
 | Vision parity | Torch-free detector boxes identical to the Torch path on ≥ 99% of regions; OCR text identical on ≥ 98% of blocks, end to end. GPU differences are reported, not hidden. |
 | Translation parity | ≥ 95% of lines identical to transformers OPUS on the translation set; every difference listed. |
-| Package size | Frozen engine without models ≤ 400 MB on disk. Measured, then confirmed with the owner. |
+| Package size | Frozen engine without models ≤ 500 MB on disk. Owner decision 2026-11-25: raised from the proposed 400 MB after the measurement (462 MiB). |
 | Startup | Warm start to `/health` ≤ 10 s on the development machine. |
 | No regressions | `uv run pytest`, the extension tests and the mocked Chrome fixture pass; the developer backend still runs unchanged. |
 
@@ -262,8 +262,9 @@ and `onnxruntime` elsewhere. Every platform therefore runs the same CPU kernels.
   defaults and their `--prepare` commands.
 - DirectML commits extra private memory, but its working set stays close to the CPU path's.
 
-**Size gate: missed and explained.** The folder is **462 MiB** without models (201 files), over
-the 400 MB target. A solid LZMA stream over it, roughly what an installer stores, is **89 MiB**.
+**Size gate: passed after the owner raised it to 500 MB.** The folder is **462 MiB** without
+models (201 files). That was over the originally proposed 400 MB; the owner then set the limit
+to 500 MB (2026-11-25). A solid LZMA stream over it, roughly what an installer stores, is **89 MiB**.
 The largest parts:
 - unidic-lite: 248 MiB, the dictionary the fugashi tokenizer memory-maps. Every Python install
   of YomiScan already carries it.
@@ -282,3 +283,86 @@ what users notice. Increment 5 measures the real installer.
 
 The distribution check installs the wheel without the `reference` group and expects the
 default engines to report their missing models.
+
+## Increment 4: launcher
+
+**Engine side.**
+- `yomiscan/launcher.py` is the native-messaging host. Chrome starts `yomiscan-engine.exe
+  chrome-extension://<id>/` for each `sendNativeMessage`, and the same frozen executable
+  recognizes that argument. The host answers one message and exits:
+  - `status`: version, whether the default models and the dictionary are installed, whether an
+    engine runs.
+  - `start`: reuses a running engine, or starts one detached (breaking away from Chrome's job
+    object) on a free loopback port, with a fresh 43-character token passed through the
+    environment, never the command line. It answers `{port, token}` once the engine serves
+    readiness.
+  - `stop`: ends the running engine.
+- A lock file keeps two tabs from starting two engines. Port, token and process id are kept in
+  `%LOCALAPPDATA%\YomiScan\engine-state.json`, and the engine logs to
+  `%LOCALAPPDATA%\YomiScan\logs\engine.log`.
+- **Token.** With `YOMISCAN_TOKEN` set, `LocalRequestGuard` requires `X-YomiScan-Token`
+  (constant-time comparison) on every request, including `/health`. CORS allows the header. The
+  developer server, which has no token, is unchanged.
+- **Idle exit.** `--idle-exit SECONDS` (the launcher passes 900; `YOMISCAN_IDLE_SECONDS`
+  overrides it for tests). An ASGI wrapper counts requests in flight, so a long page never
+  counts as idle.
+- **Registration.** `yomiscan-engine.exe --register --extension-id <id>` (or `--extension-path
+  <unpacked folder>`, which computes the ID as Chrome does) writes the host manifest and the
+  HKCU key `Software\Google\Chrome\NativeMessagingHosts\com.yomiscan.engine`, with no
+  administrator rights. `--unregister` removes both.
+
+**Extension side.**
+- The manifest adds the `nativeMessaging` permission.
+- `companion.ts` asks the host for `status` (cached 30 s, because each check starts the host) and
+  `start`. It keeps port and token in `chrome.storage.session`: memory only, extension pages
+  only. "Host not found" means not installed, and contexts without native messaging (content
+  scripts, tests) see "not installed".
+- `local.ts` is the single seam for local requests. "Local" means the companion when it is
+  installed with its models, otherwise the developer backend on its configured port.
+  - `localFetch` adds the headers. After a network error or a 401, it launches the engine again
+    and retries once.
+  - After a launch, it waits until readiness leaves `initializing`, because the engine answers
+    at once but loads its models for a few seconds.
+  - Request timeouts start only after that wait.
+- Automatic resolves to the companion first (owner decision), then installed browser models,
+  then a running developer backend. An explicit Browser choice never starts the companion.
+- The chapter transport asks the service worker for the address (only for non-browser pages).
+  The service worker hands the token to the offscreen document directly, so content scripts
+  never see it; the offscreen document attaches it only for that exact origin.
+- Advanced → Browser engine shows a line about the companion: not installed, installed with its
+  models, or what it is missing and the `--prepare` command.
+
+**Measurements** (development machine; native host driven like Chrome does):
+
+| Step | Time |
+|---|---:|
+| `status` (host start, model check, answer) | 0.35 s |
+| `start` with no engine running (launch until readiness answers) | 1.4 s |
+| `start` with the engine running (reuse) | 0.36 s |
+
+Without the token, or with a wrong one, the engine answered 401.
+
+**End to end** (`extension/tests/companion-e2e.mjs`):
+- **Setup:** real headless Chrome with a fresh profile, so no browser models; the developer
+  backend stopped; three sample pages; Chrome started with `YOMISCAN_IDLE_SECONDS=20`.
+- **ID:** Chrome assigned the unpacked extension the ID that `--extension-path` computed, and
+  the host answered `status` from the service worker.
+- **Read Chapter**, Automatic: started the companion and read the 3 pages in **12.0 s**,
+  including the launch and model load. The engine kept running after the host exited.
+- **Translate Chapter:** rendered the 3 pages with the pixel renderer in 12.3 s (OCR and
+  translation came from the processing cache).
+- **Idle exit and relaunch:** the engine exited by itself 20 s after the last request. The next
+  Read Chapter launched a new engine and finished in 20.9 s.
+
+Two bugs were found by this run and fixed before merging:
+- The first request after a launch arrived while the models were loading (503).
+- A request timeout created before the launch wait expired during it.
+
+**Not covered yet:**
+- First-start model download from the extension (the panel names the `--prepare` command).
+- An installer, and running the engine from a stable install location; registration now points
+  at the build folder.
+- A console window may flash when Chrome starts the host in a visible (non-headless) Chrome.
+
+All three belong to increment 5.
+
