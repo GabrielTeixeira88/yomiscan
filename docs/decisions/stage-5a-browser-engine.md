@@ -221,20 +221,31 @@ so ("Download the reading models again") instead of looking like a first run.
 - Advanced → Browser engine shows the storage used and the space available.
 
 **End to end** (`extension/tests/first-run-e2e.mjs`: real Chrome, backend stopped, storage
-cleared, three sample pages; the loopback server stood in for Hugging Face until the upload):
+cleared, three sample pages). The first two columns used the loopback server as the model
+source; the last used the published Hugging Face commit (the build default), in a fresh headless
+profile:
 
-| Check | WebGPU, 8 threads | CPU (`--disable-gpu`), 4 threads emulated |
-|---|---|---|
-| Offer before any byte is fetched | 579 MB | 603 MB |
-| Not now, then Read Chapter | Card shown again, nothing downloaded | Same |
-| Download from loopback (verify + store) | 4.5 s | 2.2 s |
-| Automatic → Read Chapter, 3 pages incl. model load | 23.5–24.4 s | 34.9–37.1 s |
-| Cache Storage after install | 552 MiB | 575 MiB |
-| Models removed behind the extension's back | "Download the reading models again", reinstalled in 3.7 s | 3.8 s |
+| Check | WebGPU, loopback | CPU (`--disable-gpu`), 4 threads emulated, loopback | WebGPU, Hugging Face |
+|---|---|---|---|
+| Offer before any byte is fetched | 579 MB | 603 MB | 579 MB |
+| Not now, then Read Chapter | Card shown again, nothing downloaded | Same | Same |
+| Download (verify + store) | 4.5 s | 2.2 s | 43.3 s |
+| Automatic → Read Chapter, 3 pages incl. model load | 23.5–24.4 s | 34.9–37.1 s | 32.1 s |
+| Cache Storage after install | 552 MiB | 575 MiB | 552 MiB |
+| Models removed behind the extension's back | "Download the reading models again", reinstalled in 3.7 s | 3.8 s | Same, reinstalled in 34.5 s |
 
 The CPU column caps WASM at 4 threads on the development CPU, so it is an upper bound for a
-4-core laptop, not a laptop measurement. Real-download time from Hugging Face is measured after
-the upload. No integrated-GPU or 8 GB machine was available.
+4-core laptop, not a laptop measurement. The Hugging Face download time depends on the
+connection (here about 13 MB/s). The slower Read Chapter in that run used a new profile with no
+GPU shader cache. No integrated-GPU or 8 GB machine was available.
+
+**Hosting.** The files are published at
+[huggingface.co/Billy-Herrington/yomiscan-browser-models](https://huggingface.co/Billy-Herrington/yomiscan-browser-models),
+pinned to commit `99fe864242a9cfb29a1b35dc07cf7ad9a4fb59a9` in
+`extension/src/engine/artifact-host.json`. The publish script downloaded all 663 MiB back
+through that URL and matched every size and SHA-256 before writing the pin. Downloads are
+anonymous; no user needs a Hugging Face account. A new bundle is a new commit and a new pin, so
+an installed extension never picks up files it was not built for.
 
 ### Memory: the full stack misses G8
 
@@ -282,7 +293,8 @@ uv run hf auth login                                  # once, write token
 uv run python scripts/publish_browser_artifacts.py --repo <owner>/yomiscan-browser-models
 # Chrome (test profile) with --remote-debugging-port=9231 --enable-unsafe-extension-debugging
 node extension/tests/browser-engine.mjs samples/vision/008.jpg samples/vision/1.jpg
-# First-run setup, backend stopped. YOMISCAN_MODEL_SOURCE=http://127.0.0.1:47620/ uses loopback;
+# First-run setup, backend stopped. Downloads from the pinned Hugging Face commit by default;
+# YOMISCAN_MODEL_SOURCE=http://127.0.0.1:47620/ uses loopback;
 # YOMISCAN_TEST_THREADS=4 emulates a 4-core CPU (Chrome with --disable-gpu).
 node extension/tests/first-run-e2e.mjs samples/vision/008.jpg samples/vision/1.jpg
 ```
