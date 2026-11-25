@@ -89,6 +89,7 @@ def test_onnx_ocr_resolves_tokens_reuses_cache_and_keeps_confidence_diagnostic(t
         ONNXMangaOCREngine(max_tokens=0)
 
 
+@pytest.mark.reference
 def test_transformers_ocr_uses_tokenizer_stop_id_when_model_config_lacks_eos(tmp_path):
     import torch
     from yomiscan.ocr.transformers import TransformersOCREngine

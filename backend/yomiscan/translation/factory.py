@@ -1,4 +1,5 @@
-"""Explicit developer selection. Optional engines never affect baseline startup."""
+"""Translation engine selection. The default is the Torch-free OPUS-MT export (`opus-pinned`, Stage 5b);
+"current" is the PyTorch reference. Optional engines never affect baseline startup."""
 
 import os
 from pathlib import Path
@@ -9,7 +10,7 @@ ENGINE_NAMES = ("current", "hy-mt2-manga", "qwen35-vntl", "qwen25-manga", "fugum
 
 
 def create_translation_engine(name: str | None = None, *, device: Device = "auto") -> TranslationEngine:
-    name = name or os.environ.get("YOMISCAN_TRANSLATION_ENGINE", "current")
+    name = name or os.environ.get("YOMISCAN_TRANSLATION_ENGINE", "opus-pinned")
     if name == "current":
         from .marian import MarianTranslationEngine
         return MarianTranslationEngine(device=device)
@@ -36,7 +37,7 @@ def create_translation_engine(name: str | None = None, *, device: Device = "auto
         raise TranslationInitializationError(
             f"{name} requires YOMISCAN_LLAMA_SERVER and YOMISCAN_{key}_GGUF. "
             "No optional weights are downloaded automatically; see docs/translation-benchmark.md. "
-            "Use YOMISCAN_TRANSLATION_ENGINE=current for the existing translator."
+            "Use YOMISCAN_TRANSLATION_ENGINE=opus-pinned for the default translator."
         )
     lora = None
     if name == "qwen25-manga":

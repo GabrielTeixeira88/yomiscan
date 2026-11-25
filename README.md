@@ -98,14 +98,24 @@ uv run --frozen pytest
 ```
 
 `uv sync` creates a local `.venv`, installs the `yomiscan` package from `backend/`,
-and includes the dev dependency group. Python is constrained to `>=3.13,<3.14`.
+and includes the `dev` and `reference` dependency groups. Python is constrained to `>=3.13,<3.14`.
 The generated `uv.lock` records resolved versions; direct dependencies live in
 `pyproject.toml`. No global Python configuration changes are needed.
 
-Prepare pinned production weights explicitly before running the API:
-`uv run yomiscan-prepare-defaults`. Import JMdict as described below. Normal backend
-startup and readiness do not download weights. Source-only legacy OCR experiment CLIs
-retain their documented behavior; the installed server uses local pinned artifacts.
+The package itself is **Torch-free** (Stage 5b): detection, OCR and OPUS-MT ja→en run on pinned
+ONNX models with ONNX Runtime 1.24.4. On Windows this is the DirectML build, which also runs the
+detector on any GPU. PyTorch, transformers and manga-ocr live in the `reference` dependency group.
+It is installed by default for development, for the parity checks, CUDA and the experimental
+translators, but it is never part of the package or the frozen engine.
+`uv sync --no-default-groups --group dev` gives the Torch-free environment.
+
+Prepare the default models and the dictionary explicitly before running the API:
+`uv run yomiscan-prepare-defaults`. It downloads about 805 MiB from the pinned Hugging Face
+commit and checks each file's SHA-256 into `%LOCALAPPDATA%\YomiScan\models`. `--component`
+limits it to `detection`, `ocr`, `translation` or `dictionary`; `--reference` prepares the
+PyTorch reference weights instead. An imported `data/jmdict.sqlite3` (see below) takes
+precedence over the downloaded dictionary. Normal backend startup and readiness never
+download anything.
 
 ## Single-page analysis (Phase 5)
 
@@ -156,16 +166,16 @@ either engine or remove the models. The browser engine is English only, and Tran
 then shows English as text over each bubble. It currently needs about 2 GB of memory with
 every model loaded. See the [Stage 5a record](docs/decisions/stage-5a-browser-engine.md).
 
-**Torch-free local engine (Stage 5b, in progress).** The backend can run page detection, OCR
-and OPUS-MT ja→en translation without PyTorch, on pinned ONNX models; the detector can also run
-on any Windows GPU through DirectML. It is opt-in for now:
-1. `uv sync --extra vision`
-2. `uv run yomiscan-prepare-engine detector-fp32 ocr-int8 translation-opus-ja-en-fp32`
-   (686 MiB from Hugging Face; each file is SHA-256 checked)
-3. Start the server with `YOMISCAN_DETECTOR=pinned`, `YOMISCAN_OCR=pinned` and
-   `YOMISCAN_TRANSLATION_ENGINE=opus-pinned`.
+**Torch-free local engine (Stage 5b, in progress).** The backend's default engines need no
+PyTorch. On the test corpus, 99.1% of OCR blocks and all 153 translation-set lines are identical
+to the PyTorch path. The detector runs on the GPU through DirectML when one is available
+(`YOMISCAN_ONNX_DEVICE=auto|cpu|directml`). The PyTorch engines stay selectable with
+`YOMISCAN_DETECTOR=current`, `YOMISCAN_OCR=current` and `YOMISCAN_TRANSLATION_ENGINE=current`.
 
-Its translations are identical to the current translator on all 153 test lines.
+`uv run python scripts/build_engine.py` freezes the engine with PyInstaller into
+`.cache/engine-build/dist/yomiscan-engine/`: about 462 MiB without models, no Python needed.
+Its data lives under `%LOCALAPPDATA%\YomiScan`, and `yomiscan-engine.exe --prepare` downloads
+its models. `scripts/validate_engine_build.py` starts the frozen engine and checks it.
 See the [Stage 5b record](docs/decisions/stage-5b-local-engine.md).
 
 Open an image-based chapter and click YomiScan → **Translate Chapter** to replace every
@@ -258,8 +268,9 @@ distinguish initializing, ready and missing resources; `/health` stays unavailab
 until initialization succeeds. Run preparation/import commands and restart after setup
 failures. Startup never silently downloads weights. Set
 `$env:YOMISCAN_DEVICE = "cpu"` before startup to force CPU (default `auto`).
-`YOMISCAN_DICTIONARY` overrides `data/jmdict.sqlite3`. Once models are cached, set
-`$env:HF_HUB_OFFLINE = "1"` to require offline model use.
+`YOMISCAN_DICTIONARY` overrides the dictionary: `data/jmdict.sqlite3` when present, otherwise
+the downloaded copy. The PyTorch reference engines read the Hugging Face cache; once it is
+complete, set `$env:HF_HUB_OFFLINE = "1"` to require offline model use.
 
 Terminal 2, from the repository root:
 
@@ -397,9 +408,11 @@ Missing or incomplete weights produce an initialization error.
 
 ## CPU and GPU
 
-CPU inference is supported. A compatible NVIDIA GPU can be selected automatically
-by manga-ocr when the installed PyTorch build supports CUDA. Having an NVIDIA GPU
-alone does not guarantee acceleration. Check the environment with:
+CPU inference is the baseline. With the default (Torch-free) engines on Windows, the text
+detector uses any DirectML GPU automatically. OCR and translation stay on the CPU, where they
+measured as fast. The rest of this section concerns the PyTorch reference engines: a compatible
+NVIDIA GPU can be selected automatically by manga-ocr when the installed PyTorch build supports
+CUDA. Having an NVIDIA GPU alone does not guarantee acceleration. Check the environment with:
 
 ```powershell
 uv run python -c "import torch; print(torch.__version__); print(torch.cuda.is_available())"

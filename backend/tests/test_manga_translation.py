@@ -84,10 +84,13 @@ def test_qwen25_rejects_echoed_context_lines():
 
 def test_factory_keeps_default_and_requires_real_adapter(monkeypatch):
     import yomiscan.translation.marian as marian
+    import yomiscan.translation.opus_onnx as opus_onnx
     monkeypatch.delenv("YOMISCAN_TRANSLATION_ENGINE", raising=False)
-    sentinel = object()
-    monkeypatch.setattr(marian, "MarianTranslationEngine", lambda **kwargs: sentinel)
-    assert create_translation_engine() is sentinel
+    sentinel, reference = object(), object()
+    monkeypatch.setattr(opus_onnx, "PinnedOpusTranslationEngine", lambda **kwargs: sentinel)
+    monkeypatch.setattr(marian, "MarianTranslationEngine", lambda **kwargs: reference)
+    assert create_translation_engine() is sentinel  # Stage 5b: the Torch-free translator is the default
+    assert create_translation_engine("current") is reference
     with pytest.raises(ValueError):
         create_translation_engine("imaginary")
     monkeypatch.setenv("YOMISCAN_LLAMA_SERVER", "server.exe")

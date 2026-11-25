@@ -18,7 +18,7 @@ def test_text_cli(dictionary_path, capsys):
 
 def test_cli_missing_database(tmp_path, capsys):
     assert analysis_cli.main(["猫", "--dictionary", str(tmp_path / "absent")]) == 3
-    assert "import_jmdict" in capsys.readouterr().err
+    assert "--component dictionary" in capsys.readouterr().err
 
 
 def test_image_cli_and_invalid_image(dictionary_path, tmp_path, monkeypatch, capsys):

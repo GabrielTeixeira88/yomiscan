@@ -77,6 +77,7 @@ def test_unavailable_and_invalid_device():
         select_device("metal", cuda_available=False)
 
 
+@pytest.mark.reference
 def test_reuses_model_and_batches_in_order(upstream):
     engine = MarianTranslationEngine(batch_size=2)
     texts = ["猫", "  でも\n大丈夫 ", "犬"]
@@ -97,6 +98,7 @@ def test_reuses_model_and_batches_in_order(upstream):
     assert upstream.torch.inference_mode.call_count == 3
 
 
+@pytest.mark.reference
 def test_empty_and_invalid_inputs_do_not_generate(upstream):
     engine = MarianTranslationEngine()
     assert engine.translate_many([]) == []
@@ -126,6 +128,7 @@ def test_initialization_error_preserves_cause(upstream):
     assert caught.value.__cause__ is cause
 
 
+@pytest.mark.reference
 def test_inference_error_preserves_cause(upstream):
     engine = MarianTranslationEngine()
     cause = RuntimeError("out of memory")
@@ -135,6 +138,7 @@ def test_inference_error_preserves_cause(upstream):
     assert caught.value.__cause__ is cause
 
 
+@pytest.mark.reference
 def test_long_input_is_rejected_without_truncation(upstream):
     engine = MarianTranslationEngine()
     upstream.model.config.max_position_embeddings = 5
@@ -145,6 +149,7 @@ def test_long_input_is_rejected_without_truncation(upstream):
 
 
 @pytest.mark.parametrize("rows", [[], [Row("")], [Row("partial", tokens=(7, 8))]])
+@pytest.mark.reference
 def test_missing_empty_or_unfinished_output_fails(upstream, rows):
     engine = MarianTranslationEngine()
     upstream.model.generate.side_effect = None
@@ -153,6 +158,7 @@ def test_missing_empty_or_unfinished_output_fails(upstream, rows):
         engine.translate("猫")
 
 
+@pytest.mark.reference
 def test_cuda_moves_model_and_synchronizes_mock_only(upstream):
     upstream.torch.cuda.is_available.return_value = True
     engine = MarianTranslationEngine()

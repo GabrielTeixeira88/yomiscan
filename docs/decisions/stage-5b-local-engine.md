@@ -1,6 +1,6 @@
 # Stage 5b: packaged local engine (optional companion)
 
-Status: **in progress**. Increments 1 (vision) and 2 (translation) are done. Started on the owner's go-ahead (2026-11-25)
+Status: **in progress**. Increments 1 (vision), 2 (translation) and 3 (engine profile and freezing) are done. Started on the owner's go-ahead (2026-11-25)
 after Stage 5a merged.
 
 ## Why this stage exists now
@@ -34,7 +34,7 @@ Each increment is merged only with its tests and a real-model measurement.
 |---|---|---|
 | 1 | **Torch-free vision.** Python readers for pinned ONNX exports of the production detector and manga-ocr (same Hugging Face repository and commit as the browser bundle), an explicit verified download into a per-user folder, and an ONNX Runtime device choice (CPU, DirectML). Parity against the Torch path on the sample corpus, plus CPU and GPU timings. | Done: 99.1% identical text end to end, detection 7× faster on DirectML (see increment 1) |
 | 2 | **Torch-free translation.** OPUS-MT ja→en (then pt-BR, es) without Torch: CTranslate2 and ONNX Runtime beam search compared with transformers on the Stage 3 translation set (identical lines, speed, memory). | Done for ja→en: 153/153 identical lines (see increment 2). The experimental pt-BR / es models stay Torch-only for now. |
-| 3 | **Engine profile and freezing.** Default composition uses the Torch-free engines; Torch, transformers and manga-ocr move to an optional reference extra. A PyInstaller one-folder build with the API tests run against it; measured size and startup. | Planned |
+| 3 | **Engine profile and freezing.** Default composition uses the Torch-free engines; Torch, transformers and manga-ocr move to an optional reference extra. A PyInstaller one-folder build with the API tests run against it; measured size and startup. | Done: Torch-free defaults, frozen engine 462 MiB (89 MiB compressed), ready in about 4 s (see increment 3). The size gate is missed by the UniDic dictionary. |
 | 4 | **Launcher.** A native-messaging host that starts the frozen engine on a random loopback port with a per-launch token, hands both to the extension, and stops it after an idle period. The extension's engine choice gains the companion. | Planned |
 | 5 | **Installer and release.** Per-user Windows installer (native-messaging registration in HKCU, uninstall cleanup), first-start model download with consent, docs, a clean-machine check in Windows Sandbox. | Planned |
 
@@ -48,13 +48,13 @@ Each increment is merged only with its tests and a real-model measurement.
 | Startup | Warm start to `/health` ≤ 10 s on the development machine. |
 | No regressions | `uv run pytest`, the extension tests and the mocked Chrome fixture pass; the developer backend still runs unchanged. |
 
-## Decisions the owner will be asked later (not blocking increment 1)
+## Owner decisions (2026-11-25: "do as you think is best", so the proposals below apply)
 
-- **Code signing.** An unsigned installer shows a SmartScreen warning. Signing costs money every
-  year, which the project has avoided so far. Default: ship unsigned and document the warning.
-- **Automatic order when both engines are installed.** Default proposal: companion first when it
-  is installed (GPU, pixel renderer), browser engine second, then setup.
-- **Hy-MT2 in the installer or as a separate download.** Default proposal: separate, opt-in.
+- **Code signing: unsigned.** An unsigned installer shows a SmartScreen warning; signing costs
+  money every year, which the project has avoided. The warning is documented.
+- **Automatic order when both engines are installed: companion first** (GPU, pixel renderer),
+  browser engine second, then setup.
+- **Hy-MT2: a separate, opt-in download**, not part of the installer.
 
 ## Increment 1: Torch-free vision
 
@@ -193,3 +193,92 @@ revisit this.
 
 **Not done.** The experimental pt-BR and es OPUS models still need Torch; neither has a
 pinned ONNX export yet. They stay available in the developer backend.
+
+## Increment 3: engine profile and freezing
+
+**ONNX Runtime package.** Windows needs `onnxruntime-directml` for the GPU, and its newest
+release is 1.24.4. The same Torch-free workload under three packages (6 pages, 61 crops, 153
+translation lines; development machine, 4 threads):
+
+| Package | Detector / page | OCR / block | Translation / line | Translation identical |
+|---|---:|---:|---:|---:|
+| onnxruntime 1.32.0 (CPU) | 1,413 ms | 275 ms | 210 ms | 153 / 153 |
+| onnxruntime-directml 1.24.4 (CPU path) | 1,553 ms | **181 ms** | 248 ms | 153 / 153 |
+| onnxruntime 1.24.4 (CPU) | 1,596 ms | 184 ms | 214 ms | 153 / 153 |
+
+1.24.4 has the faster int8 OCR kernels. Its OCR text differs slightly from 1.32's on the
+crops, but both read 223/225 blocks identically to PyTorch in increment 1, so neither is less
+accurate. The project now pins **1.24.4 on every platform**: `onnxruntime-directml` on Windows
+and `onnxruntime` elsewhere. Every platform therefore runs the same CPU kernels. The earlier
+`>=1.32` pin had no recorded reason beyond being the newest release.
+
+**Dependencies.**
+- The package's dependencies are Torch-free: ONNX Runtime, sentencepiece, jaconv, fugashi and
+  unidic-lite, OpenCV, FastAPI.
+- PyTorch, transformers, manga-ocr and sacremoses form the `reference` dependency group.
+  `uv sync` installs it by default (`[tool.uv] default-groups`), so development, the parity
+  scripts and CUDA keep working; the wheel and the frozen engine never include it.
+- 44 tests of the PyTorch adapters carry the `reference` marker and are skipped, with a reason,
+  in a Torch-free install. CI runs the suite both ways.
+
+**Defaults.**
+- The default engines are `pinned` (detector), `pinned` (OCR) and `opus-pinned` (translation).
+  The PyTorch engines remain selectable as `current`.
+- `YOMISCAN_ONNX_DEVICE` defaults to `auto`: DirectML when the runtime offers it, else the CPU.
+- `yomiscan-prepare-defaults` downloads the default models plus the dictionary (805 MiB,
+  SHA-256 checked); `--reference` keeps the old PyTorch downloads.
+- The local bundle gains the `dictionary` component, the browser bundle's JMdict file. An
+  imported `data/jmdict.sqlite3` still takes precedence.
+- Readiness lists the default engines first and declares each PyTorch model's dependency.
+- Hugging Face cache lookups are skipped when `huggingface_hub` is absent.
+
+**Frozen engine.**
+- `yomiscan/engine_main.py` (`yomiscan-engine`) is the packaged entry point. It never reads the
+  working directory: models and the dictionary come from `%LOCALAPPDATA%\YomiScan\models`, and
+  the processing cache and glossaries live under `%LOCALAPPDATA%\YomiScan`.
+- `--prepare [--component ...]` downloads the models explicitly. Readiness then reports
+  `yomiscan-engine --prepare` as the setup command.
+- `scripts/build_engine.py` syncs its own environment without the `reference` group, then runs
+  `packaging/engine/yomiscan-engine.spec`. The spec excludes the PyTorch packages and fails
+  the build if any reached the bundle.
+- YomiScan's own `.py` files ship next to their bytecode (`module_collection_mode
+  "pyz+py"`), because the processing cache keys results by a hash of the analysis sources.
+- OpenCV's FFmpeg video plugin (30 MB) is removed.
+- `scripts/validate_engine_build.py` runs the `.exe` with a fresh per-user folder: with no
+  models, readiness must report the setup; with models, it checks readiness, text and a page.
+
+**Measurements** (development machine; cold start; page `008.jpg`, 11 blocks):
+
+| | Developer backend, PyTorch (CPU) | Frozen engine, CPU | Frozen engine, detector on DirectML |
+|---|---:|---:|---:|
+| Ready to serve | 19.1 s | **4.3 s** | **4.1 s** |
+| First page (models load on first use) | 10.4 s | 9.4 s | 8.4 s |
+| Working set, ready / after the page | 1,132 / 1,448 MiB | 913 / **1,222 MiB** | 912 / 1,469 MiB |
+| Private bytes after the page | 2,553 MiB | 2,013 MiB | 2,894 MiB |
+
+- Text analysis took 207–261 ms, and every block on the page was translated.
+- The frozen `.exe` downloaded the dictionary itself from Hugging Face (119 MiB in 6 s).
+- With no models, it answered readiness 1.1 s after launch, listing exactly the missing
+  defaults and their `--prepare` commands.
+- DirectML commits extra private memory, but its working set stays close to the CPU path's.
+
+**Size gate: missed and explained.** The folder is **462 MiB** without models (201 files), over
+the 400 MB target. A solid LZMA stream over it, roughly what an installer stores, is **89 MiB**.
+The largest parts:
+- unidic-lite: 248 MiB, the dictionary the fugashi tokenizer memory-maps. Every Python install
+  of YomiScan already carries it.
+- OpenCV: 70 MiB after the FFmpeg plugin is removed; the page renderer needs it.
+- ONNX Runtime: 63 MiB.
+
+Shrinking further means replacing the tokenizer's dictionary, which would change the lexical
+analysis that the golden set measures. That is not worth it for disk space, and the download is
+what users notice. Increment 5 measures the real installer.
+
+**Startup gate: passed.** About 4 s to ready (gate ≤ 10 s).
+
+**CI.** Two new jobs:
+- "Python 3.13 without PyTorch": the suite in a Torch-free environment.
+- "Frozen local engine / Windows": builds the engine and runs the no-model check.
+
+The distribution check installs the wheel without the `reference` group and expects the
+default engines to report their missing models.

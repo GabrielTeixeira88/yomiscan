@@ -220,7 +220,17 @@ Increment 2 adds Torch-free OPUS-MT ja→en (`YOMISCAN_TRANSLATION_ENGINE=opus-p
 - `translation/beam.py` ports transformers' beam search.
 - `translation/marian_sentencepiece.py` replaces `MarianTokenizer` with `sentencepiece`.
 
-It matches the Torch translator on all 153 lines of the translation set. See the
+It matches the Torch translator on all 153 lines of the translation set.
+
+Increment 3 makes these engines the **defaults**:
+- **Package:** Torch-free, on ONNX Runtime 1.24.4 (the DirectML build on Windows). PyTorch moves
+  to the `reference` dependency group.
+- **Entry point:** `engine_main.py` is the frozen engine's entry, with per-user paths and
+  `--prepare`.
+- **Build:** `scripts/build_engine.py` freezes it with `packaging/engine/yomiscan-engine.spec`.
+- **Readiness:** `readiness.ENGINE_DEFAULTS` lists the three default components, and
+  `prepare_command()` names the right setup command for the developer backend or the frozen
+  engine. See the
 [Stage 5b record](decisions/stage-5b-local-engine.md).
 
 ## Post-MVP reader controls, readiness and distribution

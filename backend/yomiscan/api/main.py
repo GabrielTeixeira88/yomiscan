@@ -98,9 +98,8 @@ def default_service() -> AbstractContextManager[ImageAnalysisService]:
     device = os.getenv("YOMISCAN_DEVICE", "auto")
     if device not in ("auto", "cpu", "cuda"):
         raise ValueError("YOMISCAN_DEVICE must be auto, cpu, or cuda")
-    return open_local_service(
-        Path(os.getenv("YOMISCAN_DICTIONARY", "data/jmdict.sqlite3")), device=cast(Device, device),
-    )
+    from ..engine_models import default_dictionary
+    return open_local_service(default_dictionary(), device=cast(Device, device))
 
 
 def analyze_upload(service: ImageAnalysisService, data: bytes, page: bool = False,

@@ -46,7 +46,8 @@ def main(argv: list[str] | None = None) -> int:
     python = environment/("Scripts/python.exe" if os.name == "nt" else "bin/python")
     # Frozen sync can use exact cached lockfile URLs without a cached registry index.
     # pip's requirements resolver may need index metadata that sync never requested.
-    run(["uv", "sync", "--frozen", "--no-dev", "--no-install-project", "--offline"],
+    # Only the package's own dependencies: the PyTorch `reference` group is not part of the release.
+    run(["uv", "sync", "--frozen", "--no-default-groups", "--no-install-project", "--offline"],
         env={**os.environ, "UV_PROJECT_ENVIRONMENT": str(environment)})
     wheel, source = next(artifacts.glob("*.whl")), next(artifacts.glob("*.tar.gz"))
     imports = ("import importlib.metadata,sys; from pathlib import Path; import yomiscan; import yomiscan.api.main; "
@@ -57,13 +58,17 @@ def main(argv: list[str] | None = None) -> int:
         run(["uv", "pip", "install", "--python", str(python), "--offline", "--no-deps", "--reinstall", str(package)])
         run([str(python), "-I", "-c", imports])
     scripts = environment/("Scripts" if os.name == "nt" else "bin")
-    for command in ("yomiscan-server", "yomiscan-import-jmdict", "yomiscan-prepare-defaults", "yomiscan-prepare-vision", "yomiscan-prepare-translation", "yomiscan-translate"):
+    for command in ("yomiscan-server", "yomiscan-engine", "yomiscan-import-jmdict", "yomiscan-prepare-defaults", "yomiscan-prepare-engine",
+                    "yomiscan-prepare-vision", "yomiscan-prepare-translation", "yomiscan-translate"):
         run([str(scripts/(command+(".exe" if os.name == "nt" else ""))), "--help"], stdout=subprocess.DEVNULL)
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0));port = sock.getsockname()[1]
     env = {**os.environ, "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1", "HF_HOME": str(environment/"empty-model-cache"),
-        "YOMISCAN_DICTIONARY": str(environment/"missing-dictionary.sqlite3"), "YOMISCAN_TRANSLATION_ENGINE": "current",
-        "YOMISCAN_OCR": "current", "YOMISCAN_DETECTOR": "current"}
+        "YOMISCAN_DICTIONARY": str(environment/"missing-dictionary.sqlite3"),
+        # The default (Torch-free) engines with an empty model folder: no user models are found.
+        "YOMISCAN_ENGINE_MODELS": str(environment/"empty-engine-models"), "LOCALAPPDATA": str(environment/"local-app-data")}
+    for variable in ("YOMISCAN_TRANSLATION_ENGINE", "YOMISCAN_OCR", "YOMISCAN_DETECTOR", "YOMISCAN_ONNX_DEVICE"):
+        env.pop(variable, None)
     flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
     with (environment/"startup.log").open("wb") as log:
         process = subprocess.Popen([str(scripts/("yomiscan-server.exe" if os.name == "nt" else "yomiscan-server")),

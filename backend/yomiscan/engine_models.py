@@ -85,13 +85,30 @@ def installed_files(component_id: str, environment: dict[str, str] | None = None
     return present, complete
 
 
+def data_root(environment: dict[str, str] | None = None) -> Path:
+    """Per-user YomiScan data: %LOCALAPPDATA%/YomiScan on Windows, ~/.cache/yomiscan elsewhere."""
+    environment = dict(os.environ) if environment is None else environment
+    if environment.get("LOCALAPPDATA"):
+        return Path(environment["LOCALAPPDATA"]) / "YomiScan"
+    return Path.home() / ".cache" / "yomiscan"
+
+
 def models_root(environment: dict[str, str] | None = None) -> Path:
     environment = dict(os.environ) if environment is None else environment
     if environment.get("YOMISCAN_ENGINE_MODELS"):
         return Path(environment["YOMISCAN_ENGINE_MODELS"])
-    if environment.get("LOCALAPPDATA"):
-        return Path(environment["LOCALAPPDATA"]) / "YomiScan" / "models"
-    return Path.home() / ".cache" / "yomiscan" / "models"
+    return data_root(environment) / "models"
+
+
+def default_dictionary(environment: dict[str, str] | None = None) -> Path:
+    """YOMISCAN_DICTIONARY, else an imported data/jmdict.sqlite3, else the downloaded bundle's copy."""
+    environment = dict(os.environ) if environment is None else environment
+    if environment.get("YOMISCAN_DICTIONARY"):
+        return Path(environment["YOMISCAN_DICTIONARY"])
+    imported = Path("data") / "jmdict.sqlite3"
+    if imported.is_file():
+        return imported
+    return models_root(environment) / load_bundle().name / "dictionary" / "jmdict.sqlite3"
 
 
 def file_digest(path: Path) -> str:

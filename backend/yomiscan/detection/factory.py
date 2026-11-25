@@ -9,7 +9,7 @@ DETECTOR_NAMES = ("current", "onnx-int8", "pinned")
 
 def create_detector(name: str | None = None, *, device: Device = "auto", bubble_threshold: float = .5,
                     free_threshold: float = .5, threads: int | None = None) -> TextDetector:
-    name = name or os.environ.get("YOMISCAN_DETECTOR", "current")
+    name = name or os.environ.get("YOMISCAN_DETECTOR", "pinned")
     if name == "current":
         from .rtdetr import ComicTextDetector
         if threads is not None:

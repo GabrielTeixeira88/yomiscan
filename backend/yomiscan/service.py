@@ -1,6 +1,7 @@
 """Application composition shared by transports; no HTTP-specific logic."""
 
 from contextlib import contextmanager, ExitStack
+from importlib.util import find_spec
 from collections.abc import Iterator
 from pathlib import Path
 import os
@@ -290,6 +291,8 @@ def open_local_service(
         from .readiness import require_local_models, SetupUnavailable
         require_local_models(dict(os.environ))
         if device == "cuda":
+            if find_spec("torch") is None:
+                raise SetupUnavailable("unsupported_device")  # CUDA is a PyTorch reference path
             import torch
             if not torch.cuda.is_available():
                 raise SetupUnavailable("unsupported_device")

@@ -88,6 +88,20 @@
      "sha256": "697e1bb3e69133c786ff26ed8bd4ae7a3c86b549bddc41234359c9abc00ac805"
     }
    ]
+  },
+  {
+   "id": "dictionary",
+   "kind": "dictionary",
+   "variant": "jmdict-schema2",
+   "license": "CC-BY-SA-4.0 (EDRDG)",
+   "source": "JMdict (EDRDG), imported by scripts/import_jmdict.py; attribution required",
+   "files": [
+    {
+     "path": "dictionary/jmdict.sqlite3",
+     "bytes": 125067264,
+     "sha256": "2ee60d9de22640c57ec02e616992c483e8cde21fbbedb8ad346c4051ba3a1709"
+    }
+   ]
   }
  ]
 }

@@ -54,9 +54,7 @@ class PinnedOpusTranslationEngine:
             if not self.past_names or "logits" not in self.output_names:
                 raise ValueError("The decoder export has no key/value cache inputs or no logits output")
         except Exception as exc:
-            raise TranslationInitializationError(
-                f"Could not initialize the Torch-free OPUS-MT translator: {exc}. "
-                f"Run: uv run yomiscan-prepare-engine {COMPONENT}") from exc
+            raise TranslationInitializationError(f"Could not initialize the Torch-free OPUS-MT translator: {exc}") from exc
         self.device = "cpu"
 
     def diagnostic_metadata(self) -> dict[str, object]:
