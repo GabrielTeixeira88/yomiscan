@@ -9,6 +9,8 @@ Chrome starts `yomiscan-engine.exe chrome-extension://<id>/` as a native-messagi
   per-launch token (passed through the environment, never the command line). Answers
   `{port, token}` once the engine serves readiness. The engine exits by itself after an idle
   period; the next `start` launches it again.
+- `prepare`: start the explicit model download (the user consented in the extension) as a
+  detached process that writes its progress; `status` reports it.
 - `stop`: end the running engine.
 
 The engine's port, token and process id are kept in `engine-state.json` in the per-user data
@@ -133,11 +135,29 @@ class EngineState:
     version: str
 
 
+HOST_EXECUTABLE = "yomiscan-engine-host.exe"
+
+
 def engine_command() -> list[str]:
-    """The packaged executable, or this Python running the engine module during development."""
+    """The packaged windowless executable (no console window), or this Python during development."""
     if getattr(sys, "frozen", False):
-        return [sys.executable]
+        windowless = Path(sys.executable).with_name(HOST_EXECUTABLE)
+        return [str(windowless if windowless.is_file() else sys.executable)]
     return [sys.executable, "-m", "yomiscan.engine_main"]
+
+
+def detached(command: list[str], log: BinaryIO, environment: dict[str, str]) -> subprocess.Popen:
+    """Start a process that outlives Chrome's native-messaging host (and its job object)."""
+    if os.name != "nt":
+        return subprocess.Popen(command, env=environment, stdin=subprocess.DEVNULL, stdout=log,
+                                stderr=subprocess.STDOUT, start_new_session=True)
+    flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+    try:
+        return subprocess.Popen(command, env=environment, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
+                                creationflags=flags | subprocess.CREATE_BREAKAWAY_FROM_JOB)
+    except PermissionError:  # the job does not allow breakaway
+        return subprocess.Popen(command, env=environment, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
+                                creationflags=flags)
 
 
 def free_port() -> int:
@@ -213,20 +233,44 @@ class Launcher:
 
     def _spawn(self, port: int, token: str) -> subprocess.Popen:
         self.log_path().parent.mkdir(parents=True, exist_ok=True)
-        environment = {**os.environ, "YOMISCAN_TOKEN": token}
         command = [*engine_command(), "--port", str(port), "--idle-exit", str(self.idle_seconds)]
         with self.log_path().open("ab") as log:
-            if os.name != "nt":
-                return subprocess.Popen(command, env=environment, stdin=subprocess.DEVNULL, stdout=log,
-                                        stderr=subprocess.STDOUT, start_new_session=True)
-            detached = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
-            try:
-                # Chrome runs native hosts in a job object; leave it so the engine outlives the host.
-                return subprocess.Popen(command, env=environment, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
-                                        creationflags=detached | subprocess.CREATE_BREAKAWAY_FROM_JOB)
-            except PermissionError:
-                return subprocess.Popen(command, env=environment, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
-                                        creationflags=detached)
+            return detached(command, log, {**os.environ, "YOMISCAN_TOKEN": token})
+
+    # ---- explicit model download ----
+
+    def progress_path(self) -> Path:
+        return self.data / "prepare-progress.json"
+
+    def progress(self) -> dict[str, Any] | None:
+        """The download's progress; a download whose process is gone is reported as failed."""
+        try:
+            current = json.loads(self.progress_path().read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        if current.get("state") in ("starting", "running") and not _alive(int(current.get("pid") or 0)):
+            log = self.log_path().with_name("prepare.log")
+            return {**current, "state": "failed", "error": f"The download stopped unexpectedly; see {log}"}
+        return current
+
+    def prepare(self, launch: Callable[[list[str]], Any] | None = None) -> dict[str, Any]:
+        """Start the download unless one is already running; finished files are kept and skipped."""
+        current = self.progress()
+        if current and current.get("state") == "running" and _alive(int(current.get("pid", 0))):
+            return current
+        self.progress_path().unlink(missing_ok=True)
+        command = [*engine_command(), "--prepare", "--progress", str(self.progress_path())]
+        if launch is not None:
+            process = launch(command)
+        else:
+            self.log_path().parent.mkdir(parents=True, exist_ok=True)
+            with (self.log_path().with_name("prepare.log")).open("ab") as log:
+                process = detached(command, log, dict(os.environ))
+        # Until the download writes its first progress, this records which process to watch.
+        state = {"state": "starting", "pid": getattr(process, "pid", 0)}
+        self.data.mkdir(parents=True, exist_ok=True)
+        self.progress_path().write_text(json.dumps(state), encoding="utf-8")
+        return state
 
     def _lock(self):
         launcher = self
@@ -255,23 +299,47 @@ class Launcher:
         return Lock()
 
 
+def _alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        import ctypes
+        handle = ctypes.windll.kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not handle:
+            return False
+        code = ctypes.c_ulong()
+        ctypes.windll.kernel32.GetExitCodeProcess(handle, ctypes.byref(code))
+        ctypes.windll.kernel32.CloseHandle(handle)
+        return code.value == 259  # STILL_ACTIVE
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
 # ---- host ------------------------------------------------------------------------------------
 
 def models_status(environment: dict[str, str]) -> dict[str, Any]:
-    from .engine_models import installed_files
+    """Missing default components and how many bytes they still need (for the consent text)."""
+    from .engine_models import default_host, installed_files, load_bundle
     from .readiness import ENGINE_DEFAULTS
+    bundle, host = load_bundle(), default_host()
     missing = [component for _, _, component in ENGINE_DEFAULTS if not installed_files(component, environment)[1]]
-    dictionary = Path(environment["YOMISCAN_DICTIONARY"])
-    if not dictionary.is_file():
+    if not Path(environment["YOMISCAN_DICTIONARY"]).is_file():
         missing.append("dictionary")
-    return {"ready": not missing, "missing": missing}
+    return {"ready": not missing, "missing": missing, "bytes": sum(bundle.components[c].size for c in missing),
+            "source": f"huggingface.co/{host['repository']}" if host.get("repository") else str(host.get("base"))}
 
 
 def handle(message: dict[str, Any], launcher: Launcher, environment: dict[str, str]) -> dict[str, Any]:
     kind = message.get("type")
     if kind == "status":
         running = launcher.running()
-        return {"ok": True, "version": launcher.version, "models": models_status(environment), "running": running is not None}
+        return {"ok": True, "version": launcher.version, "models": models_status(environment), "running": running is not None,
+                "prepare": launcher.progress()}
+    if kind == "prepare":
+        return {"ok": True, "prepare": launcher.prepare()}
     if kind == "start":
         state = launcher.start()
         return {"ok": True, "version": launcher.version, "port": state.port, "token": state.token}

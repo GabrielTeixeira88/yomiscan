@@ -239,7 +239,16 @@ Increment 4 lets Chrome start that engine:
   `engine_main.ActivityTracker` drives the idle exit.
 - **Extension:** `companion.ts` (native messaging, session-only token) and `local.ts`
   (`localFetch`) route every local request. Automatic tries the companion first. The offscreen
-  page transport receives the token from the service worker, never from content scripts. See the
+  page transport receives the token from the service worker, never from content scripts.
+
+Increment 5 adds the first start and the installer:
+- **First start:** the host's `prepare` starts the explicit model download in its own process
+  and reports progress. `chapter/companion-setup.ts` offers it, with consent.
+- **Windowless executable:** `yomiscan-engine-host.exe` is what Chrome starts, so no console
+  window appears.
+- **Installer:** `packaging/engine/installer.nsi` and `scripts/build_installer.py` build a
+  per-user NSIS installer. `scripts/validate_installer.py` checks it on CI's clean Windows
+  runner. See the
 [Stage 5b record](decisions/stage-5b-local-engine.md).
 
 ## Post-MVP reader controls, readiness and distribution

@@ -8,6 +8,7 @@ import {HistoryControls} from './history-controls';
 import {SetupControls} from './setup-controls';
 import {EngineControls} from './engine-controls';
 import {EngineSetup} from './engine-setup';
+import {CompanionSetup} from './companion-setup';
 import {ENGINE_MODE_KEY,type EngineMode} from '../engine-mode';
 
 export class ChapterControls {
@@ -28,6 +29,9 @@ export class ChapterControls {
   /** The engine of the current session, chosen when Read or Translate Chapter starts (engine-mode.ts). */
   private engine:EngineMode='local';
   private setup=new EngineSetup(()=>{this.status.textContent='Reading models installed. Click Read Chapter, Translate Chapter or Select Text.';});
+  private companionSetup=new CompanionSetup(()=>{this.status.textContent='Local engine ready. Click Read Chapter, Translate Chapter or Select Text.';});
+  /** The local engine's download card first (Stage 5b); the browser models' card only when it is not shown. */
+  private async checkEngines(force:boolean){return this.setup.check(force,await this.companionSetup.check(force));}
   constructor(selectText:()=>void,private showStudy:(data:Analysis,anchor:Rect)=>void=()=>{}) {
     this.host.dataset.yomiscan="controls";
     this.host.style.cssText="all:initial!important;position:fixed!important;top:12px!important;right:12px!important;z-index:2147483646!important;";
@@ -38,7 +42,7 @@ export class ChapterControls {
     const panel=document.createElement("section");panel.className="chapter-panel";panel.setAttribute("aria-label","YomiScan controls");
     const header=document.createElement("header"), title=document.createElement("strong");title.textContent="YomiScan";
     const button=(label:string,action:()=>void)=>{const b=document.createElement("button");b.textContent=label;b.addEventListener("click",action);return b;};
-    header.append(title,button("×",()=>{this.showHost(false);}));panel.append(header,this.setup.element);
+    header.append(title,button("×",()=>{this.showHost(false);}));panel.append(header,this.companionSetup.element,this.setup.element);
     const heading=(text:string)=>{const h=document.createElement("h2");h.textContent=text;panel.append(h);};
     heading("Study");panel.append(button("Select Text",selectText));
     // With the browser engine, Translate Chapter reads pages and draws their English over each bubble
@@ -140,12 +144,12 @@ export class ChapterControls {
   }
   private showHost(visible:boolean):void {this.host.style.setProperty("display",visible?"block":"none","important");}
   private selectedPageId():number|undefined {return this.pageSelect.value?Number(this.pageSelect.value):undefined;}
-  open():void {this.showHost(true);void this.setup.check(true).catch(error=>{this.status.textContent=error instanceof Error?error.message:String(error);});}
+  open():void {this.showHost(true);void this.checkEngines(true).catch(error=>{this.status.textContent=error instanceof Error?error.message:String(error);});}
   /** Resolve the engine, then start reading. With the browser engine, Translate Chapter reads pages and
    * draws their English over each bubble (the pixel renderer belongs to the local backend). */
   private async begin(mode:SessionMode):Promise<void> {
     try {
-      const engine=await this.setup.check(true);
+      const engine=await this.checkEngines(true);
       if(engine==='setup'){this.status.textContent='Download the reading models above, or start the local backend, then try again.';return;}
       this.engine=engine;
     }catch(error){this.status.textContent=error instanceof Error?error.message:String(error);return;}
@@ -153,7 +157,7 @@ export class ChapterControls {
   }
   /** Before Select Text: false (and the setup card shown) when no engine can analyze a selection yet. */
   async ensureEngine():Promise<boolean> {
-    try {if(await this.setup.check(true)!=='setup')return true;}
+    try {if(await this.checkEngines(true)!=='setup')return true;}
     catch(error){this.status.textContent=error instanceof Error?error.message:String(error);}
     this.showHost(true);return false;
   }

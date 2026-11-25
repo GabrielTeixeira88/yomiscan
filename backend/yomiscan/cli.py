@@ -3,6 +3,7 @@
 import argparse
 from importlib.metadata import version
 import os
+from pathlib import Path
 
 # Not 8765: that is AnkiConnect's default port, often running beside YomiScan.
 DEFAULT_PORT = 47615
@@ -30,15 +31,24 @@ def prepare_defaults(argv: list[str] | None = None) -> int:
     parser.add_argument("--component", choices=("ocr", "detection", "translation", "dictionary", "all"), default="all")
     parser.add_argument("--reference", action="store_true",
                         help="Prepare the PyTorch reference artifacts instead (needs the `reference` dependency group)")
+    parser.add_argument("--progress", type=Path, help="Also write progress as JSON to this file (the extension polls it)")
     args = parser.parse_args(argv)
     if not args.reference:
-        from .engine_models import download_components, load_bundle, models_root
+        from .engine_models import ProgressFile, download_components, load_bundle, models_root
         from .readiness import ENGINE_DEFAULTS
         selected = [component for _, kind, component in ENGINE_DEFAULTS if args.component in (kind, "all")]
         selected += ["dictionary"] if args.component in ("dictionary", "all") else []
         bundle = load_bundle()
         print(f"Downloading {sum(bundle.components[c].size for c in selected) / 2**20:.0f} MiB to {models_root() / bundle.name}")
-        download_components(selected, bundle=bundle)
+        progress = ProgressFile(args.progress, [f for c in selected for f in bundle.components[c].files]) if args.progress else None
+        try:
+            download_components(selected, bundle=bundle, progress=progress.update if progress else None)
+        except Exception as error:
+            if progress:
+                progress.fail(error)  # the extension shows it; the exception still ends this process
+            raise
+        if progress:
+            progress.finish()
         print("Prepared and verified " + ", ".join(selected) + "; licenses remain separate from YomiScan MIT.")
         return 0
     if args.component == "dictionary":

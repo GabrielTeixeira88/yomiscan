@@ -67,13 +67,14 @@ export class EngineSetup {
     this.element.append(this.title, this.body, this.size, this.download, this.cancel, this.later, this.bar, this.progress, this.source, licenses, backend);
   }
 
-  /** Which engine serves the next request; shows this card when the answer is "setup". */
-  async check(force = false): Promise<ResolvedEngine> {
+  /** Which engine serves the next request; shows this card when the answer is "setup", unless
+   * `suppressed` (the local engine's own download card is shown instead). */
+  async check(force = false, suppressed = false): Promise<ResolvedEngine> {
     const reply = await chrome.runtime.sendMessage({type: 'engine-resolve'}).catch(() => null);
     if (!reply?.ok) throw new Error(reply?.error ?? 'YomiScan could not check its engines. Reload the extension.');
     const state = reply.data as EngineState;
     if (force) this.dismissed = false;
-    if (state.mode === 'setup' && state.status && !this.dismissed) this.show(state);
+    if (state.mode === 'setup' && state.status && !this.dismissed && !suppressed) this.show(state);
     else if (state.status?.install.state !== 'running') this.hide();
     return state.mode;
   }

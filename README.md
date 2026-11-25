@@ -177,11 +177,19 @@ to the PyTorch path. The detector runs on the GPU through DirectML when one is a
 Its data lives under `%LOCALAPPDATA%\YomiScan`, and `yomiscan-engine.exe --prepare` downloads
 its models. `scripts/validate_engine_build.py` starts the frozen engine and checks it.
 
-**The extension starts the engine itself** once it is registered:
+**The extension starts the engine itself** once it is installed or registered.
+`uv run python scripts/build_installer.py` (needs NSIS 3) builds
+`YomiScan-Engine-Setup-<version>.exe`. It is a per-user installer with no administrator rights,
+installs into `%LOCALAPPDATA%\Programs\YomiScan Engine`, and asks for the extension's ID (shown
+under Advanced → Browser engine). Every CI run builds it on a clean Windows runner and uploads
+it. The installer is unsigned, so Windows SmartScreen may warn. For development, register a
+build folder directly:
 
     yomiscan-engine.exe --register --extension-path extension\dist
 
-The registration is one per-user registry key; `--unregister` removes it. Automatic then
+The registration is one per-user registry key; `--unregister` removes it. On first use, the
+extension offers the engine's models (845 MB from Hugging Face) and downloads them only after you
+click. Automatic then
 prefers this "local engine companion": Chrome starts it through native messaging on a random
 local port with a one-time token, and it exits after 15 idle minutes. No `yomiscan-server`
 terminal is needed.

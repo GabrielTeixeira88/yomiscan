@@ -23,8 +23,9 @@ export function engineSummary(status: EngineStatus): string {
 }
 
 /** The local engine companion (Stage 5b): installed, ready, or what it still needs. */
-export function companionSummary(status: CompanionStatus): string {
-  if (!status.installed) return 'Local engine: not installed.';
+export function companionSummary(status: CompanionStatus, extensionId?: string): string {
+  if (!status.installed) return 'Local engine: not installed.' +
+    (extensionId ? ` To use it, install YomiScan Engine; its installer asks for this extension's ID: ${extensionId}` : '');
   const name = `Local engine${status.version ? ` ${status.version}` : ''}`;
   if (status.error) return `${name}: installed, but it did not answer (${status.error}).`;
   if (!status.ready) return `${name}: installed; missing ${status.missing.join(', ')}. Run yomiscan-engine.exe --prepare, then check again.`;
@@ -81,7 +82,7 @@ export class EngineControls {
     const [reply, companion] = await Promise.all([
       chrome.runtime.sendMessage({type: 'engine', operation, base: this.source.value}).catch(() => null),
       operation === 'status' ? chrome.runtime.sendMessage({type: 'companion-status'}).catch(() => null) : Promise.resolve(null)]);
-    const companionLine = companion?.ok ? `${companionSummary(companion.data as CompanionStatus)}\n` : '';
+    const companionLine = companion?.ok ? `${companionSummary(companion.data as CompanionStatus, chrome.runtime.id)}\n` : '';
     if (!reply?.ok) {this.output.textContent = companionLine + (reply?.error ?? 'Browser engine unavailable. Reload the extension.');return;}
     const status = reply.data as EngineStatus;
     this.output.textContent = companionLine + engineSummary(status);

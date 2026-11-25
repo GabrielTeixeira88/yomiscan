@@ -86,8 +86,10 @@ def installed_files(component_id: str, environment: dict[str, str] | None = None
 
 
 def data_root(environment: dict[str, str] | None = None) -> Path:
-    """Per-user YomiScan data: %LOCALAPPDATA%/YomiScan on Windows, ~/.cache/yomiscan elsewhere."""
+    """Per-user YomiScan data: YOMISCAN_DATA, else %LOCALAPPDATA%/YomiScan on Windows, else ~/.cache/yomiscan."""
     environment = dict(os.environ) if environment is None else environment
+    if environment.get("YOMISCAN_DATA"):
+        return Path(environment["YOMISCAN_DATA"])
     if environment.get("LOCALAPPDATA"):
         return Path(environment["LOCALAPPDATA"]) / "YomiScan"
     return Path.home() / ".cache" / "yomiscan"
@@ -136,6 +138,37 @@ def component_directory(component_id: str, *, bundle: Bundle | None = None, root
 
 
 Opener = Callable[..., Any]
+
+
+class ProgressFile:
+    """Download progress as small JSON for another process: written atomically, at most twice a second."""
+
+    def __init__(self, path: Path, files: Iterable[PinnedFile], clock: Callable[[], float] | None = None) -> None:
+        import time
+        self.path, self.clock = path, clock or time.monotonic
+        self.sizes = {f.path: f.bytes for f in files}
+        self.done: dict[str, int] = {}
+        self.written = float("-inf")
+        self._write({"state": "running", "loaded": 0})
+
+    def _write(self, data: dict[str, Any]) -> None:
+        record = {"pid": os.getpid(), "total": sum(self.sizes.values()), **data}
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        partial = self.path.with_name(self.path.name + ".tmp")
+        partial.write_text(json.dumps(record), encoding="utf-8")
+        partial.replace(self.path)
+
+    def update(self, path: str, size: int) -> None:
+        self.done[path] = size
+        if self.clock() - self.written >= .5:
+            self.written = self.clock()
+            self._write({"state": "running", "loaded": sum(self.done.values()), "file": path})
+
+    def finish(self) -> None:
+        self._write({"state": "done", "loaded": sum(self.sizes.values())})
+
+    def fail(self, error: BaseException) -> None:
+        self._write({"state": "failed", "loaded": sum(self.done.values()), "error": f"{type(error).__name__}: {error}"})
 
 
 def download_components(component_ids: Iterable[str], *, source: str | None = None, bundle: Bundle | None = None,

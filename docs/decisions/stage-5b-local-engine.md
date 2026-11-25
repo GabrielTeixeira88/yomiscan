@@ -1,6 +1,6 @@
 # Stage 5b: packaged local engine (optional companion)
 
-Status: **in progress**. Increments 1–4 (vision, translation, engine profile and freezing, launcher) are done. Started on the owner's go-ahead (2026-11-25)
+Status: **built**. Increments 1–5 are done. The installer is compiled and checked on CI's clean Windows runner; running it on the owner's machine waits for the owner's go-ahead (see increment 5). Started on the owner's go-ahead (2026-11-25)
 after Stage 5a merged.
 
 ## Why this stage exists now
@@ -36,7 +36,7 @@ Each increment is merged only with its tests and a real-model measurement.
 | 2 | **Torch-free translation.** OPUS-MT ja→en (then pt-BR, es) without Torch: CTranslate2 and ONNX Runtime beam search compared with transformers on the Stage 3 translation set (identical lines, speed, memory). | Done for ja→en: 153/153 identical lines (see increment 2). The experimental pt-BR / es models stay Torch-only for now. |
 | 3 | **Engine profile and freezing.** Default composition uses the Torch-free engines; Torch, transformers and manga-ocr move to an optional reference extra. A PyInstaller one-folder build with the API tests run against it; measured size and startup. | Done: Torch-free defaults, frozen engine 462 MiB (89 MiB compressed), ready in about 4 s (see increment 3). |
 | 4 | **Launcher.** A native-messaging host that starts the frozen engine on a random loopback port with a per-launch token, hands both to the extension, and stops it after an idle period. The extension's engine choice gains the companion. | Done: real Chrome end to end, launch to first chapter in 12 s, idle exit and relaunch (see increment 4) |
-| 5 | **Installer and release.** Per-user Windows installer (native-messaging registration in HKCU, uninstall cleanup), first-start model download with consent, docs, a clean-machine check in Windows Sandbox. | Planned |
+| 5 | **Installer and release.** Per-user Windows installer (native-messaging registration in HKCU, uninstall cleanup), first-start model download with consent, docs, a clean-machine check in Windows Sandbox. | Done: NSIS installer built and checked on CI's clean Windows runner instead of Windows Sandbox; first start downloads 845 MB in 37 s after consent (see increment 5) |
 
 ## Gates
 
@@ -365,4 +365,82 @@ Two bugs were found by this run and fixed before merging:
 - A console window may flash when Chrome starts the host in a visible (non-headless) Chrome.
 
 All three belong to increment 5.
+
+## Increment 5: installer and first start
+
+**First start, with consent.**
+- The native host gains `prepare`. It starts the explicit download (`yomiscan-engine --prepare
+  --progress <file>`) as a detached process and answers at once.
+- `status` reports what is missing, how many bytes, the source
+  (`huggingface.co/<repository>`) and the download's progress.
+- A download whose process is gone is reported as failed, with the path of its log. A second
+  `prepare` while one runs does nothing.
+- In the extension, `chapter/companion-setup.ts` is a card shown when the local engine is
+  installed without its models:
+  - It shows the size (845 MB), where the files come from and the fingerprint check.
+  - It has **Download** and **Not now**, and shows progress.
+  - While it is shown, the browser models' card stays hidden.
+- Advanced → Browser engine shows the extension's ID when the engine is not installed, because
+  the installer asks for it.
+
+**Windowless executables.** The bundle now has two executables. `yomiscan-engine.exe` is the
+console one for commands. `yomiscan-engine-host.exe` is windowless: Chrome starts it as the
+native host, and it runs the detached engine and the download.
+- No console window can appear. The program reattaches the standard handles Windows passed it:
+  Chrome's pipes, or the log file.
+- `disable_windowed_traceback` is set. Without it, an unhandled error made PyInstaller's
+  windowed bootloader open a dialog and wait for a click that nobody can give; a crashed
+  download process (see below) hung that way.
+
+**Installer** (`packaging/engine/installer.nsi`, NSIS 3, zlib license; built by
+`scripts/build_installer.py`):
+- Per user, no administrator rights: `%LOCALAPPDATA%\Programs\YomiScan Engine`, HKCU only,
+  solid LZMA compression.
+- Pages: welcome, license (YomiScan's MIT license plus a pointer to the bundled third-party
+  notices), then "Connect to Chrome", which asks for the extension ID. Silent installs use
+  `/S /EXTENSIONID=<id>`.
+- Install stops a running engine of an earlier install, copies the files, and registers the
+  native host for that extension. An invalid ID aborts the install (exit code 2). It also writes
+  the Add/Remove Programs entry.
+- The uninstaller stops the engine, removes the registration, the files and the entry, then asks
+  whether to remove downloaded models and data. Silent uninstalls keep them unless `/PURGE`.
+- The engine build adds `LICENSE.txt` and `licenses/<package>/` with the license files of all 35
+  bundled packages, indexed in `licenses/THIRD-PARTY-NOTICES.txt`. The bundle is 472 MiB.
+- The installer is unsigned (owner decision), so SmartScreen can warn. Until the extension is in
+  the Chrome Web Store, the user pastes the extension ID shown in Advanced; `--extension-id`
+  pre-fills it with the store ID later.
+
+**Clean-machine check.** Windows Sandbox needs administrator rights to enable, and a reboot. The
+"Frozen local engine and installer / Windows" CI job uses a GitHub-hosted runner instead, which
+is a fresh Windows VM on every run. `scripts/validate_installer.py`:
+- refuses an invalid extension ID;
+- runs a silent install;
+- checks the files, the native-messaging key and manifest (the windowless host, the allowed
+  extension) and the uninstall entry;
+- asks the installed host for `status` the way Chrome does;
+- runs a silent uninstall and checks that everything but user data is removed.
+
+The job uploads the installer as an artifact. Running a freshly downloaded NSIS compiler on the
+development machine was refused by the permission system, so the installer is compiled on CI.
+
+**End to end, first start** (`YOMISCAN_E2E_FIRST_START=1 node extension/tests/companion-e2e.mjs`:
+real Chrome; the engine's data folder empty through `YOMISCAN_DATA`; developer backend stopped):
+
+| Step | Result |
+|---|---|
+| Status before consent | Models missing: 845 MB |
+| Panel | Offered the local engine's models (845 MB, from Hugging Face); nothing downloaded before the click |
+| Download, verify, store | **37.1 s**, then the card closed |
+| Automatic → Read Chapter, 3 pages | 20.9 s, including the engine start and model load |
+| Translate Chapter, 3 pages, pixel renderer | 14.6 s |
+| Idle exit (20 s test setting), next Read Chapter | Exited after 24 s; a new engine served the next Read Chapter in 22.0 s |
+
+The first run of this test found a missing import in `--prepare --progress`. The download
+process crashed, and because of the windowed traceback dialog it hung instead of exiting. Both
+are fixed and covered by tests.
+
+**Not done.**
+- The installer has not run on the owner's machine.
+- Code signing (owner decision: unsigned).
+- A Chrome Web Store listing, so no extension ID needs pasting (Stage 6).
 

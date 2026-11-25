@@ -3,6 +3,9 @@
 // companion through native messaging (no browser models, no developer backend), Read Chapter and
 // Translate Chapter run through it with its per-launch token, the engine exits when idle, and the
 // next action launches it again.
+// With YOMISCAN_E2E_FIRST_START=1 (Chrome started with YOMISCAN_DATA set to an empty folder), the
+// panel must first offer the engine's models with their size, download nothing before the click,
+// and download and verify them (from the pinned Hugging Face commit) after it.
 // Needs: the frozen engine (scripts/build_engine.py) with its models (yomiscan-engine.exe --prepare),
 // registered for extension/dist (yomiscan-engine.exe --register --extension-path extension/dist);
 // the developer backend stopped; Chrome started with --remote-debugging-port (YOMISCAN_TEST_CDP_PORT,
@@ -18,7 +21,9 @@ const [expectedId, ...pages] = process.argv.slice(2);
 if (!/^[a-p]{32}$/.test(expectedId ?? "") || !pages.length) throw new Error("Pass the registered extension ID and page image paths");
 const backendUp = await fetch("http://127.0.0.1:47615/health").then(() => true, () => false);
 assert.equal(backendUp, false, "Stop the developer backend first: only the companion may serve this run");
-const statePath = path.join(process.env.LOCALAPPDATA, "YomiScan", "engine-state.json");
+const dataRoot = process.env.YOMISCAN_DATA ?? path.join(process.env.LOCALAPPDATA, "YomiScan");
+const statePath = path.join(dataRoot, "engine-state.json");
+const firstStart = process.env.YOMISCAN_E2E_FIRST_START === "1";
 const engineState = async () => {try {return JSON.parse(await readFile(statePath, "utf8"));} catch {return null;}};
 const engineAnswers = async state => state && await fetch(`http://127.0.0.1:${state.port}/api/v1/readiness`, {headers: {
   "X-YomiScan-Client": "study-extension-v1", "X-YomiScan-Token": state.token}, signal: AbortSignal.timeout(2000)}).then(r => r.ok, () => false);
@@ -63,8 +68,9 @@ try {
   const worker = (await call("Target.attachToTarget", {targetId: workerTarget.targetId, flatten: true})).sessionId;
   await evaluate(worker, "Promise.all([chrome.storage.local.clear(),chrome.storage.session.clear()])");  // Automatic, no browser models
   const status = await evaluate(worker, "chrome.runtime.sendNativeMessage('com.yomiscan.engine',{type:'status'})");
-  assert.ok(status.ok && status.models.ready, JSON.stringify(status));
-  report.checks.push(`Native host answers status: version ${status.version}, models ready`);
+  assert.ok(status.ok && status.models.ready !== firstStart, JSON.stringify(status));
+  report.checks.push(`Native host answers status: version ${status.version}, ${firstStart ?
+    `models missing (${Math.round(status.models.bytes / 1e6)} MB)` : "models ready"}`);
 
   const targetId = (await call("Target.createTarget", {url: "http://127.0.0.1:8776/"})).targetId;
   session = (await call("Target.attachToTarget", {targetId, flatten: true})).sessionId;
@@ -74,6 +80,21 @@ try {
   const tab = (await call("Target.getTargets", {filter: [{type: "tab", exclude: false}, {exclude: true}]})).targetInfos.find(t => t.url === "http://127.0.0.1:8776/");
   const activate = async () => {await call("Extensions.triggerAction", {id: extensionId, targetId: tab.targetId}); await until(() => find(n => attr(n, "class") === "chapter-panel"), 10000, "panel");};
   await activate();
+
+  if (firstStart) {
+    const card = async () => {const n = await find(n => attr(n, "aria-label") === "Download the local engine's models"); return n ? invoke(n, "function(){return this.hidden?'':this.innerText}") : "";};
+    const offer = await until(card, 20000, "local engine download card");
+    const size = /Download \(([\d,]+) MB\)/.exec(offer)?.[1];
+    assert.ok(size && /From huggingface\.co\//.test(offer), offer);
+    const before = await evaluate(worker, "chrome.runtime.sendNativeMessage('com.yomiscan.engine',{type:'status'})");
+    assert.equal(before.prepare, null, "nothing downloads before the click");
+    report.checks.push(`The panel offered the local engine's models (${size} MB, from Hugging Face) before downloading anything`);
+    const begun = Date.now();
+    await click(`Download (${size} MB)`);
+    await until(async () => (await card()) === "" && (await panel()).includes("Local engine ready"), 1800000, "engine models downloaded");
+    report.engine_download_ms = Date.now() - begun;
+    report.checks.push(`Download clicked: the engine downloaded and verified ${size} MB in ${(report.engine_download_ms / 1000).toFixed(1)} s, then the card closed`);
+  }
 
   let started = Date.now();
   await click("Read Chapter");

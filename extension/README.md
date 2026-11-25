@@ -81,7 +81,8 @@ session.
 YomiScan's engine choice is **Automatic** by default:
 1. the **local engine companion** (`yomiscan-engine.exe`, Stage 5b) when it is installed with its
    models: Chrome starts it through native messaging on a random local port with a one-time
-   token, and it exits after 15 idle minutes;
+   token, and it exits after 15 idle minutes. When it is installed without its models, the panel
+   offers them first (845 MB, explicit Download);
 2. otherwise the **browser engine** once its models are installed;
 3. otherwise the **local backend**, if it is running;
 4. otherwise the panel shows **Download the reading models**.
