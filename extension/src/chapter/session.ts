@@ -203,7 +203,7 @@ export class ChapterTranslationSession {
     const reply=await chrome.runtime.sendMessage({type:'engine',operation:'status'});
     if(!reply?.ok)throw new Error(reply?.error??'Browser engine unavailable. Reload the extension.');
     const status=reply.data as {bundle:string;required:{installed:boolean}[]};
-    if(status.required.some(c=>!c.installed))throw new Error('Install the browser engine models first: Advanced → Browser engine (preview) → Install Models.');
+    if(status.required.some(c=>!c.installed))throw new Error('Download the reading models first: open the YomiScan panel and choose Download.');
     if(this.disposed||version!==this.startVersion)return;
     const generation='browser|'+status.bundle;
     if(this.generation!==generation)this.queue.stop();

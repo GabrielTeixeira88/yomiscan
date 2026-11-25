@@ -16,7 +16,7 @@ function viewport(): Viewport {
 
 function install(): void {
   const chapter = new ChapterControls(() => { void activateStudy(); },(data,rect)=>showExisting(data,rect));
-  async function activateStudy(): Promise<void> { await chapter.prepareStudy(); start(); }
+  async function activateStudy(): Promise<void> { if (!await chapter.ensureEngine()) return; await chapter.prepareStudy(); start(); }
   let id: string | null = null;
   let host: HTMLDivElement | null = null;
   let root: ShadowRoot | null = null;

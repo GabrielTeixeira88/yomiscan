@@ -176,8 +176,7 @@ the backend caches make re-reading cheap.
 `extension/src/engine/` runs page vision inside Chrome with ONNX Runtime Web, in the
 offscreen document, without the Python backend. Increment 1 covers the detector,
 production grouping and band order, and greedy manga-ocr, plus pinned, SHA-256-verified
-model installation into Cache Storage from an explicit Setup action (**Advanced → Browser
-engine (preview)**). The extension pages are cross-origin isolated (COEP `require-corp`,
+model installation into Cache Storage from an explicit user action. The extension pages are cross-origin isolated (COEP `require-corp`,
 COOP `same-origin`) so WASM runs multi-threaded; the CSP adds only `'wasm-unsafe-eval'`.
 Increment 2 adds lexical analysis. `engine/lexical.ts` ports the analyzer, ranking, units,
 grammar and inflection over the backend's own rule JSON. `engine/lexicon.ts` adds JMdict
@@ -185,14 +184,21 @@ SQLite (sqlite-wasm), the lindera UniDic tokenizer and the Study response. On th
 set it matches Python token for token and scores the same 96.7%. Increment 3 adds OPUS-MT
 (`engine/translation.ts`): fp16 on WASM threads with the backend's exact beam search and the
 standalone `@huggingface/tokenizers`. It matched the backend on 175 of 178 real lines.
-Increment 4 adds the `engineMode` setting (`engine-mode.ts`; Local by default).
+Increment 4 adds the `engineMode` setting (`engine-mode.ts`).
 - Select Text and Edit text are routed to the engine by the service worker.
 - Read Chapter uses a `browser` page-port kind that returns analyze-page JSON.
 - English is drawn as fitted HTML text boxes by `chapter/reading-layer.ts`.
 
-See the
-[Stage 5a record](decisions/stage-5a-browser-engine.md) for increments, measurements and
-the open hosting decision.
+Increment 5 makes the choice **Automatic** by default. `resolveEngine` picks the browser engine
+once its models are installed, otherwise a running backend, otherwise `setup`. The service
+worker answers `engine-resolve` for the panel, and Select Text resolves before capturing.
+`chapter/engine-setup.ts` is the first-run card: size, source, consent, progress, and models
+that Chrome removed. The default model source is `engine/artifact-host.json`, a pinned Hugging
+Face commit written by `scripts/publish_browser_artifacts.py`. The engine refuses downloads that
+won't fit (`storageShortfall`) and reports quota errors per file.
+
+See the [Stage 5a record](decisions/stage-5a-browser-engine.md) for increments, measurements
+and the open memory decision.
 
 ## Post-MVP reader controls, readiness and distribution
 

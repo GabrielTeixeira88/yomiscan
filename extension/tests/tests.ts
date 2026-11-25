@@ -6,6 +6,7 @@ import { constrainPopup, resizePopup, popupPosition, sameViewport, screenshotRec
 import {copyStudyText} from '../src/popup';
 import {selectTranslationEngine} from "../src/chapter/readiness-client";
 import "./chapter-tests";
+import "./release-tests";
 import "./acquisition-tests";
 import "./coverage-tests";
 import "./report-tests";

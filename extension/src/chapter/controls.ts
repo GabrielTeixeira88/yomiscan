@@ -7,7 +7,8 @@ import type {Rect} from '../geometry';
 import {HistoryControls} from './history-controls';
 import {SetupControls} from './setup-controls';
 import {EngineControls} from './engine-controls';
-import {ENGINE_MODE_KEY,engineMode,parseEngineMode,type EngineMode} from '../engine-mode';
+import {EngineSetup} from './engine-setup';
+import {ENGINE_MODE_KEY,type EngineMode} from '../engine-mode';
 
 export class ChapterControls {
   private host=document.createElement("div");
@@ -24,24 +25,26 @@ export class ChapterControls {
   private translationOptions=defaultTranslationOptions();
   private translationSettings:TranslationSettings;
   private fontScale=1;
+  /** The engine of the current session, chosen when Read or Translate Chapter starts (engine-mode.ts). */
   private engine:EngineMode='local';
+  private setup=new EngineSetup(()=>{this.status.textContent='Reading models installed. Click Read Chapter, Translate Chapter or Select Text.';});
   constructor(selectText:()=>void,private showStudy:(data:Analysis,anchor:Rect)=>void=()=>{}) {
     this.host.dataset.yomiscan="controls";
     this.host.style.cssText="all:initial!important;position:fixed!important;top:12px!important;right:12px!important;z-index:2147483646!important;";
     const style=document.createElement("style");style.textContent=`
       :host{color-scheme:light}*{box-sizing:border-box}.chapter-panel{width:280px;max-width:calc(100vw - 24px);max-height:80vh;overflow:auto;overscroll-behavior:contain;background:#fffdf8;color:#203729;border:1px solid #b7c5ba;border-radius:12px;box-shadow:0 8px 30px #0004;padding:14px;font:14px/1.45 system-ui;text-align:left}
       header{display:flex;justify-content:space-between;align-items:center}h2{font-size:11px;text-transform:uppercase;letter-spacing:.1em;margin:14px 0 5px;color:#607669}
-      button{font:inherit;cursor:pointer;border:1px solid #b7c5ba;background:#edf4ee;color:#203729;border-radius:6px;padding:7px 9px;margin:3px 3px 3px 0}button[aria-pressed=true]{background:#235d3c;color:white}button:focus-visible{outline:2px solid #287946}p{margin:8px 0;white-space:pre-wrap;overflow-wrap:anywhere}small{color:#617064}.warning{font-size:12px;color:#8a372b}summary{cursor:pointer}`;
+      button{font:inherit;cursor:pointer;border:1px solid #b7c5ba;background:#edf4ee;color:#203729;border-radius:6px;padding:7px 9px;margin:3px 3px 3px 0}button[aria-pressed=true]{background:#235d3c;color:white}button:focus-visible{outline:2px solid #287946}p{margin:8px 0;white-space:pre-wrap;overflow-wrap:anywhere}small{color:#617064}.warning{font-size:12px;color:#8a372b}summary{cursor:pointer}.setup{background:#eef6f0;border:1px solid #9fc2aa;border-radius:8px;padding:10px;margin:10px 0}.setup .size{font-weight:600}.setup small{display:block;margin-top:6px}.setup progress{width:100%}`;
     const panel=document.createElement("section");panel.className="chapter-panel";panel.setAttribute("aria-label","YomiScan controls");
     const header=document.createElement("header"), title=document.createElement("strong");title.textContent="YomiScan";
     const button=(label:string,action:()=>void)=>{const b=document.createElement("button");b.textContent=label;b.addEventListener("click",action);return b;};
-    header.append(title,button("×",()=>{this.showHost(false);}));panel.append(header);
+    header.append(title,button("×",()=>{this.showHost(false);}));panel.append(header,this.setup.element);
     const heading=(text:string)=>{const h=document.createElement("h2");h.textContent=text;panel.append(h);};
     heading("Study");panel.append(button("Select Text",selectText));
     // With the browser engine, Translate Chapter reads pages and draws their English over each bubble
     // (the pixel renderer belongs to the local backend).
-    heading("Reading");panel.append(button("Read Chapter",()=>{void this.current('read').start();}),
-      button("Translate Chapter",()=>{void (this.engine==='browser'?this.current('read',true):this.current('translate')).start();}),
+    heading("Reading");panel.append(button("Read Chapter",()=>{void this.begin('read');}),
+      button("Translate Chapter",()=>{void this.begin('translate');}),
       button("Stop",()=>this.session?.stop()));
     const readingHelp=document.createElement('small');
     readingHelp.textContent='Read Chapter keeps the Japanese: click an outlined bubble (or press J / K) to study it; each page’s English button shows its translation. Translate Chapter replaces every page with English.';
@@ -129,17 +132,31 @@ export class ChapterControls {
     for(const name of ["pointerdown","pointerup","click","dblclick"])this.host.addEventListener(name,event=>event.stopPropagation());
     this.host.addEventListener("keydown",event=>{if(event.key==="Escape")this.showHost(false);event.stopPropagation();});
     window.addEventListener("pagehide",()=>{this.session?.dispose();this.session=null;});
-    // The engine choice (Setup → Browser engine) applies to the next session; a running one is cleared.
-    void engineMode().then(mode=>{this.engine=mode;});
+    // A new engine choice (Advanced → Browser engine) applies to the next session; a running one is cleared.
     chrome.storage.onChanged.addListener((changes,area)=>{
       if(area!=='local'||!(ENGINE_MODE_KEY in changes))return;
-      this.engine=parseEngineMode(changes[ENGINE_MODE_KEY].newValue);
       if(this.session){this.session.dispose();this.session=null;}
     });
   }
   private showHost(visible:boolean):void {this.host.style.setProperty("display",visible?"block":"none","important");}
   private selectedPageId():number|undefined {return this.pageSelect.value?Number(this.pageSelect.value):undefined;}
-  open():void {this.showHost(true);}
+  open():void {this.showHost(true);void this.setup.check(true).catch(error=>{this.status.textContent=error instanceof Error?error.message:String(error);});}
+  /** Resolve the engine, then start reading. With the browser engine, Translate Chapter reads pages and
+   * draws their English over each bubble (the pixel renderer belongs to the local backend). */
+  private async begin(mode:SessionMode):Promise<void> {
+    try {
+      const engine=await this.setup.check(true);
+      if(engine==='setup'){this.status.textContent='Download the reading models above, or start the local backend, then try again.';return;}
+      this.engine=engine;
+    }catch(error){this.status.textContent=error instanceof Error?error.message:String(error);return;}
+    await (mode==='translate'&&this.engine==='browser'?this.current('read',true):this.current(mode)).start();
+  }
+  /** Before Select Text: false (and the setup card shown) when no engine can analyze a selection yet. */
+  async ensureEngine():Promise<boolean> {
+    try {if(await this.setup.check(true)!=='setup')return true;}
+    catch(error){this.status.textContent=error instanceof Error?error.message:String(error);}
+    this.showHost(true);return false;
+  }
   /** The page's session; choosing the other mode replaces it (backend caches make re-reading pages cheap). */
   private current(mode?:SessionMode,autoEnglish=false):ChapterTranslationSession {
     if(this.sessionURL!==location.href || this.session?.isDisposed || (mode&&this.session&&(this.session.mode!==mode||this.session.autoEnglish!==autoEnglish)) ||

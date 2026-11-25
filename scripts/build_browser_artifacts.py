@@ -7,7 +7,8 @@ into one servable folder and writes two manifests with each file's size and SHA-
 - extension/src/engine/artifact-manifest.json, committed, so the extension accepts only these bytes.
 
 Weights stay out of Git. Serve the output folder with scripts/serve_browser_artifacts.py
-for local development, or publish it unchanged to the chosen public host.
+for local development; scripts/publish_browser_artifacts.py uploads it unchanged to Hugging
+Face. The folder also gets a model card and license texts from packaging/browser-models/.
 """
 
 import argparse
@@ -16,16 +17,18 @@ import hashlib
 import json
 from pathlib import Path
 import shutil
+from string import Template
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 PINNED = ROOT / "extension" / "src" / "engine" / "artifact-manifest.json"
+NOTICES = ROOT / "packaging" / "browser-models"
 BUNDLE = "yomiscan-browser-2026.11.1"
 MANGA_OCR = "kha-white/manga-ocr-base (Apache-2.0); ONNX export, research/stage-2"
 LINDERA = "lindera-wasm-unidic@2.1.0 (npm, pinned in extension/package-lock.json)"
 LINDERA_WASM = ROOT / "extension" / "node_modules" / "lindera-wasm-unidic" / "lindera_wasm_unidic_bg.wasm"
 JMDICT = "JMdict (EDRDG), imported by scripts/import_jmdict.py; attribution required"
-OPUS = "Xenova/opus-mt-ja-en: ONNX export of Helsinki-NLP/opus-mt-ja-en (CC-BY-4.0); fp16 files"
+OPUS = "Xenova/opus-mt-ja-en: ONNX export of Helsinki-NLP/opus-mt-ja-en (Apache-2.0); fp16 files"
 DETECTOR = "ogkalu/comic-text-and-bubble-detector@16e8a622f91fabc6b5b65c96d32d1183f8843546 (Apache-2.0); ONNX export"
 
 
@@ -54,7 +57,7 @@ def components(stage2: Path, dictionary: Path = ROOT / "data" / "jmdict.sqlite3"
         Component("dictionary", "dictionary", "jmdict-schema2", "CC-BY-SA-4.0 (EDRDG)", JMDICT,
                   ((dictionary, "dictionary/jmdict.sqlite3"),)),
         # Stage 2: fp16 + beam search on WASM reproduces the Python backend on 99/100 lines.
-        Component("translation-opus-ja-en", "translation", "fp16", "CC-BY-4.0 (Helsinki-NLP)", OPUS, tuple(
+        Component("translation-opus-ja-en", "translation", "fp16", "Apache-2.0 (Helsinki-NLP OPUS-MT)", OPUS, tuple(
             (stage2 / "hf" / "Xenova" / "opus-mt-ja-en" / source, f"translation-opus-ja-en/{Path(source).name}") for source in (
                 "onnx/encoder_model_fp16.onnx", "onnx/decoder_model_merged_fp16.onnx", "tokenizer.json", "tokenizer_config.json",
                 "config.json", "generation_config.json"))),
@@ -88,7 +91,18 @@ def build(stage2: Path, output: Path, pinned: Path = PINNED, dictionary: Path = 
     text = json.dumps(manifest, indent=1, ensure_ascii=False) + "\n"
     (output / "manifest.json").write_text(text, encoding="utf-8")
     pinned.write_text(text, encoding="utf-8")
+    write_notices(manifest, output)
     return manifest
+
+
+def write_notices(manifest: dict, output: Path, notices: Path = NOTICES) -> None:
+    """The hosted folder's model card (with a generated component table) and license texts."""
+    rows = "\n".join(
+        f"| `{c['id']}` ({c['variant']}) | {len(c['files'])} | {sum(f['bytes'] for f in c['files']) / 2**20:.1f} MiB "
+        f"| {c['license']} | {c['source']} |" for c in manifest["components"])
+    card = Template((notices / "README.md").read_text(encoding="utf-8")).substitute(bundle=manifest["bundle"], components=rows)
+    (output / "README.md").write_text(card, encoding="utf-8")
+    shutil.copytree(notices / "LICENSES", output / "LICENSES", dirs_exist_ok=True)
 
 
 def main(argv: list[str] | None = None) -> int:

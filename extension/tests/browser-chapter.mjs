@@ -394,7 +394,12 @@ try {
   await click("Clear Session");await until(async()=>!await find(n=>n.attributes?.includes("overlays")));
   report.checks.push("Clear removes overlays and releases session results");
   await call("Network.enable",{},worker);await call("Network.setBlockedURLs",{urls:[backend+"/*"]},worker);
-  await click("Translate Chapter");await until(async()=>(await panel()).includes("not running"));report.checks.push("Offline health check fails before queuing chapter requests");
+  // Automatic (the default) with no browser models and the backend offline offers first-run setup.
+  await click("Translate Chapter");await until(async()=>(await panel()).includes("Download the reading models above"));
+  report.checks.push("Automatic with the backend offline and no browser models offers setup instead of queuing");
+  await evaluate(worker,"chrome.storage.local.set({engineMode:'local'})");
+  await click("Translate Chapter");await until(async()=>(await panel()).includes("not running"));report.checks.push("Explicit Local: offline health check fails before queuing chapter requests");
+  await evaluate(worker,"chrome.storage.local.remove('engineMode')");
   await call("Network.setBlockedURLs",{urls:[]},worker);
   await click("Clear Session");
   await evaluate(session,"document.querySelector('main').replaceChildren();const image=new Image();image.id='cross-page';image.src='http://127.0.0.1:8773/page.svg';document.querySelector('main').append(image)");

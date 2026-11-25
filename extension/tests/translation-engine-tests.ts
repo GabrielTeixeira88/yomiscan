@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {beamSearch, type NextLogits} from "../src/engine/translation";
 import {combineAnalyses} from "../src/engine/engine";
-import {parseEngineMode} from "../src/engine-mode";
+import {parseEngineChoice} from "../src/engine-mode";
 import type {Analysis} from "../src/api";
 
 test("Study blocks combine as analyze_recognized_blocks: joined text, shifted unit and grammar spans", () => {
@@ -22,9 +22,10 @@ test("Study blocks combine as analyze_recognized_blocks: joined text, shifted un
   assert.equal(combineAnalyses([part("あ", "A", 1), part("い", null, 1)]).translation, null, "a missing translation is never invented");
 });
 
-test("engine mode defaults to the local backend for unknown stored values", () => {
-  assert.equal(parseEngineMode('browser'), 'browser');
-  for (const value of [undefined, null, 'gpu', 1]) assert.equal(parseEngineMode(value), 'local');
+test("engine choice is Automatic unless the user picked an engine", () => {
+  assert.equal(parseEngineChoice('browser'), 'browser');
+  assert.equal(parseEngineChoice('local'), 'local');
+  for (const value of [undefined, null, 'auto', 'gpu', 1]) assert.equal(parseEngineChoice(value), 'auto');
 });
 
 // Toy decoder: vocab 0 = pad, 1 = eos, 2..4 words. Logits depend only on the last token.
