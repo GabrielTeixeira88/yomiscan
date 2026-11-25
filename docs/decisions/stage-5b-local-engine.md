@@ -1,6 +1,6 @@
 # Stage 5b: packaged local engine (optional companion)
 
-Status: **in progress**. Increment 1 (Torch-free vision) is done. Started on the owner's go-ahead (2026-11-25)
+Status: **in progress**. Increments 1 (vision) and 2 (translation) are done. Started on the owner's go-ahead (2026-11-25)
 after Stage 5a merged.
 
 ## Why this stage exists now
@@ -33,7 +33,7 @@ Each increment is merged only with its tests and a real-model measurement.
 | # | Scope | Status |
 |---|---|---|
 | 1 | **Torch-free vision.** Python readers for pinned ONNX exports of the production detector and manga-ocr (same Hugging Face repository and commit as the browser bundle), an explicit verified download into a per-user folder, and an ONNX Runtime device choice (CPU, DirectML). Parity against the Torch path on the sample corpus, plus CPU and GPU timings. | Done: 99.1% identical text end to end, detection 7× faster on DirectML (see increment 1) |
-| 2 | **Torch-free translation.** OPUS-MT ja→en (then pt-BR, es) without Torch: CTranslate2 and ONNX Runtime beam search compared with transformers on the Stage 3 translation set (identical lines, speed, memory). | Planned |
+| 2 | **Torch-free translation.** OPUS-MT ja→en (then pt-BR, es) without Torch: CTranslate2 and ONNX Runtime beam search compared with transformers on the Stage 3 translation set (identical lines, speed, memory). | Done for ja→en: 153/153 identical lines (see increment 2). The experimental pt-BR / es models stay Torch-only for now. |
 | 3 | **Engine profile and freezing.** Default composition uses the Torch-free engines; Torch, transformers and manga-ocr move to an optional reference extra. A PyInstaller one-folder build with the API tests run against it; measured size and startup. | Planned |
 | 4 | **Launcher.** A native-messaging host that starts the frozen engine on a random loopback port with a per-launch token, hands both to the extension, and stops it after an idle period. The extension's engine choice gains the companion. | Planned |
 | 5 | **Installer and release.** Per-user Windows installer (native-messaging registration in HKCU, uninstall cleanup), first-start model download with consent, docs, a clean-machine check in Windows Sandbox. | Planned |
@@ -129,3 +129,67 @@ Observations for later increments:
   latest release (1.24.4) is older than the project's `onnxruntime>=1.32` pin. DirectML is in
   maintenance; Windows ML is its successor. Increment 3 decides the GPU runtime.
 - The Hugging Face download of the local bundle (275 MiB) took 14 s here.
+
+## Increment 2: Torch-free translation
+
+**Candidates.** Each line of the translation set was translated alone by the current
+`MarianTranslationEngine` (transformers, CPU) and by each candidate. The set is
+`benchmarks/manga-dialogue.jsonl` (53 lines) plus the local-only Stage 2 set (100 real corpus
+lines), 153 lines in all. Both candidates used a new transformers-free tokenizer
+(`sentencepiece` plus `vocab.json`, as `MarianTokenizer` does), which produced identical ids on
+all 153 lines.
+
+| Candidate | Identical lines | Median per line | Load | Files |
+|---|---:|---:|---:|---:|
+| Torch (reference) | — | 201 ms | — | — |
+| **ONNX Runtime fp32 + ported beam search** | **153 / 153** | **196 ms** | 1.4 s | 411 MiB |
+| ONNX Runtime fp16 (browser file) | 152 / 153 | 447 ms | 0.9 s | 210 MiB |
+| ONNX Runtime quantized (Xenova) | 62 / 153 | 373 ms | 0.7 s | 104 MiB |
+| CTranslate2 float32 | 121 / 153 | 109 ms | 0.4 s | 289 MiB |
+| CTranslate2 int8 | 85 / 153 | 38 ms | 0.1 s | 75 MiB |
+
+CTranslate2 is the fastest, but its beam search finishes hypotheses differently from
+transformers: even at full precision one line in five changed, which fails the 95% gate.
+ONNX Runtime with the ported beam search is exact, at the speed of Torch.
+
+**Design.**
+- `translation/beam.py`: transformers' beam search for one input in NumPy. It is ported from the
+  browser engine's port, including the separate penalties and the stopping heuristic.
+- `translation/marian_sentencepiece.py`: the tokenizer. Like `MarianTokenizer`, decoding skips
+  `</s>`, `<unk>` and `<pad>` and turns any leftover `▁` into a space.
+- `translation/opus_onnx.py`: `PinnedOpusTranslationEngine`, with the backend's contract:
+  - whitespace collapsed;
+  - more than 512 tokens is an error;
+  - 4 beams, pad banned with renormalized logits, at most 511 new tokens;
+  - an unfinished or empty output is an error.
+
+  The merged decoder reuses its key/value cache, and each beam's cache follows its parent. It
+  runs on the CPU.
+- Selected with `YOMISCAN_TRANSLATION_ENGINE=opus-pinned`, or at run time in the Setup panel
+  ("Translation engine → Use"). Readiness lists it with its setup command.
+- Files: the `translation-opus-ja-en-fp32` component in `local-manifest.json`. It holds the
+  Xenova fp32 export plus the Marian SentencePiece files, published as commit `26da07d`. The
+  publish script re-verified all 1,238 MiB, the extension's pin moved with it, and the browser
+  files are unchanged. The Hugging Face download (411 MiB) took 18 s.
+- Tests without weights: on six random tiny `MarianMTModel`s, the ported beam search picks
+  exactly the tokens of `model.generate()`. The tokenizer matches `MarianTokenizer` when its
+  files are cached. The engine contract (cache reuse, errors) runs against scripted sessions.
+
+**Result** (`scripts/compare_torch_free_translation.py`, production engine, 153 lines):
+
+| | Torch | Torch-free |
+|---|---:|---:|
+| Identical lines | — | **153 / 153** |
+| Median / p95 per line | 197 / 428 ms | 183 / 392 ms |
+| Load | 9.9 s | 2.1 s |
+| Peak working set (process, 30 lines) | 659 MiB | 1,071 MiB |
+
+**Memory.** The ONNX export stores the 60,716-entry embedding three times (encoder input,
+decoder input, output projection; about 124 MB each), where Torch ties them into one copy.
+Graph optimization level and the CPU memory arena changed nothing. Disabling weight prepacking
+(`session.disable_prepacking`) lowered the peak working set to 868 MiB but made translation
+26% slower, so the default is kept. Increment 3 measures the whole frozen engine and can
+revisit this.
+
+**Not done.** The experimental pt-BR and es OPUS models still need Torch; neither has a
+pinned ONNX export yet. They stay available in the developer backend.

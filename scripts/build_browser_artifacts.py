@@ -69,9 +69,16 @@ def components(stage2: Path, dictionary: Path = ROOT / "data" / "jmdict.sqlite3"
 
 
 def local_components(stage2: Path) -> tuple[Component, ...]:
-    """Files only the local engine uses. Stage 5b: fp32 reproduces the PyTorch boxes (226/226 on DirectML)."""
+    """Files only the local engine uses (Stage 5b): the fp32 detector reproduces the PyTorch boxes
+    (226/226 on DirectML); fp32 OPUS with the ported beam search reproduces the backend on 153/153 lines."""
+    opus = stage2 / "hf" / "Xenova" / "opus-mt-ja-en"
     return (Component("detector-fp32", "detector", "fp32", "Apache-2.0", DETECTOR,
-                      ((stage2 / "detector-onnx" / "detector.onnx", "detector-fp32/detector.onnx"),)),)
+                      ((stage2 / "detector-onnx" / "detector.onnx", "detector-fp32/detector.onnx"),)),
+            Component("translation-opus-ja-en-fp32", "translation", "fp32", "Apache-2.0 (Helsinki-NLP OPUS-MT)",
+                      OPUS.replace("fp16 files", "fp32 files, Marian SentencePiece vocabularies"), tuple(
+                          (opus / source, f"translation-opus-ja-en-fp32/{Path(source).name}") for source in (
+                              "onnx/encoder_model.onnx", "onnx/decoder_model_merged.onnx", "source.spm", "target.spm",
+                              "vocab.json", "config.json", "generation_config.json"))))
 
 
 # Browser-bundle components the local engine reuses unchanged (same paths and hashes).

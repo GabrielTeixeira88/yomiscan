@@ -17,6 +17,50 @@
    ]
   },
   {
+   "id": "translation-opus-ja-en-fp32",
+   "kind": "translation",
+   "variant": "fp32",
+   "license": "Apache-2.0 (Helsinki-NLP OPUS-MT)",
+   "source": "Xenova/opus-mt-ja-en: ONNX export of Helsinki-NLP/opus-mt-ja-en (Apache-2.0); fp32 files, Marian SentencePiece vocabularies",
+   "files": [
+    {
+     "path": "translation-opus-ja-en-fp32/encoder_model.onnx",
+     "bytes": 201162540,
+     "sha256": "3aa28e0b0be8af4ea7d32af72ee8d54ba2cb8ac3ac46ab665e46c8d997d9f980"
+    },
+    {
+     "path": "translation-opus-ja-en-fp32/decoder_model_merged.onnx",
+     "bytes": 227046416,
+     "sha256": "546cd2909c9b4e9b58ca0d5fdab653043f511ed9bd3cb0d50328ea5f682902df"
+    },
+    {
+     "path": "translation-opus-ja-en-fp32/source.spm",
+     "bytes": 781853,
+     "sha256": "d0b5c3b10b5959f056ff2c86e2f2356129242ff1fc72d3a4a34d6a8c0eee4e57"
+    },
+    {
+     "path": "translation-opus-ja-en-fp32/target.spm",
+     "bytes": 801883,
+     "sha256": "35d89c704e270d441fade716a3931d49c43179400682edcca7f180694982a2f6"
+    },
+    {
+     "path": "translation-opus-ja-en-fp32/vocab.json",
+     "bytes": 1622775,
+     "sha256": "a1667b43d021e09c76f385101bd473f20b5691a12cdca7dda43e4a8daff20021"
+    },
+    {
+     "path": "translation-opus-ja-en-fp32/config.json",
+     "bytes": 1376,
+     "sha256": "d35476f1d3858883feec67e5a63ddc387452a70fda9c8e26db99c71aa2ad6a34"
+    },
+    {
+     "path": "translation-opus-ja-en-fp32/generation_config.json",
+     "bytes": 293,
+     "sha256": "ed1bc2193210ca2a6dc9c144ea789936fed8a27113e01010d8e591f45f238912"
+    }
+   ]
+  },
+  {
    "id": "ocr-int8",
    "kind": "ocr",
    "variant": "int8",

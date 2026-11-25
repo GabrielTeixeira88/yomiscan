@@ -5,7 +5,7 @@ from pathlib import Path
 
 from .base import Device, TranslationEngine, TranslationInitializationError
 
-ENGINE_NAMES = ("current", "hy-mt2-manga", "qwen35-vntl", "qwen25-manga", "fugumt", "nllb-600m", "opus-ja-pt", "opus-ja-es")
+ENGINE_NAMES = ("current", "hy-mt2-manga", "qwen35-vntl", "qwen25-manga", "fugumt", "nllb-600m", "opus-ja-pt", "opus-ja-es", "opus-pinned")
 
 
 def create_translation_engine(name: str | None = None, *, device: Device = "auto") -> TranslationEngine:
@@ -15,6 +15,11 @@ def create_translation_engine(name: str | None = None, *, device: Device = "auto
         return MarianTranslationEngine(device=device)
     if name not in ENGINE_NAMES:
         raise ValueError(f"Unknown translation engine {name!r}; choose one of {', '.join(ENGINE_NAMES)}")
+    if name == "opus-pinned":
+        if device == "cuda":
+            raise TranslationInitializationError("The Torch-free OPUS-MT translator has no CUDA path; it runs on the CPU")
+        from .opus_onnx import PinnedOpusTranslationEngine
+        return PinnedOpusTranslationEngine()
     if name in ("opus-ja-pt", "opus-ja-es"):
         from .marian import MarianTranslationEngine
         return MarianTranslationEngine(device=device, target_language="pt-BR" if name == "opus-ja-pt" else "es")
