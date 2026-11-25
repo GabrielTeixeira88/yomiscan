@@ -73,7 +73,13 @@ export class ArtifactStore {
       } finally {reader.releaseLock();}
       if (size !== file.bytes) throw new Error(`${file.path} is incomplete (${size} of ${file.bytes} bytes)`);
       if (await sha256Hex(buffer) !== file.sha256) throw new Error(`${file.path} does not match its pinned SHA-256; not installed`);
-      await storage.put(artifactKey(file), new Response(buffer, {headers: {'Content-Type': 'application/octet-stream', 'Content-Length': String(size)}}));
+      try {
+        await storage.put(artifactKey(file), new Response(buffer, {headers: {'Content-Type': 'application/octet-stream', 'Content-Length': String(size)}}));
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'QuotaExceededError')
+          throw new Error(`Chrome ran out of storage while saving ${file.path}. Free some disk space, then download again; finished files are kept.`, {cause: error});
+        throw error;
+      }
       done += file.bytes;
     }
   }

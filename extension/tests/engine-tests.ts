@@ -101,8 +101,10 @@ test("artifact install verifies size and SHA-256, stores by content hash, and re
 
 test("engine setup summary states device path, sizes and what must be downloaded", () => {
   const text = engineSummary({backend: 'wasm', isolated: true, threads: 8, bundle: 'b', loaded: false, install: {state: 'idle'},
+    missingBytes: 110 * 2 ** 20, storage: {usage: 80 * 2 ** 20, quota: 4000 * 2 ** 20}, persisted: true,
     required: [{id: 'detector', kind: 'detector', variant: 'fp16', bytes: 80 * 2 ** 20, license: 'Apache-2.0', source: 's', installed: true},
       {id: 'ocr-int8', kind: 'ocr', variant: 'int8', bytes: 110 * 2 ** 20, license: 'Apache-2.0', source: 's', installed: false}]});
   assert.match(text, /CPU \(WASM, 8 threads\)/);
   assert.match(text, /Download needed: 110 of 190 MiB/);
+  assert.match(text, /80 MiB used, 3920 MiB available · protected from automatic clearing/);
 });

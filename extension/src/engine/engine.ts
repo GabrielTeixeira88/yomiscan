@@ -17,7 +17,20 @@ import {OpusTranslator, type MarianTokenizer} from './translation';
 export type Backend = 'webgpu' | 'wasm';
 export interface ComponentStatus {id: string; kind: string; variant: string; bytes: number; license: string; source: string; installed: boolean}
 export interface EngineStatus {backend: Backend; isolated: boolean; threads: number; bundle: string; required: ComponentStatus[];
-  install: {state: 'idle' | 'running' | 'failed' | 'done'; progress?: InstallProgress; error?: string}; loaded: boolean}
+  install: {state: 'idle' | 'running' | 'failed' | 'done'; progress?: InstallProgress; error?: string}; loaded: boolean;
+  /** Bytes still to download for this device, and what Chrome reports for this extension's storage. */
+  missingBytes: number; storage: {usage: number; quota: number} | null; persisted: boolean}
+
+/** Extra room kept free beyond the download itself: Cache Storage overhead and the rest of the disk. */
+export const STORAGE_MARGIN = 256 * 2 ** 20;
+
+/** Refuse a download that cannot fit, before any byte is fetched. */
+export function storageShortfall(missing: number, storage: {usage: number; quota: number} | null): string | null {
+  if (!storage || missing === 0) return null;
+  const free = storage.quota - storage.usage, mb = (bytes: number) => Math.ceil(bytes / 1e6);
+  return free < missing + STORAGE_MARGIN ? `Not enough free space: the models need ${mb(missing)} MB and Chrome reports ${mb(Math.max(0, free))} MB ` +
+    `available. Free at least ${mb(missing + STORAGE_MARGIN - free)} MB of disk space, then download again.` : null;
+}
 
 const manifest = parseManifest(pinned);
 
@@ -48,14 +61,26 @@ export class BrowserEngine {
     const required = await Promise.all(requiredComponents(backend).map(async c => ({id: c.id, kind: c.kind, variant: c.variant,
       bytes: componentBytes(c), license: c.license, source: c.source, installed: await this.store.installed(c)})));
     return {backend, isolated: crossOriginIsolated, threads: this.threads(), bundle: manifest.bundle, required,
-      install: this.install, loaded: this.vision !== null || this.lexical !== null};
+      install: this.install, loaded: this.vision !== null || this.lexical !== null,
+      missingBytes: required.reduce((n, c) => n + (c.installed ? 0 : c.bytes), 0), storage: await this.storage(),
+      persisted: await navigator.storage.persisted()};
   }
 
-  /** Start downloading the missing required components from `base` (explicit user action only). */
-  startInstall(base: string): void {
+  private async storage(): Promise<{usage: number; quota: number} | null> {
+    const {usage, quota} = await navigator.storage.estimate();
+    return usage === undefined || quota === undefined ? null : {usage, quota};
+  }
+
+  /** Start downloading the missing required components from `base` (explicit user action only).
+   * A download that cannot fit is refused first; persistence keeps Chrome from evicting the models. */
+  async startInstall(base: string): Promise<void> {
     if (this.install.state === 'running') throw new Error('An installation is already running');
+    this.install = {state: 'running'};  // claimed before any await, so a second click is refused
+    const {missingBytes, storage} = await this.status();
+    const shortfall = storageShortfall(missingBytes, storage);
+    if (shortfall) {this.install = {state: 'failed', error: shortfall}; return;}
+    await navigator.storage.persist();
     this.installing = new AbortController();
-    this.install = {state: 'running'};
     void (async () => {
       for (const component of requiredComponents(await this.backend))
         await this.store.install(component, base, progress => {this.install = {state: 'running', progress};}, this.installing!.signal);

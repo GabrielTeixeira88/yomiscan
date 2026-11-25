@@ -18,7 +18,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
       case 'status': return current.status();
       case 'install':
         if (typeof message.base !== 'string' || message.base.length > 500) throw new Error('Invalid artifact source');
-        current.startInstall(message.base); return current.status();
+        await current.startInstall(message.base); return current.status();
       case 'cancel': current.cancelInstall(); return current.status();
       case 'remove': await current.remove(); return current.status();
       case 'recognize': {

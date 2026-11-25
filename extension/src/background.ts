@@ -1,6 +1,7 @@
 import {backendBase} from './backend';
 import { analyzeCrop, analyzeText, parseAnalysis } from "./api";
-import {engineMode} from './engine-mode';
+import {ENGINE_INSTALLED_KEY,SETUP_NEEDED,engineChoice,engineSource,resolveEngine,type EngineChoice,type ResolvedEngine} from './engine-mode';
+import type {EngineStatus} from './engine/engine';
 import {installSourceFetch} from './chapter/source-fetch';
 import {CaptureThrottle} from './chapter/capture-throttle';
 import {cacheRequest} from './chapter/cache-client';
@@ -47,6 +48,23 @@ async function engineRequest(operation:string,extra:Record<string,unknown>={}):P
   if(!reply?.ok)throw new Error(reply?.error??'Browser engine unavailable. Reload the extension.');
   return reply.data;
 }
+/** Which engine serves the next request (engine-mode.ts). Records a complete install so a later
+ * disappearance (Chrome clearing storage) can be explained instead of looking like a first run. */
+async function engineState():Promise<{choice:EngineChoice;mode:ResolvedEngine;status:EngineStatus|null;evicted:boolean;source:string}>{
+  const choice=await engineChoice();let status:EngineStatus|null=null;
+  const mode=await resolveEngine(choice,async()=>{
+    status=await engineRequest('status') as EngineStatus;
+    const ready=status.required.every(c=>c.installed);
+    if(ready)await chrome.storage.local.set({[ENGINE_INSTALLED_KEY]:status.bundle});
+    return ready;
+  },backendRunning);
+  const installedBefore=typeof (await chrome.storage.local.get(ENGINE_INSTALLED_KEY))[ENGINE_INSTALLED_KEY]==='string';
+  return {choice,mode,status,evicted:mode==='setup'&&installedBefore,source:await engineSource()};
+}
+async function backendRunning():Promise<boolean>{
+  try {return (await fetch(await backendBase()+'/health',{signal:AbortSignal.timeout(1500),credentials:'omit',redirect:'error',cache:'no-store'})).ok;}
+  catch {return false;}// Not running (or not answering) is an expected answer here, not a failure.
+}
 async function base64(blob:Blob):Promise<string>{
   const bytes=new Uint8Array(await blob.arrayBuffer());let binary='';
   for(let i=0;i<bytes.length;i+=8192)binary+=String.fromCharCode(...bytes.subarray(i,i+8192));
@@ -90,8 +108,10 @@ async function capture(request: CaptureRequest, tab: chrome.tabs.Tab): Promise<u
     const valid = await chrome.tabs.sendMessage(tabId, {type: "verify-capture", id: request.id}, {frameId: 0});
     if (valid !== true) throw new Error("The page moved during capture. Select the region again.");
   };
+  const engine = (await engineState()).mode;
+  if (engine === "setup") throw new Error(SETUP_NEEDED);
   // The browser engine may load its models on the first request; allow it longer.
-  const timer = setTimeout(() => controller.abort(), await engineMode() === "browser" ? 120_000 : 25_000);
+  const timer = setTimeout(() => controller.abort(), engine === "browser" ? 120_000 : 25_000);
   try {
     const screenshot = await captures.run(async()=>{await verify();return chrome.tabs.captureVisibleTab(tab.windowId, {format: "png"});});
     await verify();
@@ -111,7 +131,7 @@ async function capture(request: CaptureRequest, tab: chrome.tabs.Tab): Promise<u
     if (crop.size > 10 * 1024 * 1024) throw new Error("Select a smaller region (maximum 10 MiB).");
     await verify();
     await chrome.tabs.sendMessage(tabId, {type: "captured", id: request.id}, {frameId: 0});
-    if (await engineMode() === "browser") return parseAnalysis(await engineRequest("study", {data: await base64(crop), mime: "image/png"}));
+    if (engine === "browser") return parseAnalysis(await engineRequest("study", {data: await base64(crop), mime: "image/png"}));
     return await analyzeCrop(crop, controller.signal);
   } finally {
     clearTimeout(timer);
@@ -123,10 +143,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (sender.id !== chrome.runtime.id || sender.frameId !== 0 || sender.tab?.id === undefined) return;
   if(message?.type==='engine'){
     // Browser engine setup (Stage 5a). Page recognition is not exposed to content scripts here.
-    if(!['status','install','cancel','remove'].includes(message.operation)||(message.operation==='install'&&typeof message.base!=='string')){
+    // Install uses the published model host unless Advanced sets a development source.
+    if(!['status','install','cancel','remove'].includes(message.operation)||(message.base!==undefined&&typeof message.base!=='string')){
       sendResponse({ok:false,error:'Invalid browser engine request'});return;}
-    void engineRequest(message.operation,{base:message.base}).then(data=>sendResponse({ok:true,data}),
+    void (async()=>{
+      const data=await engineRequest(message.operation,message.operation==='install'?{base:message.base??await engineSource()}:{});
+      if(message.operation==='remove')await chrome.storage.local.remove(ENGINE_INSTALLED_KEY);
+      return data;
+    })().then(data=>sendResponse({ok:true,data}),
       error=>sendResponse({ok:false,error:error instanceof Error?error.message:'Browser engine unavailable'}));
+    return true;
+  }
+  if(message?.type==='engine-resolve'){
+    void engineState().then(data=>sendResponse({ok:true,data}),
+      error=>sendResponse({ok:false,error:error instanceof Error?error.message:'Browser engine unavailable. Reload the extension.'}));
     return true;
   }
   if(message?.type==='chapter-readiness'){
@@ -141,7 +171,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if(message?.type==='study-reanalyze'){
     if(typeof message.text!=='string'||message.text.length>1000){sendResponse({ok:false,error:'Edited text must be 1 to 1,000 characters.'});return;}
     const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),25_000);
-    void engineMode().then(mode=>mode==='browser'?engineRequest('analyze-text',{text:message.text.trim(),translate:true}).then(parseAnalysis):
+    void engineState().then(({mode})=>mode==='setup'?Promise.reject(new Error(SETUP_NEEDED)):mode==='browser'?engineRequest('analyze-text',{text:message.text.trim(),translate:true}).then(parseAnalysis):
       analyzeText(message.text,controller.signal)).then(data=>sendResponse({ok:true,data}),
       error=>sendResponse({ok:false,error:error instanceof Error?error.message:'Local analysis failed'})).finally(()=>clearTimeout(timer));
     return true;

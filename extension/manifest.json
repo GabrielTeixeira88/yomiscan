@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "YomiScan — Local Manga Study & Reading",
   "version": "0.1.0",
-  "description": "Study Japanese text or progressively translate supported image-based manga readers using a local backend.",
+  "description": "Study Japanese and read or translate manga with models that run on your computer, in Chrome or a local backend.",
   "minimum_chrome_version": "120",
   "permissions": ["activeTab", "scripting", "offscreen", "storage", "unlimitedStorage"],
   "host_permissions": ["http://127.0.0.1/*"],

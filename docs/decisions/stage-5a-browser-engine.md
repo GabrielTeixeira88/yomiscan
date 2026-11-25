@@ -1,6 +1,7 @@
 # Stage 5a: browser-first engine
 
-Status: **in progress**. Increments 1–4 of 5 are done. Follows the [Stage 2 results](stage-2-results.md),
+Status: **in progress**. Increments 1–4 are done; increment 5 is built and measured, but publishing
+the models and the memory decision below are still open. Follows the [Stage 2 results](stage-2-results.md),
 where every hard gate passed and the owner chose browser-first even when it is slower or
 CPU-only. The Python backend stays available as the optional "local engine" (GPU, Hy-MT2).
 
@@ -20,7 +21,7 @@ Each increment is merged only with its tests and a real-model measurement.
 | 2 | **Lexical engine.** lindera-wasm-unidic tokenizer and JMdict SQLite (sqlite-wasm). TypeScript ports of the ranking rules plus the Stage 3 data files (`units.json`, `grammar.json`, `inflections.json`). The lexical golden set is run against the browser engine (target: the Python 96.7%). | Done (see measurements) |
 | 3 | **Translation.** OPUS-MT fp16 with transformers-exact beam search (Stage 2: 99/100 lines identical to Python). The Chrome Translator stays optional and experimental. | Done (see measurements) |
 | 4 | **Integration.** An engine setting (Browser / Local backend). Study selection, Read Chapter and the edit-text re-analysis run through the browser engine. English in browser mode is HTML text boxes over the page; the pixel renderer stays in the local engine. | Done (see measurements) |
-| 5 | **Release readiness.** First-run onboarding with sizes and consent, storage-pressure handling, laptop measurements (integrated GPU, 4-core CPU, 8 GB), and docs. | Planned |
+| 5 | **Release readiness.** First-run onboarding with sizes and consent, storage-pressure handling, laptop measurements (integrated GPU, 4-core CPU, 8 GB), and docs. | Done. Models published on Hugging Face; full-stack memory (about 2 GB) is above G8 and accepted by the owner (see increment 5). No integrated-GPU or 8 GB laptop was measured. |
 
 ## Architecture (increment 1)
 
@@ -182,21 +183,121 @@ the overlay showed readable English inside the bubbles, after whole-word wrappin
 mid-word breaks. One title block showed OPUS's literal `&gt;&gt;Hugo Barra…` hallucination,
 which the Python backend produces identically. It is a model limitation, not part of the port.
 
-## Owner decision needed (not blocking development)
+## Increment 5: release readiness
 
-**Where the public model files are hosted.** Local development serves them from
-`scripts/serve_browser_artifacts.py`. A public release needs a stable public URL. A
-Hugging Face model repository under the owner's account fits best: free and versioned,
-with the licenses already Apache-2.0 for the vision models, CC-BY-4.0 for OPUS-MT and
-CC BY-SA for JMdict with attribution. Because the extension verifies pinned hashes, the
-host needs no trust, only availability. Publishing requires the owner's account and
-consent.
+**Hosting (owner decision, 2026-11-24): Hugging Face.** `scripts/build_browser_artifacts.py`
+now adds a model card (`packaging/browser-models/README.md`, with a generated component table)
+and the license texts (Apache-2.0, UniDic BSD-3-Clause, lindera MIT) to the artifact folder.
+JMdict is credited to EDRDG under CC BY-SA 4.0, as its licence requires.
+`scripts/publish_browser_artifacts.py --repo <owner>/yomiscan-browser-models` uploads the folder,
+downloads every pinned file back through the public URL and checks its size and SHA-256.
+Only after that does it write `extension/src/engine/artifact-host.json`, so the extension's
+default source is an immutable `resolve/<commit>/` URL. Hugging Face sends CORS headers on both
+the resolve URL and its CDN redirect, which the cross-origin isolated engine page needs. The OPUS
+license label was corrected to Apache-2.0, as its model card declares; no file hash changed.
+
+**Engine choice.** The stored setting is **Automatic** unless the user picks one:
+1. the browser engine, once its models are installed;
+2. otherwise the local backend, if it answers `/health` within 1.5 s;
+3. otherwise first-run setup.
+
+An explicit Local choice is never second-guessed. With an explicit Browser choice and no models,
+setup is shown. An existing backend user therefore sees no change until they choose to download.
+
+**First-run setup.** Clicking the toolbar icon, Read Chapter, Translate Chapter or Select Text
+with no usable engine shows a card at the top of the panel. It gives the download size for this
+device (e.g. 579 MB on WebGPU, 603 MB on CPU), the host, the fingerprint check, the licenses and
+how to remove the models later, with **Download** and **Not now** buttons. Nothing is fetched
+before the click. Progress shows the component and MB. Cancel and Try again resume from the
+files that finished. If installed models later disappear (Chrome clearing data), the card says
+so ("Download the reading models again") instead of looking like a first run.
+
+**Storage pressure.**
+- Before any download, the engine compares the missing bytes plus a 256 MiB margin with
+  `navigator.storage.estimate()`. If they don't fit, it refuses and says how many MB to free.
+- A `QuotaExceededError` while saving names the file and keeps the finished ones.
+- `unlimitedStorage` is what protects the models. `navigator.storage.persist()` is requested
+  but returned false in the offscreen document without a user gesture.
+- Advanced → Browser engine shows the storage used and the space available.
+
+**End to end** (`extension/tests/first-run-e2e.mjs`: real Chrome, backend stopped, storage
+cleared, three sample pages). The first two columns used the loopback server as the model
+source; the last used the published Hugging Face commit (the build default), in a fresh headless
+profile:
+
+| Check | WebGPU, loopback | CPU (`--disable-gpu`), 4 threads emulated, loopback | WebGPU, Hugging Face |
+|---|---|---|---|
+| Offer before any byte is fetched | 579 MB | 603 MB | 579 MB |
+| Not now, then Read Chapter | Card shown again, nothing downloaded | Same | Same |
+| Download (verify + store) | 4.5 s | 2.2 s | 43.3 s |
+| Automatic → Read Chapter, 3 pages incl. model load | 23.5–24.4 s | 34.9–37.1 s | 32.1 s |
+| Cache Storage after install | 552 MiB | 575 MiB | 552 MiB |
+| Models removed behind the extension's back | "Download the reading models again", reinstalled in 3.7 s | 3.8 s | Same, reinstalled in 34.5 s |
+
+The CPU column caps WASM at 4 threads on the development CPU, so it is an upper bound for a
+4-core laptop, not a laptop measurement. The Hugging Face download time depends on the
+connection (here about 13 MB/s). The slower Read Chapter in that run used a new profile with no
+GPU shader cache. No integrated-GPU or 8 GB machine was available.
+
+**Hosting.** The files are published at
+[huggingface.co/Billy-Herrington/yomiscan-browser-models](https://huggingface.co/Billy-Herrington/yomiscan-browser-models),
+pinned to commit `99fe864242a9cfb29a1b35dc07cf7ad9a4fb59a9` in
+`extension/src/engine/artifact-host.json`. The publish script downloaded all 663 MiB back
+through that URL and matched every size and SHA-256 before writing the pin. Downloads are
+anonymous; no user needs a Hugging Face account. A new bundle is a new commit and a new pin, so
+an installed extension never picks up files it was not built for.
+
+### Memory: the full stack misses G8 (accepted)
+
+Stage 2's hard gate G8 (offscreen peak ≤ 1.5 GB) was measured with vision only. With every
+model loaded, the extension renderer's Windows private bytes are well above it:
+
+| Step (fresh engine page) | Extension process, CPU path | Extension process, WebGPU path |
+|---|---:|---:|
+| Empty engine page | 94 MiB | 311 MiB |
+| + lexical (lindera UniDic + JMdict) | 942 MiB | 968 MiB |
+| + OPUS translator | 2,086 MiB | 2,146 MiB |
+| + vision (detector + OCR, one page) | 1,955 MiB | 2,026 MiB |
+
+On WebGPU, Chrome's GPU process also grows by about 0.5 GB with vision. In Node with the same
+packages, lindera's tokenizer holds about 430 MB once UniDic is unpacked, and JMdict about
+120 MB in the sqlite heap plus a transient copy. OPUS alone, measured in the engine page with
+4 threads:
+
+| OPUS variant | Extension process | 20 decoder steps (beam 4 input) |
+|---|---:|---:|
+| fp16, optimization `all` (shipped) | 1,269 MiB | 1.15 s |
+| fp16, optimization `basic` | 1,145 MiB | 1.15 s |
+| fp16, optimization `disabled` | 927 MiB | 1.51 s |
+| fp32 | 1,794 MiB | 0.46 s |
+| int8 quantized | 637 MiB | 0.78 s |
+
+`enableCpuMemArena: false` changed nothing. No single setting brings the stack under 1.5 GB.
+Candidates for a memory increment:
+- int8 OPUS with beam search. It needs Stage 2's parity and quality check again; q8 *greedy*
+  was worse there.
+- JMdict in OPFS (sqlite `opfs-sahpool` in a worker) instead of in the heap: about −120 MiB.
+- Smaller or lazily loaded lexical data.
+- Loading OPUS only when English is requested (Read Chapter's study cards don't need it).
+
+**Owner decision (2026-11-24): accepted.** The browser engine's full-stack footprint of about
+2 GB in the extension process (plus about 0.5 GB in Chrome's GPU process on WebGPU) is accepted
+and the models are offered to everyone. G8's 1.5 GB still stands as Stage 2 measured it: the
+vision pipeline alone (785–933 MiB). For the full stack, the budget is now about 2.2 GB in the
+extension process; a change that goes above it needs a new owner decision. The memory increment
+above is not scheduled; its candidates stay recorded here for later.
 
 ## Development commands
 
 ```powershell
 uv run python scripts/build_browser_artifacts.py      # package exports and pin hashes
 uv run python scripts/serve_browser_artifacts.py      # http://127.0.0.1:47620/
+uv run hf auth login                                  # once, write token
+uv run python scripts/publish_browser_artifacts.py --repo <owner>/yomiscan-browser-models
 # Chrome (test profile) with --remote-debugging-port=9231 --enable-unsafe-extension-debugging
 node extension/tests/browser-engine.mjs samples/vision/008.jpg samples/vision/1.jpg
+# First-run setup, backend stopped. Downloads from the pinned Hugging Face commit by default;
+# YOMISCAN_MODEL_SOURCE=http://127.0.0.1:47620/ uses loopback;
+# YOMISCAN_TEST_THREADS=4 emulates a 4-core CPU (Chrome with --disable-gpu).
+node extension/tests/first-run-e2e.mjs samples/vision/008.jpg samples/vision/1.jpg
 ```

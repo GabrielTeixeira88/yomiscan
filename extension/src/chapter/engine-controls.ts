@@ -1,10 +1,8 @@
-// Setup for the browser engine (Stage 5a preview): shows the device path, the pinned
-// components this device needs and their sizes, and installs them only on an explicit click.
+// Advanced → Browser engine (Stage 5a): the engine choice, the device path, the pinned components
+// this device needs with their sizes and storage, and install/remove on an explicit click.
 import type {EngineStatus} from '../engine/engine';
-import {engineMode, setEngineMode} from '../engine-mode';
+import {DEFAULT_ENGINE_SOURCE, ENGINE_SOURCE_KEY, engineChoice, setEngineChoice} from '../engine-mode';
 
-export const ENGINE_SOURCE_KEY = 'engineArtifactSource';
-export const DEFAULT_ENGINE_SOURCE = 'http://127.0.0.1:47620/';
 const mib = (bytes: number) => (bytes / 2 ** 20).toFixed(0);
 
 export function engineSummary(status: EngineStatus): string {
@@ -14,6 +12,8 @@ export function engineSummary(status: EngineStatus): string {
     ...status.required.map(c => `${c.id} (${c.variant}) · ${mib(c.bytes)} MiB · ${c.installed ? 'installed' : 'not installed'} · ${c.license}`),
     missing.length ? `Download needed: ${mib(missing.reduce((n, c) => n + c.bytes, 0))} of ${mib(total)} MiB, stored by Chrome for this extension.` :
       `All ${mib(total)} MiB installed${status.loaded ? ' and loaded' : ''}.`];
+  if (status.storage) lines.push(`Chrome storage for YomiScan: ${mib(status.storage.usage)} MiB used, ${mib(Math.max(0, status.storage.quota - status.storage.usage))} MiB available` +
+    (status.persisted ? ' · protected from automatic clearing' : ''));
   const install = status.install;
   if (install.state === 'running' && install.progress)
     lines.push(`Installing ${install.progress.component}: ${mib(install.progress.loaded)} / ${mib(install.progress.total)} MiB`);
@@ -28,10 +28,10 @@ export class EngineControls {
   private timer = 0;
   private radios: HTMLInputElement[] = [];
   constructor() {
-    const summary = document.createElement('summary');summary.textContent = 'Browser engine (preview)';
+    const summary = document.createElement('summary');summary.textContent = 'Browser engine';
     const help = document.createElement('small');
-    help.textContent = 'Runs text detection, OCR, word analysis (JMdict, grammar notes) and OPUS-MT translation inside Chrome, without the Python backend. Install the models once, then choose it below. Each file is checked against a SHA-256 pinned in the extension.';
-    const label = document.createElement('label');label.textContent = 'Model source ';
+    help.textContent = 'Runs text detection, OCR, word analysis (JMdict, grammar notes) and OPUS-MT translation inside Chrome, without the Python backend. Each model file is checked against a SHA-256 pinned in the extension.';
+    const label = document.createElement('label');label.textContent = 'Model source (change only for development) ';
     Object.assign(this.source, {type: 'url', value: DEFAULT_ENGINE_SOURCE});this.source.setAttribute('aria-label', 'Browser engine model source URL');
     label.append(this.source);
     const button = (text: string, operation: string) => {const b = document.createElement('button');b.textContent = text;b.onclick = () => {void this.request(operation);};return b;};
@@ -39,10 +39,11 @@ export class EngineControls {
     // Which engine serves Select Text, Edit text, Read Chapter and Translate Chapter.
     const choice = document.createElement('fieldset'), legend = document.createElement('legend');
     legend.textContent = 'Engine for Study and reading';choice.append(legend);
-    for (const [value, text] of [['local', 'Local backend (Python)'], ['browser', 'Browser engine (preview)']] as const) {
+    for (const [value, text] of [['auto', 'Automatic: browser engine when its models are installed, otherwise the local backend'],
+      ['local', 'Local backend (Python)'], ['browser', 'Browser engine']] as const) {
       const row = document.createElement('label'), input = document.createElement('input');
       input.type = 'radio';input.name = 'yomiscan-engine';input.value = value;input.dataset.purpose = 'engine-' + value;
-      input.addEventListener('change', () => {if (input.checked) void setEngineMode(value);});
+      input.addEventListener('change', () => {if (input.checked) void setEngineChoice(value);});
       this.radios.push(input);row.style.display = 'block';row.append(input, document.createTextNode(' ' + text));choice.append(row);
     }
     const note = document.createElement('small');
@@ -52,7 +53,7 @@ export class EngineControls {
       button('Remove Models', 'remove'), button('Check', 'status'), this.output);
     this.element.addEventListener('toggle', () => {
       if (this.element.open) {
-        void engineMode().then(mode => this.radios.forEach(r => {r.checked = r.value === mode;}));
+        void engineChoice().then(choice => this.radios.forEach(r => {r.checked = r.value === choice;}));
         void chrome.storage.local.get(ENGINE_SOURCE_KEY).then(v => {if (typeof v[ENGINE_SOURCE_KEY] === 'string') this.source.value = v[ENGINE_SOURCE_KEY];});
         void this.request('status');
       } else clearTimeout(this.timer);
@@ -62,7 +63,9 @@ export class EngineControls {
     clearTimeout(this.timer);
     if (operation === 'install') {
       try {new URL(this.source.value);} catch {this.output.textContent = 'Enter the model source as a full http(s) URL.';return;}
-      await chrome.storage.local.set({[ENGINE_SOURCE_KEY]: this.source.value});
+      // Only a development override is stored; the default follows the published host across updates.
+      if (this.source.value === DEFAULT_ENGINE_SOURCE) await chrome.storage.local.remove(ENGINE_SOURCE_KEY);
+      else await chrome.storage.local.set({[ENGINE_SOURCE_KEY]: this.source.value});
     }
     if (operation === 'remove' && !confirm('Remove the browser engine models from this browser? They can be installed again later.')) return;
     const reply = await chrome.runtime.sendMessage({type: 'engine', operation, base: this.source.value}).catch(() => null);

@@ -76,6 +76,21 @@ Bubbles stay clickable over the English image. **Stop**, **Retry**, **Retranslat
 and **Clear Session** work as in Translate Chapter. Choosing the other mode starts a new
 session.
 
+## Engines and first-run setup
+
+YomiScan's engine choice is **Automatic** by default:
+1. the **browser engine** once its models are installed;
+2. otherwise the **local backend**, if it is running;
+3. otherwise the panel shows **Download the reading models**.
+
+The setup card gives the size for this computer (about 580 MB with a GPU, 600 MB on CPU), the
+host (Hugging Face) and the licenses. Nothing downloads until you click **Download**. Each file
+is checked against a SHA-256 built into the extension and stored by Chrome for this extension
+only. A download that cannot fit is refused, with how much space to free. If Chrome later
+removes the models, the card offers them again. **Advanced → Browser engine** can force Local
+or Browser, show sizes and storage, and remove the models. The browser engine is English only
+and needs about 2 GB of memory with every model loaded.
+
 ## Translate Chapter
 
 Post-MVP page actions: choose a page (or **Nearest viewport**) and **Retranslate Page**

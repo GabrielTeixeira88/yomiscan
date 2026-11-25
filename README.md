@@ -146,13 +146,15 @@ straight away: no dragging and no new OCR. Each page has an **English** button a
 top-right corner that renders that page's translation on demand, and **Japanese** switches
 back. See [reading mode](docs/architecture.md#stage-4-reading-mode).
 
-**Browser engine (Stage 5a preview).** Study, Read Chapter and Translate Chapter can run
-entirely inside Chrome with no Python backend: detection, OCR, JMdict word analysis and
-OPUS-MT translation. Install the pinned models once under **Advanced → Browser engine
-(preview)**, then choose **Browser engine**. It needs about 550–575 MiB and is English
-only. Translate Chapter then shows English as text over each bubble. During development the
-models are served by `scripts/serve_browser_artifacts.py`. See the
-[Stage 5a record](docs/decisions/stage-5a-browser-engine.md).
+**Browser engine (Stage 5a).** Study, Read Chapter and Translate Chapter can run entirely
+inside Chrome with no Python backend: detection, OCR, JMdict word analysis and OPUS-MT
+translation. The engine choice is **Automatic** by default: the browser engine once its models
+are installed, otherwise a running local backend. With neither, the panel offers a one-time
+download (about 580–600 MB, from Hugging Face, each file checked against a SHA-256 pinned in
+the extension). It never downloads without a click. **Advanced → Browser engine** can force
+either engine or remove the models. The browser engine is English only, and Translate Chapter
+then shows English as text over each bubble. It currently needs about 2 GB of memory with
+every model loaded. See the [Stage 5a record](docs/decisions/stage-5a-browser-engine.md).
 
 Open an image-based chapter and click YomiScan → **Translate Chapter** to replace every
 page with English instead. Visible pages process first, one at a time. **Original /

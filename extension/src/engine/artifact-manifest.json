@@ -106,8 +106,8 @@
    "id": "translation-opus-ja-en",
    "kind": "translation",
    "variant": "fp16",
-   "license": "CC-BY-4.0 (Helsinki-NLP)",
-   "source": "Xenova/opus-mt-ja-en: ONNX export of Helsinki-NLP/opus-mt-ja-en (CC-BY-4.0); fp16 files",
+   "license": "Apache-2.0 (Helsinki-NLP OPUS-MT)",
+   "source": "Xenova/opus-mt-ja-en: ONNX export of Helsinki-NLP/opus-mt-ja-en (Apache-2.0); fp16 files",
    "files": [
     {
      "path": "translation-opus-ja-en/encoder_model_fp16.onnx",
