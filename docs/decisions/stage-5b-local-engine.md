@@ -423,6 +423,16 @@ is a fresh Windows VM on every run. `scripts/validate_installer.py`:
 The job uploads the installer as an artifact. Running a freshly downloaded NSIS compiler on the
 development machine was refused by the permission system, so the installer is compiled on CI.
 
+First CI run (NSIS 3.13 from Chocolatey, GitHub `windows-latest`):
+
+| Check | Result |
+|---|---|
+| Installer | **85.3 MiB** (installs 473.6 MiB) |
+| Invalid extension ID | Refused, exit code 2, nothing registered |
+| Silent install | 13.8 s; files, native-messaging key and manifest (windowless host, allowed extension), uninstall entry |
+| Installed host `status`, Chrome framing | Answers; 805 MiB of models still to download |
+| Silent uninstall | 1.0 s; files, registration and entry removed, user data kept |
+
 **End to end, first start** (`YOMISCAN_E2E_FIRST_START=1 node extension/tests/companion-e2e.mjs`:
 real Chrome; the engine's data folder empty through `YOMISCAN_DATA`; developer backend stopped):
 
