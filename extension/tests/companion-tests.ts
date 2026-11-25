@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {NATIVE_HOST, companionConnection, companionStatus, parseStart, type NativeMessaging, type SessionStore} from "../src/companion";
+import {NATIVE_HOST, companionConnection, companionStatus, parsePrepare, parseStart, type NativeMessaging, type SessionStore} from "../src/companion";
+import {companionProgress, companionSetupLines} from "../src/chapter/companion-setup";
 import {resolveEngine} from "../src/engine-mode";
 import {localFetch} from "../src/local";
 
@@ -45,7 +46,8 @@ test("companion status: not installed, ready, missing models, cached for 30 s", 
   assert.deepEqual(await companionStatus(deps), {installed: false, ready: false, missing: []});
   assert.deepEqual(await companionStatus(deps), {installed: false, ready: false, missing: []}, "cached");
   now = 31_000;
-  assert.deepEqual(await companionStatus(deps), {installed: true, ready: false, missing: ["dictionary"], version: "0.1.0"});
+  assert.deepEqual(await companionStatus(deps), {installed: true, ready: false, missing: ["dictionary"], version: "0.1.0",
+    bytes: undefined, source: undefined, prepare: null});
   assert.equal((await companionStatus(deps, true)).ready, true);
   assert.equal(missing.sent.length, 3);
   const broken = native([() => ({ok: false, error: "OSError: disk full"})]);
@@ -104,8 +106,25 @@ test("localFetch waits for a launched engine's models, sends the token, and rela
 test("Advanced shows what the local engine companion needs", async () => {
   const {companionSummary} = await import("../src/chapter/engine-controls");
   assert.equal(companionSummary({installed: false, ready: false, missing: []}), "Local engine: not installed.");
+  assert.match(companionSummary({installed: false, ready: false, missing: []}, "a".repeat(32)),
+    new RegExp(`installer asks for this extension's ID: ${"a".repeat(32)}`));
   assert.match(companionSummary({installed: true, ready: false, missing: ["dictionary"], version: "0.1.0"}),
     /^Local engine 0\.1\.0: installed; missing dictionary\. Run yomiscan-engine\.exe --prepare/);
   assert.match(companionSummary({installed: true, ready: true, missing: []}), /Automatic uses it first/);
   assert.match(companionSummary({installed: true, ready: false, missing: [], error: "OSError: x"}), /did not answer \(OSError: x\)/);
+});
+
+test("the local engine's download card states size, source and progress", () => {
+  const status = {installed: true, ready: false, missing: ["dictionary"], bytes: 805e6, source: "huggingface.co/owner/models", prepare: null};
+  const lines = companionSetupLines(status);
+  assert.match(lines.size, /^805 MB, saved in your user folder/);
+  assert.match(lines.source, /^From huggingface\.co\/owner\/models\. Each file is checked against a fingerprint/);
+  assert.equal(companionProgress(status), "");
+  assert.equal(companionProgress({...status, prepare: {state: "starting"}}), "Starting the download…");
+  assert.equal(companionProgress({...status, prepare: {state: "running", loaded: 186e6, total: 805e6}}),
+    "Downloading the local engine's models: 186 of 805 MB");
+  assert.equal(companionProgress({...status, prepare: {state: "failed", error: "ValueError: bad hash"}}), "Download stopped: ValueError: bad hash");
+  assert.deepEqual(parsePrepare({state: "running", loaded: 5, total: 10, pid: 3}), {state: "running", loaded: 5, total: 10, error: undefined});
+  assert.equal(parsePrepare({state: "exploded"}), null);
+  assert.equal(parsePrepare(null), null);
 });

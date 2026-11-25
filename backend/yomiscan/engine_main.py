@@ -9,10 +9,16 @@ Modes:
 - `yomiscan-engine [--port N] [--idle-exit SECONDS]`: serve on 127.0.0.1.
 - `yomiscan-engine chrome-extension://<id>/ ...`: Chrome's native-messaging host (launcher.py).
 - `yomiscan-engine --register --extension-id <id>` / `--unregister`: Chrome registration (HKCU).
-- `yomiscan-engine --prepare [--component ...]`: download and verify the models.
+- `yomiscan-engine --prepare [--component ...] [--progress FILE]`: download and verify the models.
+- `yomiscan-engine --stop`: end the engine the launcher started (the uninstaller uses it).
+
+The bundle has two executables: `yomiscan-engine.exe` (console, for these commands) and the
+windowless `yomiscan-engine-host.exe`, which Chrome starts and which runs the detached engine, so
+no console window ever appears.
 """
 
 import argparse
+import io
 from importlib.metadata import version
 import os
 from pathlib import Path
@@ -83,6 +89,29 @@ def serve(port: int, idle_exit: float) -> None:
         raise SystemExit(f"Could not serve on 127.0.0.1:{port}")
 
 
+def attach_std_streams() -> None:
+    """A windowless (GUI) process may start without sys.std* even when Windows passed it handles:
+    Chrome's pipes for the native host, the log file for the detached engine. Attach those."""
+    if os.name != "nt" or all(stream is not None for stream in (sys.stdin, sys.stdout, sys.stderr)):
+        return
+    import ctypes
+    import msvcrt
+    kernel32 = ctypes.windll.kernel32
+    kernel32.GetStdHandle.restype = ctypes.c_void_p
+    for name, handle_id, mode in (("stdin", -10, "rb"), ("stdout", -11, "wb"), ("stderr", -12, "wb")):
+        if getattr(sys, name) is not None:
+            continue
+        handle = kernel32.GetStdHandle(handle_id)
+        if handle in (None, 0, ctypes.c_void_p(-1).value):
+            continue
+        try:
+            raw = os.fdopen(msvcrt.open_osfhandle(handle, os.O_BINARY | (os.O_RDONLY if mode == "rb" else 0)), mode, buffering=0)
+        except OSError:
+            continue  # not a usable handle: the stream stays absent, as before
+        buffered = io.BufferedReader(raw) if mode == "rb" else io.BufferedWriter(raw)
+        setattr(sys, name, io.TextIOWrapper(buffered, encoding="utf-8", errors="replace", line_buffering=True))
+
+
 def native_host() -> int:
     from .engine_models import data_root
     from .launcher import IDLE_SECONDS, Launcher, host_main
@@ -95,6 +124,7 @@ def native_host() -> int:
 
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
+    attach_std_streams()
     if any(argument.startswith("chrome-extension://") for argument in argv):
         return native_host()  # Chrome passes the caller's origin (and --parent-window on Windows)
     parser = argparse.ArgumentParser(prog="yomiscan-engine", description="YomiScan local engine (Torch-free), on 127.0.0.1")
@@ -108,6 +138,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="Download and verify the default models and dictionary (explicit; nothing downloads otherwise)")
     parser.add_argument("--component", choices=("ocr", "detection", "translation", "dictionary", "all"), default="all",
                         help="With --prepare: only this part")
+    parser.add_argument("--progress", type=Path, help="With --prepare: write progress as JSON to this file")
+    parser.add_argument("--stop", action="store_true", help="End the engine the launcher started, if it runs")
     parser.add_argument("--register", action="store_true", help="Register this engine as Chrome's native-messaging host")
     parser.add_argument("--unregister", action="store_true", help="Remove the Chrome registration")
     parser.add_argument("--extension-id", action="append", default=[], help="With --register: an allowed extension (repeatable)")
@@ -131,9 +163,15 @@ def main(argv: list[str] | None = None) -> int:
         path = register(Path(engine_command()[0]), ids, folder)
         print(f"Registered {path} for extension(s) {', '.join(sorted(set(ids)))}")
         return 0
+    if arguments.stop:
+        from .engine_models import data_root
+        from .launcher import Launcher
+        print("Stopped the YomiScan engine" if Launcher(data_root(), version("yomiscan")).stop() else "No YomiScan engine was running")
+        return 0
     if arguments.prepare:
         from .cli import prepare_defaults
-        return prepare_defaults(["--component", arguments.component])
+        return prepare_defaults(["--component", arguments.component,
+                                 *(["--progress", str(arguments.progress)] if arguments.progress else [])])
     os.environ["YOMISCAN_DEVICE"] = arguments.device
     serve(arguments.port, arguments.idle_exit)
     return 0

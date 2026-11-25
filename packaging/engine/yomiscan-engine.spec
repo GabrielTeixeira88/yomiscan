@@ -19,6 +19,13 @@ analysis = Analysis(
     noarchive=False,
 )
 pyz = PYZ(analysis.pure)
+# Two executables share one folder: the console one for commands (--prepare, --register, --version)
+# and a windowless one that Chrome starts as the native-messaging host and that runs the detached
+# engine, so no console window appears.
 exe = EXE(pyz, analysis.scripts, [], exclude_binaries=True, name="yomiscan-engine", console=True,
           debug=False, strip=False, upx=False)
-coll = COLLECT(exe, analysis.binaries, analysis.datas, strip=False, upx=False, name="yomiscan-engine")
+# disable_windowed_traceback: an unhandled error must end the process (its traceback goes to the
+# log file that the launcher attaches), never open a dialog that waits invisibly for a click.
+host = EXE(pyz, analysis.scripts, [], exclude_binaries=True, name="yomiscan-engine-host", console=False,
+           disable_windowed_traceback=True, debug=False, strip=False, upx=False)
+coll = COLLECT(exe, host, analysis.binaries, analysis.datas, strip=False, upx=False, name="yomiscan-engine")

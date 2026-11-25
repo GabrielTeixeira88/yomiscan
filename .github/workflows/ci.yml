@@ -64,9 +64,9 @@ jobs:
         run: uv run --frozen --no-sync python -c "from importlib.util import find_spec; assert find_spec('torch') is None and find_spec('transformers') is None"
 
   engine:
-    name: Frozen local engine / Windows
+    name: Frozen local engine and installer / Windows
     runs-on: windows-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
@@ -80,6 +80,23 @@ jobs:
         run: python scripts/build_engine.py
       - name: Start it with no models and check readiness reports setup
         run: python scripts/validate_engine_build.py
+      - name: NSIS (open source, zlib license) for the installer
+        shell: pwsh
+        run: |
+          if (-not (Get-Command makensis -ErrorAction SilentlyContinue) -and -not (Test-Path "C:\Program Files (x86)\NSIS\makensis.exe")) {
+            choco install nsis --no-progress -y
+          }
+      - name: Build the per-user installer from the frozen engine
+        run: python scripts/build_installer.py --skip-engine
+      - name: Clean machine - silent install, registration, host status, uninstall
+        run: python scripts/validate_installer.py --installer .cache/engine-build/YomiScan-Engine-Setup-0.1.0.exe
+      - name: Upload the unsigned installer
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: yomiscan-engine-setup-${{ github.sha }}
+          path: .cache/engine-build/YomiScan-Engine-Setup-*.exe
+          if-no-files-found: error
+          retention-days: 14
 
   extension:
     name: Chrome extension / Node 22

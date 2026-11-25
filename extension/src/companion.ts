@@ -10,7 +10,10 @@ const STATUS_KEY = 'companionStatus';
 const STATUS_TTL = 30_000;
 export const CLIENT_HEADERS = {'X-YomiScan-Client': 'study-extension-v1'} as const;
 
-export interface CompanionStatus {installed: boolean; ready: boolean; missing: string[]; version?: string; error?: string}
+export interface CompanionPrepare {state: 'starting' | 'running' | 'done' | 'failed'; loaded?: number; total?: number; error?: string}
+export interface CompanionStatus {installed: boolean; ready: boolean; missing: string[]; version?: string; error?: string;
+  /** Bytes still to download, where they come from, and the explicit download's progress. */
+  bytes?: number; source?: string; prepare?: CompanionPrepare | null}
 /** `started`: this call launched the engine, so its models may still be loading. */
 export interface Connection {base: string; headers: Record<string, string>; companion: boolean; started?: boolean}
 
@@ -42,7 +45,9 @@ export async function companionStatus(deps: Deps | null = chromeDeps(), fresh = 
     const reply = await deps.native.sendNativeMessage(NATIVE_HOST, {type: 'status'});
     if (!record(reply) || reply.ok !== true || !record(reply.models)) throw new Error(record(reply) && typeof reply.error === 'string' ? reply.error : 'Invalid companion reply');
     const missing = Array.isArray(reply.models.missing) ? reply.models.missing.filter((m): m is string => typeof m === 'string') : [];
-    status = {installed: true, ready: reply.models.ready === true, missing, version: typeof reply.version === 'string' ? reply.version : undefined};
+    status = {installed: true, ready: reply.models.ready === true, missing, version: typeof reply.version === 'string' ? reply.version : undefined,
+      bytes: typeof reply.models.bytes === 'number' ? reply.models.bytes : undefined,
+      source: typeof reply.models.source === 'string' ? reply.models.source : undefined, prepare: parsePrepare(reply.prepare)};
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     status = NOT_INSTALLED.test(message) ? {installed: false, ready: false, missing: []} :
@@ -50,6 +55,22 @@ export async function companionStatus(deps: Deps | null = chromeDeps(), fresh = 
   }
   await deps.session.set({[STATUS_KEY]: {at: deps.now(), status}});
   return status;
+}
+
+export function parsePrepare(value: unknown): CompanionPrepare | null {
+  if (!record(value) || !['starting', 'running', 'done', 'failed'].includes(value.state as string)) return null;
+  const number = (key: string) => typeof value[key] === 'number' && Number.isFinite(value[key]) ? value[key] as number : undefined;
+  return {state: value.state as CompanionPrepare['state'], loaded: number('loaded'), total: number('total'),
+    error: typeof value.error === 'string' ? value.error.slice(0, 300) : undefined};
+}
+
+/** Start the explicit model download (after the user's click). */
+export async function companionPrepare(deps: Deps | null = chromeDeps()): Promise<CompanionPrepare | null> {
+  if (!deps) throw new Error(NO_NATIVE_MESSAGING);
+  const reply = await deps.native.sendNativeMessage(NATIVE_HOST, {type: 'prepare'});
+  if (!record(reply) || reply.ok !== true) throw new Error(`The local engine could not start the download: ${
+    record(reply) && typeof reply.error === 'string' ? reply.error : 'no reply'}`);
+  return parsePrepare(reply.prepare);
 }
 
 export function parseStart(reply: unknown): {port: number; token: string} {

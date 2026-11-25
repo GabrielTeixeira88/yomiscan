@@ -183,3 +183,79 @@ def test_chrome_origin_argument_selects_the_native_host(monkeypatch):
     import yomiscan.engine_main as module
     monkeypatch.setattr(module, "native_host", lambda: 7)
     assert engine_main([f"chrome-extension://{ID}/", "--parent-window=0"]) == 7
+
+
+def test_progress_file_is_atomic_throttled_and_reports_failure(tmp_path):
+    from yomiscan.engine_models import PinnedFile, ProgressFile
+    clock = {"now": 0.0}
+    path = tmp_path / "progress.json"
+    progress = ProgressFile(path, [PinnedFile("a", 100, "x"), PinnedFile("b", 50, "y")], clock=lambda: clock["now"])
+    assert json.loads(path.read_text())["state"] == "running" and json.loads(path.read_text())["total"] == 150
+    progress.update("a", 40)
+    progress.update("a", 60)  # within half a second: not written
+    assert json.loads(path.read_text())["loaded"] == 40
+    clock["now"] = 1.0
+    progress.update("b", 10)
+    assert json.loads(path.read_text())["loaded"] == 70
+    progress.fail(ValueError("bad hash"))
+    assert json.loads(path.read_text()) | {"pid": 0} == {"pid": 0, "total": 150, "state": "failed", "loaded": 70,
+                                                         "error": "ValueError: bad hash"}
+    progress.finish()
+    assert json.loads(path.read_text())["state"] == "done" and json.loads(path.read_text())["loaded"] == 150
+    assert not (tmp_path / "progress.json.tmp").exists()
+
+
+def test_prepare_starts_one_download_and_status_reports_it(tmp_path, monkeypatch):
+    launched = []
+    launcher, _ = make_launcher(tmp_path, set(), [])
+    assert launcher.prepare(launch=lambda command: (launched.append(command), Mock(pid=31))[1]) == {"state": "starting", "pid": 31}
+    assert launched[0][-3:] == ["--prepare", "--progress", str(tmp_path / "prepare-progress.json")]
+    monkeypatch.setattr(launcher_module, "_alive", lambda pid: False)
+    failed = launcher.progress()  # the download process died before writing progress
+    assert failed["state"] == "failed" and "prepare.log" in failed["error"]
+    (tmp_path / "prepare-progress.json").write_text(json.dumps({"state": "running", "pid": 4242, "loaded": 1, "total": 9}))
+    monkeypatch.setattr(launcher_module, "_alive", lambda pid: pid == 4242)
+    assert launcher.prepare(launch=launched.append)["pid"] == 4242 and len(launched) == 1  # not started twice
+    environment = {"YOMISCAN_ENGINE_MODELS": str(tmp_path / "models"), "YOMISCAN_DICTIONARY": str(tmp_path / "none.sqlite3")}
+    status = handle({"type": "status"}, launcher, environment)
+    assert status["prepare"]["state"] == "running" and status["models"]["bytes"] > 700 * 2**20
+    assert status["models"]["source"].startswith("huggingface.co/")
+    monkeypatch.setattr(launcher_module, "_alive", lambda pid: False)  # a crashed download is started again
+    assert handle({"type": "prepare"}, launcher, environment)["ok"]
+
+
+def test_data_root_override_and_stop_command(tmp_path, monkeypatch, capsys):
+    from yomiscan.engine_models import data_root
+    assert data_root({"YOMISCAN_DATA": str(tmp_path), "LOCALAPPDATA": "elsewhere"}) == tmp_path
+    monkeypatch.setenv("YOMISCAN_DATA", str(tmp_path))
+    # main() fills in the engine's defaults. setenv records each key (even an absent one) so the
+    # test removes them again; delenv alone records nothing for an absent key.
+    for key in ("YOMISCAN_DETECTOR", "YOMISCAN_OCR", "YOMISCAN_TRANSLATION_ENGINE", "YOMISCAN_PREPARE_COMMAND",
+                "YOMISCAN_DICTIONARY", "YOMISCAN_CACHE_DIRECTORY", "YOMISCAN_GLOSSARY_DATABASE"):
+        monkeypatch.setenv(key, "")
+        monkeypatch.delenv(key)
+    assert engine_main(["--stop"]) == 0
+    assert "No YomiScan engine was running" in capsys.readouterr().out
+
+
+def test_prepare_defaults_writes_progress_and_failures(tmp_path, monkeypatch):
+    import yomiscan.engine_models as models
+    from yomiscan.cli import prepare_defaults
+    monkeypatch.setenv("YOMISCAN_ENGINE_MODELS", str(tmp_path / "models"))
+    calls = []
+
+    def download(selected, *, bundle, progress):
+        calls.append(selected)
+        progress(bundle.components[selected[0]].files[0].path, 10)
+        return tmp_path
+    monkeypatch.setattr(models, "download_components", download)
+    assert prepare_defaults(["--component", "dictionary", "--progress", str(tmp_path / "p.json")]) == 0
+    assert calls == [["dictionary"]] and json.loads((tmp_path / "p.json").read_text())["state"] == "done"
+
+    def broken(selected, *, bundle, progress):
+        raise RuntimeError("Could not download dictionary/jmdict.sqlite3")
+    monkeypatch.setattr(models, "download_components", broken)
+    with pytest.raises(RuntimeError):
+        prepare_defaults(["--component", "dictionary", "--progress", str(tmp_path / "p.json")])
+    record = json.loads((tmp_path / "p.json").read_text())
+    assert record["state"] == "failed" and "Could not download" in record["error"]

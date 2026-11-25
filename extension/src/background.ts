@@ -1,5 +1,5 @@
 import {backendBase} from './backend';
-import {companionStatus} from './companion';
+import {companionPrepare,companionStatus} from './companion';
 import {localConnection,localFetch} from './local';
 import { analyzeCrop, analyzeText, parseAnalysis } from "./api";
 import {ENGINE_INSTALLED_KEY,SETUP_NEEDED,engineChoice,engineSource,resolveEngine,type EngineChoice,type ResolvedEngine} from './engine-mode';
@@ -164,6 +164,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return data;
     })().then(data=>sendResponse({ok:true,data}),
       error=>sendResponse({ok:false,error:error instanceof Error?error.message:'Browser engine unavailable'}));
+    return true;
+  }
+  if(message?.type==='companion-prepare'){
+    void companionPrepare().then(data=>sendResponse({ok:true,data}),
+      error=>sendResponse({ok:false,error:error instanceof Error?error.message:'The local engine could not start the download'}));
     return true;
   }
   if(message?.type==='companion-status'){
