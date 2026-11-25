@@ -4,7 +4,7 @@ import os
 from ..translation.base import Device
 from .base import TextDetector, DetectionInitializationError
 
-DETECTOR_NAMES = ("current", "onnx-int8")
+DETECTOR_NAMES = ("current", "onnx-int8", "pinned")
 
 
 def create_detector(name: str | None = None, *, device: Device = "auto", bubble_threshold: float = .5,
@@ -21,4 +21,9 @@ def create_detector(name: str | None = None, *, device: Device = "auto", bubble_
             raise DetectionInitializationError("The experimental ONNX detector is CPU-only; select --device cpu")
         from .onnx import ONNXComicTextDetector
         return ONNXComicTextDetector(bubble_threshold=bubble_threshold, free_threshold=free_threshold, threads=threads or 4)
+    if name == "pinned":
+        from ..onnx_runtime import onnx_device
+        from .pinned import PinnedComicTextDetector
+        return PinnedComicTextDetector(device=onnx_device(device), bubble_threshold=bubble_threshold,
+                                       free_threshold=free_threshold, threads=threads or 4)
     raise ValueError(f"Unknown detector {name!r}; choose {DETECTOR_NAMES}")

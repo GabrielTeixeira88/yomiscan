@@ -4,7 +4,7 @@ import os
 from .base import OCREngine, OCRInitializationError
 
 # "current" is manga-ocr with greedy decoding; "current-published" keeps the library's beam settings.
-OCR_NAMES = ("current", "current-published", "original-rgb", "2025", "2025-greedy", "2025-onnx", "2025-onnx-no-cache")
+OCR_NAMES = ("current", "current-published", "original-rgb", "2025", "2025-greedy", "2025-onnx", "2025-onnx-no-cache", "pinned")
 
 
 def create_ocr_engine(name: str | None = None, *, device: str = "auto", threads: int | None = None,
@@ -18,6 +18,11 @@ def create_ocr_engine(name: str | None = None, *, device: str = "auto", threads:
         import torch
         if not torch.cuda.is_available():
             raise OCRInitializationError("CUDA was explicitly requested but is unavailable; select CPU")
+    if name == "pinned":
+        if device == "cuda":
+            raise OCRInitializationError("The Torch-free OCR has no CUDA path; it runs on the CPU")
+        from .pinned import PinnedMangaOCREngine
+        return PinnedMangaOCREngine(device="cpu", threads=threads or 4)
     if name.startswith("2025-onnx"):
         if device == "cuda":
             raise OCRInitializationError("The experimental ONNX OCR is CPU-only; select --device cpu")

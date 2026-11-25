@@ -171,7 +171,7 @@ hide all pages or request every read page. Font changes rerender only pages that
 have English. Switching between Read Chapter and Translate Chapter replaces the session;
 the backend caches make re-reading cheap.
 
-## Stage 5a browser engine (in progress)
+## Stage 5a browser engine
 
 `extension/src/engine/` runs page vision inside Chrome with ONNX Runtime Web, in the
 offscreen document, without the Python backend. Increment 1 covers the detector,
@@ -198,7 +198,23 @@ Face commit written by `scripts/publish_browser_artifacts.py`. The engine refuse
 won't fit (`storageShortfall`) and reports quota errors per file.
 
 See the [Stage 5a record](decisions/stage-5a-browser-engine.md) for increments, measurements
-and the open memory decision.
+and the accepted memory footprint (about 2 GB with every model loaded).
+
+## Stage 5b local engine (in progress)
+
+Stage 5b packages a Torch-free local engine as an optional Windows companion. Increment 1 adds
+Torch-free vision, opt-in with `YOMISCAN_DETECTOR=pinned` and `YOMISCAN_OCR=pinned`:
+- `engine_models.py` downloads and verifies the files pinned in
+  `resources/engine/local-manifest.json`. They come from the same Hugging Face commit as the
+  browser bundle (`local-host.json`), via the explicit `yomiscan-prepare-engine` command.
+- `detection/pinned.py` runs the fp32 RT-DETR-v2 export and reproduces transformers'
+  preprocessing and post-processing. `ocr/pinned.py` runs the int8 manga-ocr export with the
+  backend's greedy decoding, always on the CPU.
+- `onnx_runtime.session` chooses the device: `YOMISCAN_ONNX_DEVICE=cpu` (default) or `directml`.
+
+On the 23-page corpus, 99.1% of blocks give identical text to the Torch path end to end. With
+DirectML, detection takes 143 ms per page instead of about 1 s. See the
+[Stage 5b record](decisions/stage-5b-local-engine.md).
 
 ## Post-MVP reader controls, readiness and distribution
 

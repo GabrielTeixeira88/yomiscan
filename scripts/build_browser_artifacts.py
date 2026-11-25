@@ -4,7 +4,9 @@ Copies the ONNX exports made by research/stage-2 (see its README for the export 
 into one servable folder and writes two manifests with each file's size and SHA-256:
 
 - <output>/manifest.json, served next to the files;
-- extension/src/engine/artifact-manifest.json, committed, so the extension accepts only these bytes.
+- extension/src/engine/artifact-manifest.json, committed, so the extension accepts only these bytes;
+- <output>/local-manifest.json and backend/yomiscan/resources/engine/local-manifest.json for the
+  Torch-free local engine (Stage 5b): the fp32 detector plus the browser bundle's int8 OCR files.
 
 Weights stay out of Git. Serve the output folder with scripts/serve_browser_artifacts.py
 for local development; scripts/publish_browser_artifacts.py uploads it unchanged to Hugging
@@ -22,6 +24,8 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 PINNED = ROOT / "extension" / "src" / "engine" / "artifact-manifest.json"
+LOCAL_PINNED = ROOT / "backend" / "yomiscan" / "resources" / "engine" / "local-manifest.json"
+LOCAL_BUNDLE = "yomiscan-local-2026.11.1"
 NOTICES = ROOT / "packaging" / "browser-models"
 BUNDLE = "yomiscan-browser-2026.11.1"
 MANGA_OCR = "kha-white/manga-ocr-base (Apache-2.0); ONNX export, research/stage-2"
@@ -64,6 +68,16 @@ def components(stage2: Path, dictionary: Path = ROOT / "data" / "jmdict.sqlite3"
     )
 
 
+def local_components(stage2: Path) -> tuple[Component, ...]:
+    """Files only the local engine uses. Stage 5b: fp32 reproduces the PyTorch boxes (226/226 on DirectML)."""
+    return (Component("detector-fp32", "detector", "fp32", "Apache-2.0", DETECTOR,
+                      ((stage2 / "detector-onnx" / "detector.onnx", "detector-fp32/detector.onnx"),)),)
+
+
+# Browser-bundle components the local engine reuses unchanged (same paths and hashes).
+LOCAL_SHARED = ("ocr-int8",)
+
+
 def sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -72,35 +86,50 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def copy_component(component: Component, output: Path) -> dict:
+    files = []
+    for source, published in component.files:
+        target = output / published
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, target)
+        files.append({"path": published, "bytes": target.stat().st_size, "sha256": sha256(target)})
+    return {"id": component.id, "kind": component.kind, "variant": component.variant,
+            "license": component.license, "source": component.source, "files": files}
+
+
 def build(stage2: Path, output: Path, pinned: Path = PINNED, dictionary: Path = ROOT / "data" / "jmdict.sqlite3",
-          tokenizer: Path = LINDERA_WASM) -> dict:
+          tokenizer: Path = LINDERA_WASM, local_pinned: Path | None = None) -> dict:
+    """Writes both manifests; local_pinned defaults to local-manifest.json next to `pinned`."""
     manifest: dict = {"schema": 1, "bundle": BUNDLE, "components": []}
-    missing = [source for c in components(stage2, dictionary, tokenizer) for source, _ in c.files if not source.is_file()]
+    everything = (*components(stage2, dictionary, tokenizer), *local_components(stage2))
+    missing = [source for c in everything for source, _ in c.files if not source.is_file()]
     if missing:
         raise FileNotFoundError("Missing inputs (research/stage-2 exports, npm ci in extension/, scripts/import_jmdict.py): "
                                 + ", ".join(str(p) for p in missing))
     for component in components(stage2, dictionary, tokenizer):
-        files = []
-        for source, published in component.files:
-            target = output / published
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(source, target)
-            files.append({"path": published, "bytes": target.stat().st_size, "sha256": sha256(target)})
-        manifest["components"].append({"id": component.id, "kind": component.kind, "variant": component.variant,
-                                       "license": component.license, "source": component.source, "files": files})
-    text = json.dumps(manifest, indent=1, ensure_ascii=False) + "\n"
-    (output / "manifest.json").write_text(text, encoding="utf-8")
-    pinned.write_text(text, encoding="utf-8")
-    write_notices(manifest, output)
+        manifest["components"].append(copy_component(component, output))
+    local: dict = {"schema": 1, "bundle": LOCAL_BUNDLE, "components": [
+        *(copy_component(c, output) for c in local_components(stage2)),
+        *(c for c in manifest["components"] if c["id"] in LOCAL_SHARED)]}
+    for name, data, committed in (("manifest.json", manifest, pinned),
+                                  ("local-manifest.json", local, local_pinned or pinned.with_name("local-manifest.json"))):
+        text = json.dumps(data, indent=1, ensure_ascii=False) + "\n"
+        (output / name).write_text(text, encoding="utf-8")
+        committed.write_text(text, encoding="utf-8")
+    write_notices(manifest, output, local)
     return manifest
 
 
-def write_notices(manifest: dict, output: Path, notices: Path = NOTICES) -> None:
-    """The hosted folder's model card (with a generated component table) and license texts."""
-    rows = "\n".join(
-        f"| `{c['id']}` ({c['variant']}) | {len(c['files'])} | {sum(f['bytes'] for f in c['files']) / 2**20:.1f} MiB "
-        f"| {c['license']} | {c['source']} |" for c in manifest["components"])
-    card = Template((notices / "README.md").read_text(encoding="utf-8")).substitute(bundle=manifest["bundle"], components=rows)
+def write_notices(manifest: dict, output: Path, local: dict, notices: Path = NOTICES) -> None:
+    """The hosted folder's model card (with generated component tables) and license texts."""
+    def rows(items) -> str:
+        return "\n".join(
+            f"| `{c['id']}` ({c['variant']}) | {len(c['files'])} | {sum(f['bytes'] for f in c['files']) / 2**20:.1f} MiB "
+            f"| {c['license']} | {c['source']} |" for c in items)
+    only_local = [c for c in local["components"] if c["id"] not in LOCAL_SHARED]
+    card = Template((notices / "README.md").read_text(encoding="utf-8")).substitute(
+        bundle=manifest["bundle"], components=rows(manifest["components"]), local_bundle=local["bundle"],
+        local_components=rows(only_local), local_shared=", ".join(f"`{c}`" for c in LOCAL_SHARED))
     (output / "README.md").write_text(card, encoding="utf-8")
     shutil.copytree(notices / "LICENSES", output / "LICENSES", dirs_exist_ok=True)
 
@@ -111,14 +140,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output", type=Path, default=ROOT / ".cache" / "browser-artifacts", help="Servable artifact folder")
     arguments = parser.parse_args(argv)
     try:
-        manifest = build(arguments.stage2, arguments.output)
+        manifest = build(arguments.stage2, arguments.output, local_pinned=LOCAL_PINNED)
     except FileNotFoundError as error:
         print(error, file=sys.stderr)
         return 2
     for component in manifest["components"]:
         size = sum(f["bytes"] for f in component["files"]) / 2**20
         print(f"{component['id']:<10} {size:7.1f} MiB  {len(component['files'])} files")
-    print(f"Wrote {arguments.output / 'manifest.json'} and {PINNED.relative_to(ROOT)}")
+    print(f"Wrote {arguments.output / 'manifest.json'} and {arguments.output / 'local-manifest.json'}, "
+          f"{PINNED.relative_to(ROOT)} and {LOCAL_PINNED.relative_to(ROOT)}")
     return 0
 
 

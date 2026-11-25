@@ -37,6 +37,7 @@ class ModelDescriptor:
     approximate_download_bytes: int | None = None
     devices: tuple[str, ...] = ("cpu", "cuda")
     setup_command: str = ""
+    engine_component: str | None = None
 
 
 def model_catalog() -> tuple[ModelDescriptor, ...]:
@@ -56,6 +57,14 @@ def model_catalog() -> tuple[ModelDescriptor, ...]:
             spec.repository, spec.revision, spec.license, spec.files, experimental=True,
             dependency="onnxruntime" if "onnx" in identifier else None,
             devices=("cpu",) if "onnx" in identifier else ("cpu", "cuda"), setup_command="yomiscan-prepare-vision "+key))
+    from .engine_models import default_host, load_bundle
+    host, bundle = default_host(), load_bundle()
+    for identifier, kind, component in (("detector-pinned", "detection", "detector-fp32"), ("ocr-pinned", "ocr", "ocr-int8")):
+        catalog.append(ModelDescriptor(identifier, kind, host["repository"] or "loopback", host["revision"] or bundle.name,
+            bundle.components[component].license, tuple(f.path for f in bundle.components[component].files),
+            experimental=True, dependency="onnxruntime", devices=("cpu",),
+            approximate_download_bytes=bundle.components[component].size,
+            setup_command="yomiscan-prepare-engine "+component, engine_component=component))
     for name, spec in NMT_MODELS.items():
         files = ("config.json", "tokenizer_config.json", "sentencepiece.bpe.model", "tokenizer.json") if name == "nllb-600m" else ("config.json", "source.spm", "target.spm", "vocab.json")
         catalog.append(ModelDescriptor(name, "translation", spec.model, spec.revision, spec.license, files,
@@ -81,6 +90,9 @@ def model_catalog() -> tuple[ModelDescriptor, ...]:
 
 def local_artifacts(spec: ModelDescriptor, environment: dict[str, str]) -> tuple[list[Path], bool]:
     """Return private paths internally; endpoints only receive counts/status."""
+    if spec.engine_component is not None:
+        from .engine_models import installed_files
+        return installed_files(spec.engine_component, environment)
     if spec.dependency == "llama.cpp":
         key = {"hy-mt2-manga": "HY_MT2", "qwen25-manga": "QWEN25", "qwen35-vntl": "QWEN35"}[spec.id]
         raw = environment.get("YOMISCAN_"+key+"_GGUF", "")
@@ -118,8 +130,9 @@ def selected_models(environment: dict[str, str]) -> dict[str, str]:
     ocr = environment.get("YOMISCAN_OCR", "current")
     detector = environment.get("YOMISCAN_DETECTOR", "current")
     return {"ocr": "ocr-current" if ocr in ("current", "original-rgb") else "ocr-2025" if ocr in ("2025", "2025-greedy") else
-                "ocr-onnx" if ocr in ("2025-onnx", "2025-onnx-no-cache") else "invalid",
-        "detection": "detector-current" if detector == "current" else "detector-onnx" if detector == "onnx-int8" else "invalid",
+                "ocr-onnx" if ocr in ("2025-onnx", "2025-onnx-no-cache") else "ocr-pinned" if ocr == "pinned" else "invalid",
+        "detection": "detector-current" if detector == "current" else "detector-onnx" if detector == "onnx-int8" else
+                "detector-pinned" if detector == "pinned" else "invalid",
         "translation": environment.get("YOMISCAN_TRANSLATION_ENGINE", "current")}
 
 
