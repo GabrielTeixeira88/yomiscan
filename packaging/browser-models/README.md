@@ -32,11 +32,20 @@ $components
 
 A device downloads either `ocr-q4` (WebGPU) or `ocr-int8` (CPU), never both.
 
+### YomiScan local engine ($local_bundle)
+
+The optional Windows local engine runs the same models with ONNX Runtime outside Chrome.
+`local-manifest.json` pins its files: $local_shared from the table above, plus:
+
+| Component | Files | Size | License | Source |
+|---|---|---:|---|---|
+$local_components
+
 ## Licenses and attribution
 
 These files are **not** covered by YomiScan's MIT license. Each component keeps its own terms:
 
-- **Text detector**: an ONNX fp16 export of
+- **Text detector**: ONNX exports (fp16 for the browser, fp32 for the local engine) of
   [ogkalu/comic-text-and-bubble-detector](https://huggingface.co/ogkalu/comic-text-and-bubble-detector)
   (RT-DETR-v2), Apache-2.0. The weights are unchanged; only the format and precision differ.
 - **OCR**: ONNX exports (q4 and int8 quantized) of

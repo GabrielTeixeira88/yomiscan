@@ -247,6 +247,10 @@ through that URL and matched every size and SHA-256 before writing the pin. Down
 anonymous; no user needs a Hugging Face account. A new bundle is a new commit and a new pin, so
 an installed extension never picks up files it was not built for.
 
+Stage 5b added the local engine's files in commit `f623c220526047f951e8ca7d7fc23cc3c677f975`, and
+the extension now pins that commit. The browser manifest and its files are unchanged, so
+installed browser models stay valid.
+
 ### Memory: the full stack misses G8 (accepted)
 
 Stage 2's hard gate G8 (offscreen peak ≤ 1.5 GB) was measured with vision only. With every

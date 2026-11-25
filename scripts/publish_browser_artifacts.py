@@ -7,7 +7,9 @@
 Uploads .cache/browser-artifacts unchanged (files, manifest.json, model card, license texts),
 then downloads every pinned file back through the public URL and checks its size and SHA-256.
 Only then does it write extension/src/engine/artifact-host.json, so the extension's default
-source is an immutable commit URL whose bytes are known to match the pinned manifest.
+source is an immutable commit URL whose bytes are known to match the pinned manifest. The same
+commit also serves the Torch-free local engine (Stage 5b): local-manifest.json is checked the
+same way and backend/yomiscan/resources/engine/local-host.json gets the same pin.
 """
 
 import argparse
@@ -21,6 +23,8 @@ from urllib.request import Request, urlopen
 ROOT = Path(__file__).resolve().parents[1]
 PINNED = ROOT / "extension" / "src" / "engine" / "artifact-manifest.json"
 HOST = ROOT / "extension" / "src" / "engine" / "artifact-host.json"
+LOCAL_PINNED = ROOT / "backend" / "yomiscan" / "resources" / "engine" / "local-manifest.json"
+LOCAL_HOST = ROOT / "backend" / "yomiscan" / "resources" / "engine" / "local-host.json"
 REPOSITORY = re.compile(r"^[\w.-]+/[\w.-]+$")
 REVISION = re.compile(r"^[a-f0-9]{40}$")
 
@@ -32,9 +36,9 @@ def host_record(repository: str, revision: str) -> dict:
             "base": f"https://huggingface.co/{repository}/resolve/{revision}/"}
 
 
-def check_folder(folder: Path, pinned: Path = PINNED) -> dict:
-    """The folder must hold exactly the manifest the extension pins."""
-    served = folder / "manifest.json"
+def check_folder(folder: Path, pinned: Path = PINNED, served_name: str = "manifest.json") -> dict:
+    """The folder must hold exactly the manifest that is pinned in the repository."""
+    served = folder / served_name
     if not served.is_file():
         raise FileNotFoundError(f"{served} is missing; run scripts/build_browser_artifacts.py first")
     manifest = json.loads(served.read_text(encoding="utf-8"))
@@ -69,6 +73,17 @@ def verify_remote(manifest: dict, base: str, opener=urlopen) -> int:
     return total
 
 
+def combined(*manifests: dict) -> dict:
+    """One manifest with every distinct file, so shared files are downloaded and checked once."""
+    seen: dict[str, dict] = {}
+    for manifest in manifests:
+        for component in manifest["components"]:
+            for file in component["files"]:
+                if seen.setdefault(file["path"], file) != file:
+                    raise ValueError(f"{file['path']} has different pins in the browser and local manifests")
+    return {"components": [{"id": "all", "files": list(seen.values())}]}
+
+
 def publish(folder: Path, repository: str, private: bool) -> str:
     from huggingface_hub import HfApi
     from huggingface_hub.errors import HfHubHTTPError
@@ -98,12 +113,15 @@ def main(argv: list[str] | None = None) -> int:
     if not REPOSITORY.match(arguments.repo):
         parser.error("--repo must look like owner/name")
     manifest = check_folder(arguments.folder)
+    local = check_folder(arguments.folder, LOCAL_PINNED, "local-manifest.json")
     revision = arguments.revision or publish(arguments.folder, arguments.repo, arguments.private)
     record = host_record(arguments.repo, revision)
     print(f"Checking every pinned file at {record['base']}")
-    total = verify_remote(manifest, record["base"])
-    HOST.write_text(json.dumps(record, indent=1) + "\n", encoding="utf-8")
-    print(f"All {total / 2**20:.0f} MiB match. Wrote {HOST.relative_to(ROOT)}; rebuild the extension.")
+    total = verify_remote(combined(manifest, local), record["base"])
+    for path in (HOST, LOCAL_HOST):
+        path.write_text(json.dumps(record, indent=1) + "\n", encoding="utf-8")
+    print(f"All {total / 2**20:.0f} MiB match. Wrote {HOST.relative_to(ROOT)} and {LOCAL_HOST.relative_to(ROOT)}; "
+          "rebuild the extension.")
     return 0
 
 

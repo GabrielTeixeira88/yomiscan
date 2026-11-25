@@ -35,6 +35,7 @@ yomiscan-server = "yomiscan.cli:server_main"
 yomiscan-import-jmdict = "yomiscan.dictionary.cli:main"
 yomiscan-prepare-defaults = "yomiscan.cli:prepare_defaults"
 yomiscan-prepare-vision = "yomiscan.vision_models:main"
+yomiscan-prepare-engine = "yomiscan.engine_models:main"
 yomiscan-prepare-translation = "yomiscan.translation.setup_models:main"
 yomiscan-translate = "yomiscan.translation.cli:main"
 

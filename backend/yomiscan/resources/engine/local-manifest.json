@@ -1,0 +1,49 @@
+{
+ "schema": 1,
+ "bundle": "yomiscan-local-2026.11.1",
+ "components": [
+  {
+   "id": "detector-fp32",
+   "kind": "detector",
+   "variant": "fp32",
+   "license": "Apache-2.0",
+   "source": "ogkalu/comic-text-and-bubble-detector@16e8a622f91fabc6b5b65c96d32d1183f8843546 (Apache-2.0); ONNX export",
+   "files": [
+    {
+     "path": "detector-fp32/detector.onnx",
+     "bytes": 171647512,
+     "sha256": "99acccccfa55778326ab3bc522a4ad076c09ef7ccf61107fe9197b60691a01cf"
+    }
+   ]
+  },
+  {
+   "id": "ocr-int8",
+   "kind": "ocr",
+   "variant": "int8",
+   "license": "Apache-2.0",
+   "source": "kha-white/manga-ocr-base (Apache-2.0); ONNX export, research/stage-2",
+   "files": [
+    {
+     "path": "ocr-int8/encoder.onnx",
+     "bytes": 86860370,
+     "sha256": "cbb337fd8c47a96e5b85a95df515531acf9550f8ce983caf65f5931d4a19e711"
+    },
+    {
+     "path": "ocr-int8/decoder.onnx",
+     "bytes": 29599738,
+     "sha256": "01e2a70c82d3c934a638bd04a4ba82ca88759084da6d8dcea7b23e910d55f594"
+    },
+    {
+     "path": "ocr-int8/vocab.txt",
+     "bytes": 30216,
+     "sha256": "5cb5c5586d98a2f331d9f8828e4586479b0611bfba5d8c3b6dadffc84d6a36a3"
+    },
+    {
+     "path": "ocr-int8/generation.json",
+     "bytes": 195,
+     "sha256": "697e1bb3e69133c786ff26ed8bd4ae7a3c86b549bddc41234359c9abc00ac805"
+    }
+   ]
+  }
+ ]
+}

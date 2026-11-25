@@ -15,7 +15,8 @@ spec.loader.exec_module(builder)
 def fake_inputs(root: Path) -> dict[str, Path]:
     """Every input lives under the test folder; real exports, node_modules and data/ are never touched."""
     paths = {"stage2": root / "stage2", "dictionary": root / "jmdict.sqlite3", "tokenizer": root / "lindera.wasm"}
-    for component in builder.components(paths["stage2"], paths["dictionary"], paths["tokenizer"]):
+    for component in (*builder.components(paths["stage2"], paths["dictionary"], paths["tokenizer"]),
+                      *builder.local_components(paths["stage2"])):
         for source, _ in component.files:
             assert root in source.parents
             source.parent.mkdir(parents=True, exist_ok=True)
@@ -32,6 +33,11 @@ def test_builder_copies_exports_and_pins_size_and_sha256(tmp_path):
         for entry in component["files"]:
             data = (output / entry["path"]).read_bytes()
             assert entry["bytes"] == len(data) and entry["sha256"] == hashlib.sha256(data).hexdigest()
+    local = json.loads((tmp_path / "local-manifest.json").read_text(encoding="utf-8"))
+    assert local == json.loads((output / "local-manifest.json").read_text(encoding="utf-8"))
+    assert local["bundle"] == builder.LOCAL_BUNDLE and [c["id"] for c in local["components"]] == ["detector-fp32", "ocr-int8"]
+    assert local["components"][1] == manifest["components"][2]  # shared files keep identical pins
+    assert (output / "detector-fp32" / "detector.onnx").is_file()
 
 
 def test_builder_refuses_missing_exports_without_writing_a_manifest(tmp_path):
@@ -40,11 +46,12 @@ def test_builder_refuses_missing_exports_without_writing_a_manifest(tmp_path):
     assert not (tmp_path / "pinned.json").exists()
 
 
-def test_committed_manifest_matches_the_extension_contract():
-    manifest = json.loads(builder.PINNED.read_text(encoding="utf-8"))
-    assert manifest["schema"] == 1
-    for component in manifest["components"]:
-        assert component["files"] and all(len(f["sha256"]) == 64 and f["bytes"] > 0 and ".." not in f["path"] for f in component["files"])
+def test_committed_manifests_match_the_engine_contracts():
+    for pinned in (builder.PINNED, builder.LOCAL_PINNED):
+        manifest = json.loads(pinned.read_text(encoding="utf-8"))
+        assert manifest["schema"] == 1
+        for component in manifest["components"]:
+            assert component["files"] and all(len(f["sha256"]) == 64 and f["bytes"] > 0 and ".." not in f["path"] for f in component["files"])
 
 
 def test_builder_writes_the_model_card_and_license_texts(tmp_path):
@@ -52,7 +59,8 @@ def test_builder_writes_the_model_card_and_license_texts(tmp_path):
     manifest = builder.build(paths["stage2"], output, tmp_path / "pinned.json", paths["dictionary"], paths["tokenizer"])
     card = (output / "README.md").read_text(encoding="utf-8")
     assert f"# YomiScan browser models ({manifest['bundle']})" in card and "$" not in card
-    assert card.count("\n| `") == len(manifest["components"])
+    assert card.count("\n| `") == len(manifest["components"]) + 1  # plus the local engine's fp32 detector
+    assert "`detector-fp32` (fp32)" in card and builder.LOCAL_BUNDLE in card
     assert "CC BY-SA 4.0" in card and "UniDic Consortium" in card and "Electronic Dictionary Research" in card
     assert sorted(p.name for p in (output / "LICENSES").iterdir()) == ["Apache-2.0.txt", "UniDic-BSD-3-Clause.txt", "lindera-MIT.txt"]
 
@@ -74,6 +82,10 @@ def test_publisher_refuses_a_folder_that_differs_from_the_pinned_manifest(tmp_pa
     paths, output, pinned = fake_inputs(tmp_path), tmp_path / "out", tmp_path / "pinned.json"
     builder.build(paths["stage2"], output, pinned, paths["dictionary"], paths["tokenizer"])
     assert publisher.check_folder(output, pinned)["bundle"] == builder.BUNDLE
+    local = publisher.check_folder(output, tmp_path / "local-manifest.json", "local-manifest.json")
+    assert local["bundle"] == builder.LOCAL_BUNDLE
+    files = publisher.combined(json.loads(pinned.read_text(encoding="utf-8")), local)["components"][0]["files"]
+    assert len(files) == len({f["path"] for f in files}) and "detector-fp32/detector.onnx" in {f["path"] for f in files}
     (output / "detector" / "detector-fp16.onnx").write_bytes(b"changed size")
     with pytest.raises(ValueError, match="rebuild"):
         publisher.check_folder(output, pinned)
