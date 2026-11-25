@@ -3,13 +3,23 @@
 The frozen build (scripts/build_engine.py) runs this module. Unlike the developer server, it
 never reads the working directory: models and the dictionary live in the per-user model folder
 (%LOCALAPPDATA%/YomiScan/models), the processing cache and glossaries in %LOCALAPPDATA%/YomiScan.
-Explicit YOMISCAN_* variables still win. Nothing is downloaded here; readiness reports the
-setup command (`yomiscan-engine --prepare` in this build) until the models are installed.
+Explicit YOMISCAN_* variables still win. Nothing is downloaded unless `--prepare` is given.
+
+Modes:
+- `yomiscan-engine [--port N] [--idle-exit SECONDS]`: serve on 127.0.0.1.
+- `yomiscan-engine chrome-extension://<id>/ ...`: Chrome's native-messaging host (launcher.py).
+- `yomiscan-engine --register --extension-id <id>` / `--unregister`: Chrome registration (HKCU).
+- `yomiscan-engine --prepare [--component ...]`: download and verify the models.
 """
 
 import argparse
 from importlib.metadata import version
 import os
+from pathlib import Path
+import sys
+import threading
+import time
+from typing import Any, Callable
 
 from .cli import DEFAULT_PORT
 
@@ -28,27 +38,104 @@ def engine_environment(environment: dict[str, str]) -> dict[str, str]:
     return {key: value for key, value in defaults.items() if not environment.get(key)}
 
 
+class ActivityTracker:
+    """ASGI wrapper recording requests in flight and when the last one finished."""
+
+    def __init__(self, app: Any, clock: Callable[[], float] = time.monotonic) -> None:
+        self.app, self.clock = app, clock
+        self.active, self.last = 0, clock()
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        self.active += 1
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            self.active -= 1
+            self.last = self.clock()
+
+    def idle_for(self) -> float:
+        return 0.0 if self.active else self.clock() - self.last
+
+
+def watch_idle(tracker: ActivityTracker, server: Any, limit: float, poll: float = 5.0,
+               sleep: Callable[[float], None] = time.sleep) -> None:
+    """Ask the server to exit once no request has run for `limit` seconds."""
+    while not server.should_exit:
+        if tracker.idle_for() >= limit:
+            print(f"YomiScan engine: idle for {limit:.0f} s, shutting down", flush=True)
+            server.should_exit = True
+            return
+        sleep(poll)
+
+
+def serve(port: int, idle_exit: float) -> None:
+    import uvicorn
+    from .api.main import app
+    tracker = ActivityTracker(app)
+    server = uvicorn.Server(uvicorn.Config(tracker, host="127.0.0.1", port=port))
+    if idle_exit > 0:
+        threading.Thread(target=watch_idle, args=(tracker, server, idle_exit), daemon=True, name="idle-exit").start()
+    server.run()
+    if not server.started:
+        raise SystemExit(f"Could not serve on 127.0.0.1:{port}")
+
+
+def native_host() -> int:
+    from .engine_models import data_root
+    from .launcher import IDLE_SECONDS, Launcher, host_main
+    os.environ.update(engine_environment(dict(os.environ)))
+    # YOMISCAN_IDLE_SECONDS shortens the idle exit for tests; Chrome passes its own environment on.
+    idle = int(os.environ.get("YOMISCAN_IDLE_SECONDS", IDLE_SECONDS))
+    launcher = Launcher(data_root(), version("yomiscan"), idle_seconds=idle)
+    return host_main(sys.stdin.buffer, sys.stdout.buffer, launcher, dict(os.environ))
+
+
 def main(argv: list[str] | None = None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    if any(argument.startswith("chrome-extension://") for argument in argv):
+        return native_host()  # Chrome passes the caller's origin (and --parent-window on Windows)
     parser = argparse.ArgumentParser(prog="yomiscan-engine", description="YomiScan local engine (Torch-free), on 127.0.0.1")
     parser.add_argument("--version", action="version", version=version("yomiscan"))
     parser.add_argument("--port", type=int, default=DEFAULT_PORT, help=f"Loopback port (default {DEFAULT_PORT})")
     parser.add_argument("--device", choices=("auto", "cpu"), default=os.getenv("YOMISCAN_DEVICE", "auto"),
                         help="auto uses a DirectML GPU for detection when available; cpu forces the CPU")
+    parser.add_argument("--idle-exit", type=float, default=0, metavar="SECONDS",
+                        help="Exit after this many seconds without requests (the launcher uses 900; 0 never)")
     parser.add_argument("--prepare", action="store_true",
                         help="Download and verify the default models and dictionary (explicit; nothing downloads otherwise)")
     parser.add_argument("--component", choices=("ocr", "detection", "translation", "dictionary", "all"), default="all",
                         help="With --prepare: only this part")
+    parser.add_argument("--register", action="store_true", help="Register this engine as Chrome's native-messaging host")
+    parser.add_argument("--unregister", action="store_true", help="Remove the Chrome registration")
+    parser.add_argument("--extension-id", action="append", default=[], help="With --register: an allowed extension (repeatable)")
+    parser.add_argument("--extension-path", type=Path, action="append", default=[],
+                        help="With --register: an unpacked extension folder; its ID is computed as Chrome does")
     arguments = parser.parse_args(argv)
     if not 1024 <= arguments.port <= 65535:
         parser.error("Port must be between 1024 and 65535")
     os.environ.update(engine_environment(dict(os.environ)))
+    if arguments.register or arguments.unregister:
+        from .engine_models import data_root
+        from .launcher import engine_command, extension_id_for_path, register, unregister
+        folder = data_root() / "native-host"
+        if arguments.unregister:
+            unregister(folder)
+            print("Removed the YomiScan native-messaging registration")
+            return 0
+        if not getattr(sys, "frozen", False):
+            parser.error("--register needs the packaged engine (scripts/build_engine.py); Chrome cannot start a Python module")
+        ids = [*arguments.extension_id, *(extension_id_for_path(path) for path in arguments.extension_path)]
+        path = register(Path(engine_command()[0]), ids, folder)
+        print(f"Registered {path} for extension(s) {', '.join(sorted(set(ids)))}")
+        return 0
     if arguments.prepare:
         from .cli import prepare_defaults
         return prepare_defaults(["--component", arguments.component])
     os.environ["YOMISCAN_DEVICE"] = arguments.device
-    import uvicorn
-    from .api.main import app
-    uvicorn.run(app, host="127.0.0.1", port=arguments.port)
+    serve(arguments.port, arguments.idle_exit)
     return 0
 
 

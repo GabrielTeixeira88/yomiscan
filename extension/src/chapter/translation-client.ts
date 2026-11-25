@@ -1,4 +1,4 @@
-import {backendBase} from '../backend';
+import {localFetch} from '../local';
 import {validateProfile,type TranslationProfile} from './translation-options';
 export type TranslationOperation='profile'|'create-series'|'delete-series'|'save-term'|'delete-term';
 const endpoints:Record<TranslationOperation,string>={profile:'translation-profile','create-series':'glossaries/series',
@@ -6,15 +6,15 @@ const endpoints:Record<TranslationOperation,string>={profile:'translation-profil
 /** Fixed local endpoints, bounded JSON, no paths, URLs or implicit model downloads. */
 export async function translationRequest(operation:TranslationOperation,payload:Record<string,unknown>):Promise<unknown> {
   if(!Object.hasOwn(endpoints,operation)||JSON.stringify(payload).length>1800)throw new Error('Invalid translation settings request');
-  let url=await backendBase()+'/api/v1/'+endpoints[operation];
+  let url='/api/v1/'+endpoints[operation];
   if(operation==='profile'){
     const query=new URLSearchParams();
     if(typeof payload.scope==='string')query.set('scope',payload.scope);
     if(typeof payload.target==='string')query.set('target',payload.target);
     url+='?'+query;
   }
-  const response=await fetch(url,{method:operation==='profile'?'GET':'POST',credentials:'omit',redirect:'error',cache:'no-store',
-    signal:AbortSignal.timeout(10_000),headers:{'Content-Type':'application/json','X-YomiScan-Client':'study-extension-v1'},
+  const response=await localFetch(url,{method:operation==='profile'?'GET':'POST',
+    timeout:10_000,headers:{'Content-Type':'application/json'},
     body:operation==='profile'?undefined:JSON.stringify(payload)});
   if(!response.ok){
     if(response.status===429)throw new Error('A page is processing. Stop translation, wait for it to finish, then edit settings.');

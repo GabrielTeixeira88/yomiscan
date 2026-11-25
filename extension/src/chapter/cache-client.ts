@@ -1,4 +1,4 @@
-import {backendBase} from '../backend';
+import {localFetch} from '../local';
 /** Fixed loopback operations only. Never accepts a filesystem path or arbitrary URL. */
 export interface CacheStatus {
   persistent_enabled:boolean;memory_bytes:number;memory_limit:number;disk_bytes:number;disk_limit:number;
@@ -6,9 +6,8 @@ export interface CacheStatus {
 }
 export async function cacheRequest(operation:'read'|'settings'|'clear',enabled?:boolean):Promise<CacheStatus> {
   const suffix=operation==='read'?'':operation==='settings'?'/settings':'/clear';
-  const response=await fetch(await backendBase()+'/api/v1/cache'+suffix,{
-    method:operation==='read'?'GET':'POST',credentials:'omit',redirect:'error',cache:'no-store',
-    signal:AbortSignal.timeout(10_000),headers:{'X-YomiScan-Client':'study-extension-v1','Content-Type':'application/json'},
+  const response=await localFetch('/api/v1/cache'+suffix,{
+    method:operation==='read'?'GET':'POST',timeout:10_000,headers:{'Content-Type':'application/json'},
     body:operation==='settings'?JSON.stringify({enabled}):undefined,
   });
   if(!response.ok)throw new Error(response.status===429?'The backend is processing a page. Try cache controls after it finishes.':

@@ -1,4 +1,3 @@
-import {backendBase} from '../backend';
 import {CHUNK, MAX_INPUT, MAX_OUTPUT, encodeChunk, decodeChunk} from "./wire";
 import {parseCoverage} from './coverage';
 import {parseSnapshot} from './reports';
@@ -15,9 +14,10 @@ interface PageRequestOptions {configuration?:string;translation?:ReaderTranslati
 async function pageRequest<T>(kind:'render'|'analyze'|'browser',blob:Blob,signal:AbortSignal,options:PageRequestOptions,
   reply:(message:{type:string;[key:string]:unknown},parts:Uint8Array<ArrayBuffer>[],size:number)=>T|undefined):Promise<T> {
   if (blob.size > MAX_INPUT) throw new Error("Page exceeds the backend's 10 MiB limit");
-  const ready = await chrome.runtime.sendMessage({type: "chapter-prepare"});
+  const ready = await chrome.runtime.sendMessage({type: "chapter-prepare", kind});
   if (!ready?.ok) throw new Error(ready?.error || "Could not start local page transport");
-  const backend = await backendBase();
+  const backend = ready.backend;
+  if (typeof backend !== "string") throw new Error("Could not start local page transport");
   signal.throwIfAborted();
   return new Promise((resolve,reject) => {
     const job=crypto.randomUUID(),tracker=new ProgressTracker(job),{progress,...wireOptions}=options;

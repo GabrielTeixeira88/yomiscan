@@ -176,6 +176,15 @@ to the PyTorch path. The detector runs on the GPU through DirectML when one is a
 `.cache/engine-build/dist/yomiscan-engine/`: about 462 MiB without models, no Python needed.
 Its data lives under `%LOCALAPPDATA%\YomiScan`, and `yomiscan-engine.exe --prepare` downloads
 its models. `scripts/validate_engine_build.py` starts the frozen engine and checks it.
+
+**The extension starts the engine itself** once it is registered:
+
+    yomiscan-engine.exe --register --extension-path extension\dist
+
+The registration is one per-user registry key; `--unregister` removes it. Automatic then
+prefers this "local engine companion": Chrome starts it through native messaging on a random
+local port with a one-time token, and it exits after 15 idle minutes. No `yomiscan-server`
+terminal is needed.
 See the [Stage 5b record](docs/decisions/stage-5b-local-engine.md).
 
 Open an image-based chapter and click YomiScan → **Translate Chapter** to replace every

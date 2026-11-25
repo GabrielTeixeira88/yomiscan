@@ -1,4 +1,6 @@
 import {backendBase} from './backend';
+import {companionStatus} from './companion';
+import {localConnection,localFetch} from './local';
 import { analyzeCrop, analyzeText, parseAnalysis } from "./api";
 import {ENGINE_INSTALLED_KEY,SETUP_NEEDED,engineChoice,engineSource,resolveEngine,type EngineChoice,type ResolvedEngine} from './engine-mode';
 import type {EngineStatus} from './engine/engine';
@@ -41,6 +43,16 @@ async function prepareTransport():Promise<void> {
       justification:"Transfer and process page image Blobs through the local renderer without service-worker fetch lifetime limits"});
   })().finally(()=>{preparing=null;});return preparing;
 }
+/** The local engine address for one chapter page upload. The offscreen document receives the
+ * companion's token directly; content scripts only see the address. Browser-engine pages need no backend. */
+async function pageBackend(kind:unknown):Promise<{backend:string}>{
+  if(kind==='browser')return {backend:await backendBase()};
+  const connection=await localConnection({verify:true});
+  const reply=await chrome.runtime.sendMessage({target:'offscreen-credentials',origin:connection.base,
+    token:connection.headers['X-YomiScan-Token']??null});
+  if(!reply?.ok)throw new Error('Could not prepare the local page transport. Reload the extension and retry.');
+  return {backend:connection.base};
+}
 /** One request to the browser engine in the offscreen document (created on demand). */
 async function engineRequest(operation:string,extra:Record<string,unknown>={}):Promise<unknown>{
   await prepareTransport();
@@ -57,7 +69,7 @@ async function engineState():Promise<{choice:EngineChoice;mode:ResolvedEngine;st
     const ready=status.required.every(c=>c.installed);
     if(ready)await chrome.storage.local.set({[ENGINE_INSTALLED_KEY]:status.bundle});
     return ready;
-  },backendRunning);
+  },backendRunning,async()=>{const companion=await companionStatus();return companion.installed&&companion.ready;});
   const installedBefore=typeof (await chrome.storage.local.get(ENGINE_INSTALLED_KEY))[ENGINE_INSTALLED_KEY]==='string';
   return {choice,mode,status,evicted:mode==='setup'&&installedBefore,source:await engineSource()};
 }
@@ -154,6 +166,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       error=>sendResponse({ok:false,error:error instanceof Error?error.message:'Browser engine unavailable'}));
     return true;
   }
+  if(message?.type==='companion-status'){
+    void companionStatus(undefined,true).then(data=>sendResponse({ok:true,data}),
+      error=>sendResponse({ok:false,error:error instanceof Error?error.message:'Local engine status unavailable'}));
+    return true;
+  }
   if(message?.type==='engine-resolve'){
     void engineState().then(data=>sendResponse({ok:true,data}),
       error=>sendResponse({ok:false,error:error instanceof Error?error.message:'Browser engine unavailable. Reload the extension.'}));
@@ -220,8 +237,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
   if(message?.type === "chapter-health" || message?.type === "chapter-prepare" || message?.type === "chapter-capture") {
-    const work=message.type==="chapter-prepare" ? prepareTransport() : message.type==="chapter-capture" ? pageCapture(message,sender.tab) :
-      backendBase().then(base=>fetch(base+"/health",{signal:AbortSignal.timeout(5000),credentials:"omit",redirect:"error",cache:"no-store"})).then(async response=>{
+    const work=message.type==="chapter-prepare" ? prepareTransport().then(()=>pageBackend(message.kind)) : message.type==="chapter-capture" ? pageCapture(message,sender.tab) :
+      localFetch("/health",{timeout:5000}).then(async response=>{
         if(!response.ok || (await response.json()).status!=="ok")throw new Error("YomiScan backend resources are unavailable. Check the server terminal.");
         const configuration=response.headers.get('X-YomiScan-Configuration');
         if(configuration && /^[a-f0-9]{64}$/.test(configuration))return {configuration_id:configuration};

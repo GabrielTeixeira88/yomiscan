@@ -79,9 +79,12 @@ session.
 ## Engines and first-run setup
 
 YomiScan's engine choice is **Automatic** by default:
-1. the **browser engine** once its models are installed;
-2. otherwise the **local backend**, if it is running;
-3. otherwise the panel shows **Download the reading models**.
+1. the **local engine companion** (`yomiscan-engine.exe`, Stage 5b) when it is installed with its
+   models: Chrome starts it through native messaging on a random local port with a one-time
+   token, and it exits after 15 idle minutes;
+2. otherwise the **browser engine** once its models are installed;
+3. otherwise the **local backend**, if it is running;
+4. otherwise the panel shows **Download the reading models**.
 
 The setup card gives the size for this computer (about 580 MB with a GPU, 600 MB on CPU), the
 host (Hugging Face) and the licenses. Nothing downloads until you click **Download**. Each file

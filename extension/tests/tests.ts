@@ -18,6 +18,7 @@ import "./reading-tests";
 import "./engine-tests";
 import "./lexical-tests";
 import "./translation-engine-tests";
+import "./companion-tests";
 
 const viewport = {width: 800, height: 600};
 test("study copy writes exact Japanese/English and reports clipboard failures safely",async()=>{
@@ -184,8 +185,9 @@ test("aborted requests produce useful timeout guidance", async context => {
 test("manifest limits access to active tab and loopback; no content scripts run automatically", async () => {
   const manifest = JSON.parse(await readFile("manifest.json", "utf8"));
   assert.equal(manifest.manifest_version, 3);
-  // unlimitedStorage holds the browser engine's pinned models (Stage 5a); no new host access.
-  assert.deepEqual(manifest.permissions, ["activeTab", "scripting", "offscreen", "storage", "unlimitedStorage"]);
+  // unlimitedStorage holds the browser engine's pinned models (Stage 5a); nativeMessaging starts
+  // the local engine companion (Stage 5b) and only reaches com.yomiscan.engine. No new host access.
+  assert.deepEqual(manifest.permissions, ["activeTab", "scripting", "offscreen", "storage", "unlimitedStorage", "nativeMessaging"]);
   // WASM needs wasm-unsafe-eval (never unsafe-eval); threads need cross-origin isolation.
   assert.match(manifest.content_security_policy.extension_pages, /script-src 'self' 'wasm-unsafe-eval';/);
   assert.doesNotMatch(manifest.content_security_policy.extension_pages, /'unsafe-eval'|'unsafe-inline'/);

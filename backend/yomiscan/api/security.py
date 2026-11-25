@@ -1,5 +1,11 @@
-"""Bound request bodies before multipart parsing; guard browser-origin requests."""
+"""Bound request bodies before multipart parsing; guard browser-origin requests.
 
+With a token (the packaged engine, started by its launcher with a per-launch secret), every
+request must carry it in X-YomiScan-Token. Unlike the client header, the token is an
+authentication secret: other local programs and web pages cannot read it.
+"""
+
+import hmac
 import re
 
 from starlette.responses import JSONResponse
@@ -10,14 +16,16 @@ from .images import MAX_FILE_BYTES
 EXTENSION_ORIGIN = r"chrome-extension://[a-p]{32}"
 CLIENT_HEADER = b"x-yomiscan-client"
 CLIENT_VALUE = b"study-extension-v1"
+TOKEN_HEADER = b"x-yomiscan-token"
 MAX_BODY_BYTES = MAX_FILE_BYTES + 64 * 1024
 MAX_TEXT_BODY_BYTES = 8 * 1024  # 1,000 characters of edited OCR text as JSON
 
 
 class LocalRequestGuard:
-    def __init__(self, app: ASGIApp, origins: list[str]) -> None:
+    def __init__(self, app: ASGIApp, origins: list[str], token: str | None = None) -> None:
         self.app = app
         self.origins = origins
+        self.token = token.encode() if token else None
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
@@ -28,6 +36,10 @@ class LocalRequestGuard:
         allowed = origin in self.origins if self.origins else bool(re.fullmatch(EXTENSION_ORIGIN, origin))
         if origin and not allowed:
             await JSONResponse({"detail": "This browser origin is not allowed."}, 403)(scope, receive, send)
+            return
+        if self.token is not None and scope["method"] != "OPTIONS" and not hmac.compare_digest(
+                headers.get(TOKEN_HEADER, b""), self.token):
+            await JSONResponse({"detail": "Missing or wrong YomiScan engine token."}, 401)(scope, receive, send)
             return
         private_read = (scope.get("path") in ("/api/v1/translation-profile", "/api/v1/readiness") or
                         scope.get("path", "").startswith("/api/v1/jobs/")) and scope["method"] == "GET"

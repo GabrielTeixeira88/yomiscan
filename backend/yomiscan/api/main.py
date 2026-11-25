@@ -170,8 +170,10 @@ def analyze_upload(service: ImageAnalysisService, data: bytes, page: bool = Fals
 
 def create_app(
     service_factory: ServiceFactory = default_service, *, allowed_origins: list[str] | None = None,
-    background_initialization: bool | None = None,
+    background_initialization: bool | None = None, token: str | None = None,
 ) -> FastAPI:
+    # The packaged engine's launcher passes a per-launch token (Stage 5b); the developer server has none.
+    token = token if token is not None else os.getenv("YOMISCAN_TOKEN") or None
     origins = allowed_origins if allowed_origins is not None else [
         value.strip() for value in os.getenv("YOMISCAN_EXTENSION_ORIGINS", "").split(",") if value.strip()
     ]
@@ -227,11 +229,11 @@ def create_app(
                 executor.shutdown(wait=True, cancel_futures=True)
 
     app = FastAPI(title="YomiScan local study API", version="1.0", lifespan=lifespan)
-    app.add_middleware(LocalRequestGuard, origins=origins)
+    app.add_middleware(LocalRequestGuard, origins=origins, token=token)
     app.add_middleware(
         CORSMiddleware, allow_origins=origins,
         allow_origin_regex=None if origins else EXTENSION_ORIGIN,
-        allow_methods=["GET", "POST"], allow_headers=["Content-Type", "X-YomiScan-Client"],
+        allow_methods=["GET", "POST"], allow_headers=["Content-Type", "X-YomiScan-Client", "X-YomiScan-Token"],
         expose_headers=["X-YomiScan-Blocks-Rendered", "X-YomiScan-Blocks-Skipped", "X-YomiScan-Processing-Ms", "X-YomiScan-Coverage", "X-YomiScan-Configuration"],
     )
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "[::1]"])
