@@ -21,7 +21,7 @@ Each increment is merged only with its tests and a real-model measurement.
 | 2 | **Lexical engine.** lindera-wasm-unidic tokenizer and JMdict SQLite (sqlite-wasm). TypeScript ports of the ranking rules plus the Stage 3 data files (`units.json`, `grammar.json`, `inflections.json`). The lexical golden set is run against the browser engine (target: the Python 96.7%). | Done (see measurements) |
 | 3 | **Translation.** OPUS-MT fp16 with transformers-exact beam search (Stage 2: 99/100 lines identical to Python). The Chrome Translator stays optional and experimental. | Done (see measurements) |
 | 4 | **Integration.** An engine setting (Browser / Local backend). Study selection, Read Chapter and the edit-text re-analysis run through the browser engine. English in browser mode is HTML text boxes over the page; the pixel renderer stays in the local engine. | Done (see measurements) |
-| 5 | **Release readiness.** First-run onboarding with sizes and consent, storage-pressure handling, laptop measurements (integrated GPU, 4-core CPU, 8 GB), and docs. | Built; **full-stack memory misses G8** (see increment 5) |
+| 5 | **Release readiness.** First-run onboarding with sizes and consent, storage-pressure handling, laptop measurements (integrated GPU, 4-core CPU, 8 GB), and docs. | Done. Models published on Hugging Face; full-stack memory (about 2 GB) is above G8 and accepted by the owner (see increment 5). No integrated-GPU or 8 GB laptop was measured. |
 
 ## Architecture (increment 1)
 
@@ -247,7 +247,7 @@ through that URL and matched every size and SHA-256 before writing the pin. Down
 anonymous; no user needs a Hugging Face account. A new bundle is a new commit and a new pin, so
 an installed extension never picks up files it was not built for.
 
-### Memory: the full stack misses G8
+### Memory: the full stack misses G8 (accepted)
 
 Stage 2's hard gate G8 (offscreen peak ≤ 1.5 GB) was measured with vision only. With every
 model loaded, the extension renderer's Windows private bytes are well above it:
@@ -280,9 +280,12 @@ Candidates for a memory increment:
 - Smaller or lazily loaded lexical data.
 - Loading OPUS only when English is requested (Read Chapter's study cards don't need it).
 
-**Owner decision needed:** accept about 2 GB (plus about 0.5 GB of GPU memory on WebGPU) as
-the browser engine's footprint and revise G8, or fund a memory increment before the models are
-offered to everyone.
+**Owner decision (2026-11-24): accepted.** The browser engine's full-stack footprint of about
+2 GB in the extension process (plus about 0.5 GB in Chrome's GPU process on WebGPU) is accepted
+and the models are offered to everyone. G8's 1.5 GB still stands as Stage 2 measured it: the
+vision pipeline alone (785–933 MiB). For the full stack, the budget is now about 2.2 GB in the
+extension process; a change that goes above it needs a new owner decision. The memory increment
+above is not scheduled; its candidates stay recorded here for later.
 
 ## Development commands
 
