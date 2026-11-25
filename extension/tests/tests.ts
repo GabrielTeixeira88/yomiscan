@@ -19,6 +19,7 @@ import "./engine-tests";
 import "./lexical-tests";
 import "./translation-engine-tests";
 import "./companion-tests";
+import "./library-tests";
 
 const viewport = {width: 800, height: 600};
 test("study copy writes exact Japanese/English and reports clipboard failures safely",async()=>{

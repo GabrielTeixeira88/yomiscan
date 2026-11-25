@@ -1,5 +1,6 @@
 import { parseAnalysis, type Analysis, type Meaning } from "./api";
 import {furigana} from "./furigana";
+import {tokenWord, unitWord, type SentenceSummary} from "./library";
 import { constrainPopup, popupPosition, resizePopup, type Point, type Rect, type ResizeEdge } from "./geometry";
 
 export async function copyStudyText(text:string,write:(text:string)=>Promise<void>=value=>navigator.clipboard.writeText(value)):Promise<string> {
@@ -26,6 +27,9 @@ export const styles = `
   button:focus-visible, summary:focus-visible, a:focus-visible { outline: 2px solid #287946; outline-offset: 2px; }
   button.copy, button.action { width:auto;height:auto;padding:4px 8px;margin-top:6px;font-size:12px; }
   button.action { margin:0 16px 12px; }
+  button.save-word { margin:2px 0 0; }
+  button.save-word[aria-pressed=true] { background:#235d3c; border-color:#235d3c; color:#fff; }
+  .library-status { padding:0 16px 12px; }
   .entry-divider { list-style:none;margin:8px 0 2px -20px;font-size:11px;color:#637366; }
   .copy-feedback { font-size:12px;color:#637366; }
   section { padding: 12px 16px; border-bottom: 1px solid #e8e9e2; }
@@ -95,6 +99,11 @@ export class StudyPopup {
   private body: HTMLDivElement;
   private manual: Rect | null = null;
   private listeners = new AbortController();
+  /** Save buttons by word key: a word can appear twice in a card (as a word and in an expression). */
+  private saveButtons = new Map<string, HTMLButtonElement[]>();
+  private libraryStatus = element("p", "", "copy-feedback library-status");
+  /** Counts show() calls, so a late saved-words lookup never marks a newer card. */
+  private shown = 0;
   private gesture: {pointerId: number; target: HTMLElement; start: Point; rect: Rect; kind: "drag" | ResizeEdge} | null = null;
   constructor(private host: HTMLElement, root: ShadowRoot, private anchor: Rect, close: () => void) {
     this.panel = element("div", undefined, "panel");
@@ -247,6 +256,46 @@ export class StudyPopup {
     section.append(edit);
   }
 
+  /** One request to the saved-words library in the service worker. */
+  private async library<T>(request: Record<string, unknown>): Promise<T> {
+    const reply = await chrome.runtime.sendMessage({type: "library", ...request}).catch(() => null);
+    if (!reply) throw new Error("Saved words unavailable. Reload the extension.");
+    if (!reply.ok) throw new Error(reply.error ?? "Saved words unavailable.");
+    return reply.data as T;
+  }
+
+  private tell(message: string): void {
+    if (this.listeners.signal.aborted) return;
+    this.libraryStatus.textContent = message;
+    window.setTimeout(() => {if (this.libraryStatus.textContent === message) this.libraryStatus.textContent = "";}, 4000);
+  }
+
+  private markSaved(key: string, saved: boolean): void {
+    for (const button of this.saveButtons.get(key) ?? []) {
+      button.setAttribute("aria-pressed", String(saved));
+      button.textContent = saved ? "★ Saved" : "☆ Save word";
+      button.title = saved ? "Saved. Click to remove it from your saved words." : "Save this word (YomiScan → Saved)";
+    }
+  }
+
+  /** A toggle that saves the word (its dictionary form) with this sentence, or removes it again. */
+  private saveWordButton(word: ReturnType<typeof tokenWord>): HTMLButtonElement {
+    const button = element("button", "", "copy save-word");
+    button.lang = "en";
+    button.setAttribute("aria-label", `Save ${word.expression}`);
+    this.saveButtons.set(word.key, [...this.saveButtons.get(word.key) ?? [], button]);
+    button.addEventListener("click", () => {
+      const saved = button.getAttribute("aria-pressed") === "true";
+      button.disabled = true;
+      void this.library(saved ? {operation: "delete-word", key: word.key} : {operation: "save-word", word}).then(() => {
+        this.markSaved(word.key, !saved);
+        this.tell(saved ? `Removed ${word.expression} from your saved words.` : `Saved ${word.expression}.`);
+      }, error => this.tell(error.message)).finally(() => {button.disabled = false;});
+    });
+    this.markSaved(word.key, false);
+    return button;
+  }
+
   status(message: string, error = false): void {
     this.body.replaceChildren(element("p", message, `status${error ? " error" : ""}`));
     this.position();
@@ -254,6 +303,10 @@ export class StudyPopup {
 
   show(data: Analysis): void {
     this.body.replaceChildren();
+    this.saveButtons.clear();
+    this.libraryStatus.textContent = "";
+    this.libraryStatus.setAttribute("role", "status");
+    this.libraryStatus.lang = "en";
     // Reading mode: where this bubble sits in the chapter, and how to move on without dragging.
     const reading = data.provenance?.reading as {page?: unknown; bubble?: unknown; bubbles?: unknown} | undefined;
     if (reading && [reading.page, reading.bubble, reading.bubbles].every(Number.isInteger)) {
@@ -281,7 +334,20 @@ export class StudyPopup {
         feedback.textContent=message;
         window.setTimeout(()=>{if(feedback.textContent===message)feedback.textContent='';},3000);
       });});
-      section.append(copy,feedback);
+      section.append(copy);
+      if (className === "original") {
+        const save = element("button", "Save sentence", "copy");
+        save.lang = "en"; save.disabled = !value;
+        save.setAttribute("aria-label", "Save this sentence with its translation and word breakdown");
+        save.addEventListener("click", () => {
+          save.disabled = true;
+          void this.library<SentenceSummary>({operation: "save-sentence", analysis: data})
+            .then(() => this.tell("Sentence saved. Open YomiScan → Saved to see it."), error => this.tell(error.message))
+            .finally(() => {save.disabled = false;});
+        });
+        section.append(" ", save);
+      }
+      section.append(feedback);
       if (className === "original") { section.lang = "ja"; this.appendEditor(section, data.original_text); }
       this.body.append(section);
     }
@@ -295,7 +361,7 @@ export class StudyPopup {
         const row = element("article");
         const surface = element("div", unit.surface, "surface");
         surface.lang = "ja";
-        row.append(surface);
+        row.append(surface, this.saveWordButton(unitWord(unit, data)));
         if (unit.dictionary_form !== unit.surface) row.append(element("p", `Dictionary form: ${unit.dictionary_form}`, "metadata"));
         const parts = data.tokens.slice(unit.start_token, unit.end_token).map(token => token.surface);
         row.append(element("p", `Words: ${parts.join(" + ")}`, "metadata"));
@@ -335,7 +401,7 @@ export class StudyPopup {
       const surface = element("div", undefined, "surface");
       surface.lang = "ja";
       appendFurigana(surface, token.surface, token.reading);
-      row.append(surface, element("p", `Reading: ${token.reading ?? "unavailable"}`, "metadata"));
+      row.append(surface, this.saveWordButton(tokenWord(token, data)), element("p", `Reading: ${token.reading ?? "unavailable"}`, "metadata"));
       row.append(element("p", `Lemma: ${token.lemma ?? "unavailable"}`, "metadata"));
       if (token.dictionary_form && token.dictionary_form !== token.lemma) row.append(element("p", `Dictionary form: ${token.dictionary_form}`, "metadata"));
       row.append(element("p", `POS: ${token.part_of_speech ?? "unavailable"}`, "metadata"));
@@ -364,12 +430,14 @@ export class StudyPopup {
     // Retained page analysis carries no per-bubble timings; zeros would read as "free".
     if (time.total_ms > 0 || time.ocr_ms > 0)
       footer.append(element("p", `Local processing · OCR ${Math.round(time.ocr_ms)} ms · Translation ${Math.round(time.translation_ms)} ms · Analysis ${Math.round(time.analysis_ms)} ms`));
-    this.body.append(footer);
-    const save=element('button','Save to History','action'),saved=element('p','','copy-feedback');saved.setAttribute('role','status');
-    save.addEventListener('click',()=>{save.disabled=true;void chrome.runtime.sendMessage({type:'study-history',operation:'save',payload:{analysis:data}}).then(reply=>{
-      if(!this.listeners.signal.aborted)saved.textContent=reply?.ok?'Saved locally.':reply?.error??'History unavailable.';
-    },()=>{if(!this.listeners.signal.aborted)saved.textContent='History unavailable. Reload the extension.';}).finally(()=>{save.disabled=false;});});
-    this.body.append(save,saved);
+    this.body.append(footer, this.libraryStatus);
     this.position();
+    // Mark the words already saved (one lookup for the whole card).
+    const keys = [...this.saveButtons.keys()];
+    const shown = ++this.shown;
+    if (keys.length) void this.library<string[]>({operation: "saved", keys}).then(saved => {
+      if (this.listeners.signal.aborted || shown !== this.shown) return;
+      for (const key of saved) this.markSaved(key, true);
+    }, error => this.tell(error.message));
   }
 }

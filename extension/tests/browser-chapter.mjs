@@ -573,35 +573,21 @@ try {
     await until(()=>find(byClass('panel')));
     assert.ok((await invoke(await find(byClass('panel')),'function(){return this.innerText}')).includes('ねこ'));
     assert.equal(mockStudyCalls,beforeBubble);
-    // AU-04: the text action must not inherit the 30x30 close-button size and overflow.
-    const saveSize=await invoke(await find(byClass('panel')),"function(){const b=[...this.querySelectorAll('button')].find(x=>x.textContent==='Save to History');return {w:b.offsetWidth,client:b.clientHeight,scroll:b.scrollHeight}}");
-    assert.ok(saveSize.w>60&&saveSize.scroll<=saveSize.client+1,'Save to History fits its label: '+JSON.stringify(saveSize));
-    await click('Save to History');await until(async()=>(await invoke(await find(byClass('panel')),'function(){return this.innerText}')).includes('History is off'));
-    await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27},session);
-    const historySummary=await find(n=>n.nodeName==='SUMMARY'&&n.children?.some(c=>c.nodeValue==='Study history'));
-    await invoke(historySummary,'function(){this.click()}');await until(async()=>(await panel()).includes('New writes disabled'));
-    const historyEnabled=await find(n=>n.nodeName==='INPUT'&&n.attributes?.includes('study-history'));
-    assert.equal(await invoke(historyEnabled,'function(){return this.checked}'),false);
-    await invoke(historyEnabled,'function(){this.click()}');await until(async()=>(await panel()).includes('Saving enabled'));
-    await click('Inspect Regions');await invoke(await regionSelect(),"function(){this.value='B2';this.dispatchEvent(new Event('change'))}");
-    await click('Study Bubble');await click('Save to History');
-    await until(async()=>(await invoke(await find(byClass('panel')),'function(){return this.innerText}')).includes('Saved locally.'));
-    await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27},session);
-    await click('Reload History');await until(async()=>(await panel()).includes('1 saved entries'));
-    await click('Open Study Entry');await until(()=>find(byClass('panel')));
-    assert.ok((await invoke(await find(byClass('panel')),'function(){return this.innerText}')).includes('Reused completed page analysis'));
-    assert.equal(mockStudyCalls,beforeBubble);
+    // AU-04: the text actions must not inherit the 30x30 close-button size and overflow.
+    const saveSize=await invoke(await find(byClass('panel')),"function(){const b=[...this.querySelectorAll('button')].find(x=>x.textContent==='Save sentence');return {w:b.offsetWidth,client:b.clientHeight,scroll:b.scrollHeight}}");
+    assert.ok(saveSize.w>60&&saveSize.scroll<=saveSize.client+1,'Save sentence fits its label: '+JSON.stringify(saveSize));
+    const cardText=async()=>invoke(await find(byClass('panel')),'function(){return this.innerText}');
+    await click('Save sentence');await until(async()=>(await cardText()).includes('Sentence saved.'));
     await click('Copy Japanese');await until(async()=>(await evaluate(session,'navigator.clipboard.readText()'))==='猫です');
+    await click('☆ Save word');await until(async()=>(await cardText()).includes('★ Saved'));
     await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27},session);
-    await click('Export History');await until(async()=>(await readdir(reportDir)).some(name=>name.startsWith('yomiscan-study-history-')));
-    const historyName=(await readdir(reportDir)).find(name=>name.startsWith('yomiscan-study-history-'));
-    const historyExport=JSON.parse(await readFile(path.join(reportDir,historyName),'utf8'));
-    assert.equal(historyExport.entries.length,1);assert.ok(!JSON.stringify(historyExport).includes('http://127.0.0.1'));
-    await click('Clear Persistent Cache');await click('Reload History');assert.ok((await panel()).includes('1 saved entries'));
-    await click('Delete Study Entry');await until(async()=>(await panel()).includes('0 saved entries'));
-    await click('Clear History');await until(async()=>!await invoke(historyEnabled,'function(){return this.disabled}'));
-    await invoke(historyEnabled,'function(){this.click()}');await until(async()=>(await panel()).includes('New writes disabled'));
-    report.checks.push('Preserved region shows truthful reason and opt-in text; bubble Study reuses readings/dictionary without another OCR; history is opt-in and supports save/reopen/copy/export/delete independently of cache');
+    // Reopening the bubble shows the word as saved (stored by the service worker), still without another OCR.
+    await click('Inspect Regions');await invoke(await regionSelect(),"function(){this.value='B2';this.dispatchEvent(new Event('change'))}");
+    await click('Study Bubble');await until(async()=>(await cardText()).includes('★ Saved'));
+    assert.equal(mockStudyCalls,beforeBubble);
+    await click('★ Saved');await until(async()=>!(await cardText()).includes('★ Saved'));
+    await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27},session);
+    report.checks.push('Preserved region shows truthful reason and opt-in text; bubble Study reuses readings/dictionary without another OCR; Save sentence and Save word store locally and the card shows saved words when reopened');
     await click('Inspect Regions');
     await call('Emulation.setDeviceMetricsOverride',{width:1000,height:900,deviceScaleFactor:1,mobile:false},session);
     await evaluate(session,"document.querySelector('main img').scrollIntoView()");await wait(150);

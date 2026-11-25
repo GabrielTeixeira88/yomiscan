@@ -44,7 +44,7 @@ does not enforce glossary hints. JMdict definitions remain English. See
 **Post-MVP: Reader Experience & Distribution (P06/P10/P11/P12/P13).** Chapter controls
 offer bounded font scaling, explicit region inspection and Study Bubble reuse.
 Read-only setup checks and real, cache-aware stages explain local processing.
-Optional Study history is off by default and requires explicit Save. Unsigned extension
+Study history (opt-in, explicit Save) is now part of saved sentences (Stage 6). Unsigned extension
 ZIP/backend distributions include checksums and installation checks. See
 [reader controls and privacy](docs/post-mvp-reader-experience-distribution.md),
 [Windows/Linux installation](docs/installation.md) and
@@ -67,9 +67,10 @@ ZIP/backend distributions include checksums and installation checks. See
 | Panel ordering and PT/ES sentence targets | Experimental; generic Portuguese is not validated Brazilian register; NLLB is noncommercial |
 | Font 75–150%, preserved-region reasons, Study Bubble | Implemented; render-only reuse and exact retained page analysis |
 | Setup/readiness and page stages | Implemented; local checks, real stage/cache observations, no automatic weight download |
-| Local Study history | Off by default; enable plus explicit Save, 100 entries/2 MiB, delete/clear/export |
+| Saved words and sentences | Stage 6: explicit Save per word or sentence; Saved page with search, CSV export, JSON backup and restore; up to 50,000 words and 2,000 sentences |
 | Unsigned extension ZIP, backend wheel/sdist | Build workflow and installation checks; separate model/JMdict preparation |
-| Narrative context, new production models, vocabulary/JLPT, full graphical model manager | Future work |
+| Anki export, known words (Stage 6, next increments) | Planned |
+| Narrative context, new production models, JLPT grading, full graphical model manager | Future work |
 
 The purpose is to help Japanese learners study manga without paid APIs or per-request
 costs. Sentence translation is separate from ordered tokens with readings, dictionary
@@ -166,7 +167,7 @@ either engine or remove the models. The browser engine is English only, and Tran
 then shows English as text over each bubble. It currently needs about 2 GB of memory with
 every model loaded. See the [Stage 5a record](docs/decisions/stage-5a-browser-engine.md).
 
-**Torch-free local engine (Stage 5b, in progress).** The backend's default engines need no
+**Torch-free local engine (Stage 5b).** The backend's default engines need no
 PyTorch. On the test corpus, 99.1% of OCR blocks and all 153 translation-set lines are identical
 to the PyTorch path. The detector runs on the GPU through DirectML when one is available
 (`YOMISCAN_ONNX_DEVICE=auto|cpu|directml`). The PyTorch engines stay selectable with
@@ -194,6 +195,15 @@ prefers this "local engine companion": Chrome starts it through native messaging
 local port with a one-time token, and it exits after 15 idle minutes. No `yomiscan-server`
 terminal is needed.
 See the [Stage 5b record](docs/decisions/stage-5b-local-engine.md).
+
+**Saved words and sentences (Stage 6).** Every word and expression in a study card has
+**☆ Save word**, and the sentence has **Save sentence**. A saved word keeps its dictionary form
+with that form's reading (食べた → 食べる, たべる), the best dictionary entry's meanings, and the
+sentence it came from. **YomiScan → Open Saved** lists everything, with search. It exports words
+or sentences as CSV (UTF-8, for Anki or a spreadsheet) and backs up or restores everything as
+one JSON file. Nothing is saved without a click, and nothing leaves the browser. Entries from the
+old opt-in Study history become saved sentences. See the
+[Stage 6 record](docs/decisions/stage-6-capture-release.md).
 
 Open an image-based chapter and click YomiScan → **Translate Chapter** to replace every
 page with English instead. Visible pages process first, one at a time. **Original /

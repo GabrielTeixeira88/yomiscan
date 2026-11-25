@@ -4,7 +4,7 @@ import {TranslationSettings} from './translation-settings';
 import {defaultTranslationOptions,targetLabel,type ReaderTranslationOptions} from './translation-options';
 import type {Analysis} from '../api';
 import type {Rect} from '../geometry';
-import {HistoryControls} from './history-controls';
+import {SavedControls} from './saved-controls';
 import {SetupControls} from './setup-controls';
 import {EngineControls} from './engine-controls';
 import {EngineSetup} from './engine-setup';
@@ -26,6 +26,7 @@ export class ChapterControls {
   private translationOptions=defaultTranslationOptions();
   private translationSettings:TranslationSettings;
   private fontScale=1;
+  private saved=new SavedControls();
   /** The engine of the current session, chosen when Read or Translate Chapter starts (engine-mode.ts). */
   private engine:EngineMode='local';
   private setup=new EngineSetup(()=>{this.status.textContent='Reading models installed. Click Read Chapter, Translate Chapter or Select Text.';});
@@ -45,6 +46,7 @@ export class ChapterControls {
     header.append(title,button("×",()=>{this.showHost(false);}));panel.append(header,this.companionSetup.element,this.setup.element);
     const heading=(text:string)=>{const h=document.createElement("h2");h.textContent=text;panel.append(h);};
     heading("Study");panel.append(button("Select Text",selectText));
+    heading("Saved");panel.append(this.saved.element);
     // With the browser engine, Translate Chapter reads pages and draws their English over each bubble
     // (the pixel renderer belongs to the local backend).
     heading("Reading");panel.append(button("Read Chapter",()=>{void this.begin('read');}),
@@ -117,7 +119,6 @@ export class ChapterControls {
       if(invalidate||identity(options)!==identity(this.translationOptions)){this.session?.dispose();this.session=null;}
       this.translationOptions=options;this.english.textContent=targetLabel(options.target_language);
     });panel.append(this.translationSettings.element);
-    panel.append(new HistoryControls(data=>this.showStudy(data,{x:16,y:16,width:0,height:0})).element);
     advanced.append(new SetupControls().element,new EngineControls().element);
     const resources=document.createElement('details'),resourceTitle=document.createElement('summary'),resourceText=document.createElement('p');
     resourceTitle.textContent='Processing details';resources.append(resourceTitle,resourceText);
@@ -144,7 +145,7 @@ export class ChapterControls {
   }
   private showHost(visible:boolean):void {this.host.style.setProperty("display",visible?"block":"none","important");}
   private selectedPageId():number|undefined {return this.pageSelect.value?Number(this.pageSelect.value):undefined;}
-  open():void {this.showHost(true);void this.checkEngines(true).catch(error=>{this.status.textContent=error instanceof Error?error.message:String(error);});}
+  open():void {this.showHost(true);void this.saved.refresh();void this.checkEngines(true).catch(error=>{this.status.textContent=error instanceof Error?error.message:String(error);});}
   /** Resolve the engine, then start reading. With the browser engine, Translate Chapter reads pages and
    * draws their English over each bubble (the pixel renderer belongs to the local backend). */
   private async begin(mode:SessionMode):Promise<void> {

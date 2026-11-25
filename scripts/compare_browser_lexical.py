@@ -15,6 +15,7 @@ from pathlib import Path
 import sys
 
 from yomiscan.analysis import TextAnalyzer
+from yomiscan.api.models import ImageAnalysisResponse
 from yomiscan.dictionary import SQLiteDictionary
 from yomiscan.lexical_evaluation import evaluate, load_cases
 from yomiscan.nlp import FugashiTokenizer, JapaneseToken
@@ -29,10 +30,13 @@ class ReplayTokenizer:
 
 
 def python_view(result) -> dict:
+    response = ImageAnalysisResponse.from_analysis(result)
     return {"tokens": [{"lookup_form": t.lookup_form, "entry_ids": list(t.entry_ids), "inflection": list(t.inflection)} for t in result.tokens],
             "units": [{"start": u.start, "end": u.end, "surface": u.surface, "lookup_form": u.lookup_form, "entry_ids": list(u.entry_ids)}
                       for u in result.units],
-            "grammar": [{"pattern": g.pattern, "start": g.start, "end": g.end} for g in result.grammar]}
+            "grammar": [{"pattern": g.pattern, "start": g.start, "end": g.end} for g in result.grammar],
+            # Stage 6: the reading of each dictionary form (headword.py), as the study card receives it.
+            "readings": {"tokens": [t.dictionary_reading for t in response.tokens], "units": [u.dictionary_reading for u in response.units]}}
 
 
 def main() -> int:
@@ -51,7 +55,7 @@ def main() -> int:
             expected = python_view(analyzer.analyze(text))
             if expected != item["analysis"]:
                 differences += 1
-                for part in ("tokens", "units", "grammar"):
+                for part in ("tokens", "units", "grammar", "readings"):
                     if expected[part] != item["analysis"][part]:
                         print(f"DIFF {part}: {text}\n  python  {expected[part]}\n  browser {item['analysis'][part]}")
         print(f"{len(browser['sentences']) - differences} / {len(browser['sentences'])} sentences identical "

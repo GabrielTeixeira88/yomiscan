@@ -8,9 +8,13 @@ import {installSourceFetch} from './chapter/source-fetch';
 import {CaptureThrottle} from './chapter/capture-throttle';
 import {cacheRequest} from './chapter/cache-client';
 import {translationRequest,type TranslationOperation} from './chapter/translation-client';
-import {StudyHistory} from './history';
+import {Library,type LibraryRequest,libraryRequest} from './library';
+import {IndexedDbStore} from './library-idb';
 import {readinessRequest,selectTranslationEngine} from './chapter/readiness-client';
-const history=new StudyHistory({get:key=>chrome.storage.local.get(key),set:items=>chrome.storage.local.set(items)});
+const library=new Library(new IndexedDbStore());
+// The old opt-in Study history becomes saved sentences once; if moving fails, it stays where it was.
+const migrated=library.migrateHistory({get:key=>chrome.storage.local.get(key),remove:key=>chrome.storage.local.remove(key)})
+  .catch(error=>{console.error('YomiScan could not move Study history into saved sentences; it is kept as it was.',error);});
 const captures=new CaptureThrottle();
 installSourceFetch();
 import { screenshotRect, validSelection, type Rect, type Viewport } from "./geometry";
@@ -198,11 +202,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       error=>sendResponse({ok:false,error:error instanceof Error?error.message:'Local analysis failed'})).finally(()=>clearTimeout(timer));
     return true;
   }
-  if(message?.type==='study-history'){
-    if(typeof message.operation!=='string'||!message.payload||typeof message.payload!=='object'||Array.isArray(message.payload)||
-      JSON.stringify(message.payload).length>150*1024){sendResponse({ok:false,error:'Invalid local history request'});return;}
-    void history.request(message.operation,message.payload).then(data=>sendResponse({ok:true,data}),
-      error=>sendResponse({ok:false,error:error instanceof Error?error.message:'Local history unavailable'}));return true;
+  if(message?.type==='library'){
+    if(JSON.stringify(message).length>150*1024){sendResponse({ok:false,error:'Saved-word request too large.'});return;}
+    if(message.operation==='open'){
+      void chrome.tabs.create({url:chrome.runtime.getURL('library.html')}).then(()=>sendResponse({ok:true}),
+        error=>sendResponse({ok:false,error:error instanceof Error?error.message:'Could not open the Saved page.'}));
+      return true;
+    }
+    void migrated.then(()=>libraryRequest(library,message as LibraryRequest)).then(data=>sendResponse({ok:true,data}),
+      error=>sendResponse({ok:false,error:error instanceof Error?error.message:'Saved words unavailable. Reload the extension.'}));
+    return true;
   }
   if(message?.type==='chapter-translation-settings'){
     if(!['profile','create-series','delete-series','save-term','delete-term'].includes(message.operation)||

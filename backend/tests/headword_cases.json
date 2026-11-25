@@ -1,0 +1,26 @@
+{
+ "_comment": "Shared cases for dictionary_reading (backend/yomiscan/headword.py) and dictionaryReading (extension/src/engine/lexicon.ts).",
+ "entries": {
+  "taberu": {"spellings": ["食べる", "喰べる"], "readings": [{"text": "たべる", "spellings": [], "no_kanji": false}]},
+  "watashi": {"spellings": ["私"], "readings": [{"text": "わたし", "spellings": [], "no_kanji": false}, {"text": "わたくし", "spellings": [], "no_kanji": false}]},
+  "kyou": {"spellings": ["今日"], "readings": [{"text": "きょう", "spellings": [], "no_kanji": false}, {"text": "こんにち", "spellings": [], "no_kanji": false}]},
+  "restricted": {"spellings": ["日本", "日本國"], "readings": [{"text": "にほん", "spellings": [], "no_kanji": false}, {"text": "にっぽん", "spellings": ["日本"], "no_kanji": false}]},
+  "nokanji": {"spellings": ["為る"], "readings": [{"text": "する", "spellings": [], "no_kanji": false}, {"text": "スル", "spellings": [], "no_kanji": true}]},
+  "note": {"spellings": [], "readings": [{"text": "ノート", "spellings": [], "no_kanji": false}]}
+ },
+ "cases": [
+  {"name": "inflected verb: the entry's reading, not the surface's", "form": "食べる", "entry": "taberu", "hints": [null, "たべる"], "expected": "たべる"},
+  {"name": "surface hint picks among readings", "form": "私", "entry": "watashi", "hints": ["わたし", "わたくし"], "expected": "わたし"},
+  {"name": "lemma hint when the surface was inflected", "form": "私", "entry": "watashi", "hints": [null, "わたくし"], "expected": "わたくし"},
+  {"name": "no hint: first applicable reading", "form": "今日", "entry": "kyou", "hints": [], "expected": "きょう"},
+  {"name": "a restricted reading does not apply to another spelling", "form": "日本國", "entry": "restricted", "hints": ["にっぽん"], "expected": "にほん"},
+  {"name": "a restricted reading applies to its own spelling", "form": "日本", "entry": "restricted", "hints": ["にっぽん"], "expected": "にっぽん"},
+  {"name": "re_nokanji readings never belong to the written form", "form": "為る", "entry": "nokanji", "hints": ["する"], "expected": "する"},
+  {"name": "kana form is its own reading, as the entry writes it", "form": "のーと", "entry": "note", "hints": [], "expected": "ノート"},
+  {"name": "kana form without an entry", "form": "ね", "entry": null, "hints": ["ね"], "expected": "ね"},
+  {"name": "written form without an entry: the first hint", "form": "猫", "entry": null, "hints": [null, "ねこ"], "expected": "ねこ"},
+  {"name": "written form the entry does not list: the first hint", "form": "喰う", "entry": "taberu", "hints": ["くう"], "expected": "くう"},
+  {"name": "nothing known", "form": "猫", "entry": null, "hints": [], "expected": null},
+  {"name": "no form", "form": null, "entry": null, "hints": ["ねこ"], "expected": null}
+ ]
+}

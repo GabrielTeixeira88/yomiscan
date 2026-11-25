@@ -71,18 +71,44 @@ export function fromLindera(token: LinderaToken): JapaneseToken {
 
 // ---- Study response ------------------------------------------------------------------------
 
+const KANJI = /[㐀-䶿一-鿿豈-﫿\u{20000}-\u{323af}々〆ヶ]/u;
+
+/** headword.dictionary_reading: the JMdict reading of `form` in its best entry (食べた -> 食べる, たべる);
+ * `hints` (hiragana readings) break ties, in order. Same cases: backend/tests/headword_cases.json. */
+export function dictionaryReading(form: string | null, entry: DictionaryEntry | undefined, hints: readonly (string | null)[]): string | null {
+  if (!form) return null;
+  const known = hints.filter((hint): hint is string => !!hint);
+  if (!KANJI.test(form)) return entry?.readings.find(r => hiragana(r.text) === hiragana(form))?.text ?? form;
+  if (!entry || !entry.spellings.includes(form)) return known[0] ?? null;
+  const candidates = entry.readings.filter(r => !r.no_kanji && (!r.spellings.length || r.spellings.includes(form))).map(r => r.text);
+  for (const hint of known) {
+    const match = candidates.find(candidate => hiragana(candidate) === hint);
+    if (match) return match;
+  }
+  return candidates[0] ?? known[0] ?? null;
+}
+
 const meanings = (ids: readonly number[], entries: Map<number, DictionaryEntry>): Meaning[] =>
   ids.flatMap(id => entries.get(id)!.senses.map(sense => ({entry_id: id, glosses: sense.glosses, parts_of_speech: sense.parts_of_speech,
     spellings: sense.spellings, readings: sense.readings, notes: sense.notes, labels: sense.labels})));
 
 /** ImageAnalysisResponse.from_analysis for a browser lexical result (translation added later). */
 export function toAnalysis(result: LexicalResult, translation: string | null, provenance: Record<string, unknown> = {}): Analysis {
-  const tokens: Token[] = result.tokens.map(item => ({surface: item.token.surface, reading: item.token.reading, lemma: item.token.lemma,
-    dictionary_form: item.lookup_form || item.token.orthographic_base || item.token.lemma, part_of_speech: item.token.part_of_speech,
-    conjugation_type: item.token.conjugation_type, conjugation_form: item.token.conjugation_form, inflection: item.inflection,
-    meanings: meanings(item.entry_ids, result.dictionary_entries)}));
-  const units: Unit[] = result.units.map(u => ({surface: u.surface, dictionary_form: u.lookup_form, start_token: u.start, end_token: u.end,
-    meanings: meanings(u.entry_ids, result.dictionary_entries)}));
+  const best = (ids: readonly number[]) => ids.length ? result.dictionary_entries.get(ids[0]) : undefined;
+  const tokens: Token[] = result.tokens.map(item => {
+    const form = item.lookup_form || item.token.orthographic_base || item.token.lemma;
+    return {surface: item.token.surface, reading: item.token.reading, lemma: item.token.lemma,
+      dictionary_form: form, part_of_speech: item.token.part_of_speech,
+      conjugation_type: item.token.conjugation_type, conjugation_form: item.token.conjugation_form, inflection: item.inflection,
+      meanings: meanings(item.entry_ids, result.dictionary_entries),
+      dictionary_reading: dictionaryReading(form, best(item.entry_ids), [item.token.surface === form ? item.token.reading : null, item.token.lemma_reading])};
+  });
+  const units: Unit[] = result.units.map(u => {
+    const parts = result.tokens.slice(u.start, u.end).map(item => item.token.reading);
+    const spoken = u.surface === u.lookup_form && parts.every(Boolean) ? parts.join('') : null;
+    return {surface: u.surface, dictionary_form: u.lookup_form, start_token: u.start, end_token: u.end,
+      meanings: meanings(u.entry_ids, result.dictionary_entries), dictionary_reading: dictionaryReading(u.lookup_form, best(u.entry_ids), [spoken])};
+  });
   const grammar: GrammarNote[] = result.grammar.map(g => {const p = grammarPattern(g.pattern)!;
     return {id: g.pattern, name: p.name, meaning: p.meaning, start_token: g.start, end_token: g.end};});
   return {original_text: result.original_text, translation, processing: {ocr_ms: 0, translation_ms: 0, analysis_ms: 0, total_ms: 0},

@@ -1,6 +1,9 @@
 from pydantic import BaseModel
 
-from yomiscan.analysis import ImageAnalysisResult, TextAnalysisResult
+from yomiscan.analysis import AnalyzedToken, ImageAnalysisResult, TextAnalysisResult
+from yomiscan.dictionary import DictionaryEntry
+from yomiscan.headword import dictionary_reading
+from yomiscan.lexical_units import LexicalUnit
 from yomiscan.ocr import OCRResult
 from yomiscan.page import PageAnalysisResult
 
@@ -32,6 +35,7 @@ class TokenResponse(BaseModel):
     conjugation_form: str | None
     meanings: list[Meaning]
     inflection: list[str] = []  # learner labels for verb/adjective heads, e.g. ["negative", "past"]
+    dictionary_reading: str | None = None  # reading of dictionary_form (headword.py): 食べた -> たべる
 
 
 class UnitResponse(BaseModel):
@@ -41,6 +45,7 @@ class UnitResponse(BaseModel):
     start_token: int
     end_token: int
     meanings: list[Meaning]
+    dictionary_reading: str | None = None
 
 
 class GrammarResponse(BaseModel):
@@ -82,6 +87,19 @@ class ImageAnalysisResponse(BaseModel):
     def from_analysis(cls, analysis: TextAnalysisResult, *, ocr_ms: float = 0, total_ms: float = 0, origin: str = "study") -> "ImageAnalysisResponse":
         from ..diagnostics import model_info
         translation = analysis.translation
+
+        def best(ids: tuple[int, ...]) -> DictionaryEntry | None:
+            return analysis.dictionary_entries[ids[0]] if ids else None
+
+        def token_reading(item: AnalyzedToken) -> str | None:
+            form = item.lookup_form or item.token.orthographic_base or item.token.lemma
+            surface = item.token.reading if item.token.surface == form else None
+            return dictionary_reading(form, best(item.entry_ids), (surface, item.token.lemma_reading))
+
+        def unit_reading(unit: LexicalUnit) -> str | None:
+            parts = [item.token.reading for item in analysis.tokens[unit.start:unit.end]]
+            spoken = "".join(p for p in parts if p) if unit.surface == unit.lookup_form and all(parts) else None
+            return dictionary_reading(unit.lookup_form, best(unit.entry_ids), (spoken,))
         return cls(
             original_text=analysis.original_text,
             translation=analysis.translation.translated_text if analysis.translation else None,
@@ -103,12 +121,14 @@ class ImageAnalysisResponse(BaseModel):
                 meanings=[Meaning(entry_id=entry_id, **sense.__dict__)
                           for entry_id in item.entry_ids
                           for sense in analysis.dictionary_entries[entry_id].senses],
+                dictionary_reading=token_reading(item),
             ) for item in analysis.tokens],
             units=[UnitResponse(
                 surface=unit.surface, dictionary_form=unit.lookup_form, start_token=unit.start, end_token=unit.end,
                 meanings=[Meaning(entry_id=entry_id, **sense.__dict__)
                           for entry_id in unit.entry_ids
                           for sense in analysis.dictionary_entries[entry_id].senses],
+                dictionary_reading=unit_reading(unit),
             ) for unit in analysis.units],
             grammar=grammar_responses(analysis),
         )
