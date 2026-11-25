@@ -49,9 +49,10 @@ class SQLiteDictionary:
             self._connection.execute("SELECT form, entry_id FROM forms LIMIT 0")
         except (sqlite3.Error, DictionaryError, OSError) as exc:
             self.close()
+            from ..readiness import prepare_command
             raise DictionaryError(
-                f"Cannot open dictionary '{self._path}': {exc}. "
-                "Run scripts/import_jmdict.py first (see README)."
+                f"Cannot open dictionary '{self._path}': {exc}. Download it with "
+                f"`{prepare_command()} --component dictionary`, or import JMdict with yomiscan-import-jmdict (see README)."
             ) from exc
 
     def _ensure_current(self) -> None:

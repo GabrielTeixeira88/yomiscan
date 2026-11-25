@@ -1,4 +1,4 @@
-"""ONNX Runtime boundary shared by the vision engines; never imported at startup."""
+"""ONNX Runtime boundary shared by the Torch-free engines; onnxruntime is imported only when a session is built."""
 
 import os
 from pathlib import Path
@@ -8,20 +8,34 @@ OnnxDevice = Literal["cpu", "directml"]
 PROVIDERS: dict[str, str] = {"cpu": "CPUExecutionProvider", "directml": "DmlExecutionProvider"}
 
 
-def onnx_device(device: str, environment: dict[str, str] | None = None) -> OnnxDevice:
+def available_providers() -> list[str]:
+    try:
+        import onnxruntime as ort
+    except ImportError:
+        return []
+    return list(ort.get_available_providers())
+
+
+def onnx_device(device: str, environment: dict[str, str] | None = None,
+                available: list[str] | None = None) -> OnnxDevice:
     """Map the backend's auto/cpu/cuda setting to an ONNX Runtime device.
 
-    YOMISCAN_ONNX_DEVICE (cpu or directml) chooses for auto; explicit cpu stays CPU. The
-    Torch-free engines have no CUDA path: DirectML is their GPU path on Windows.
+    For auto, YOMISCAN_ONNX_DEVICE chooses: `auto` (default) uses DirectML when the installed
+    runtime offers it (onnxruntime-directml on Windows) and the CPU otherwise; `cpu` and
+    `directml` force one. An explicit cpu setting stays CPU. The Torch-free engines have no
+    CUDA path: DirectML is their GPU path.
     """
     environment = dict(os.environ) if environment is None else environment
     if device == "cuda":
-        raise ValueError("The Torch-free engines have no CUDA path; use YOMISCAN_ONNX_DEVICE=directml for a GPU")
+        raise ValueError("The Torch-free engines have no CUDA path; DirectML is their GPU path (YOMISCAN_ONNX_DEVICE)")
     if device == "cpu":
         return "cpu"
-    choice = environment.get("YOMISCAN_ONNX_DEVICE", "cpu")
+    choice = environment.get("YOMISCAN_ONNX_DEVICE", "auto")
+    if choice == "auto":
+        providers = available_providers() if available is None else available
+        return "directml" if PROVIDERS["directml"] in providers else "cpu"
     if choice not in PROVIDERS:
-        raise ValueError(f"YOMISCAN_ONNX_DEVICE must be one of {tuple(PROVIDERS)}")
+        raise ValueError(f"YOMISCAN_ONNX_DEVICE must be auto or one of {tuple(PROVIDERS)}")
     return choice  # type: ignore[return-value]
 
 
@@ -35,7 +49,7 @@ def session(path: Path, *, threads: int = 4, device: OnnxDevice = "cpu") -> Any:
     try:
         import onnxruntime as ort
     except ImportError as exc:
-        raise RuntimeError("ONNX engines require uv sync --extra vision; the default engine needs no ONNX runtime") from exc
+        raise RuntimeError("ONNX Runtime is missing; run uv sync (it is a core dependency)") from exc
     provider = PROVIDERS[device]
     if provider not in ort.get_available_providers():
         raise RuntimeError(f"ONNX Runtime {ort.__version__} has no {provider}; "

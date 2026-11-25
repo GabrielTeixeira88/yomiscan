@@ -34,6 +34,7 @@ def runtime(monkeypatch):
     return torch, processor_type, model_type, processor, model
 
 
+@pytest.mark.reference
 def test_detector_loads_once_reuses_resources_and_maps_original_size(runtime):
     torch, processor_type, model_type, processor, model = runtime
     detector = ComicTextDetector()
@@ -47,6 +48,7 @@ def test_detector_loads_once_reuses_resources_and_maps_original_size(runtime):
     assert model_type.from_pretrained.call_args.kwargs["use_safetensors"] is True
 
 
+@pytest.mark.reference
 def test_detector_cuda_selection_and_unavailable_error(runtime):
     torch, *_ = runtime
     with pytest.raises(DetectionInitializationError, match="CUDA unavailable"):
@@ -56,6 +58,7 @@ def test_detector_cuda_selection_and_unavailable_error(runtime):
     assert ComicTextDetector(device="cpu").device == "cpu"
 
 
+@pytest.mark.reference
 def test_detector_contextual_errors_keep_cause(runtime):
     _, _, model_type, _, model = runtime
     error = RuntimeError("fixture failure")
@@ -77,6 +80,7 @@ def test_detector_invalid_configuration(kwargs):
         ComicTextDetector(**kwargs)
 
 
+@pytest.mark.reference
 def test_class_thresholds_recover_bubble_text_without_lowering_free_text_floor(runtime):
     _, _, _, processor, _ = runtime
     def tensor(values):

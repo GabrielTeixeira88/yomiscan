@@ -17,6 +17,7 @@ from yomiscan.readiness import readiness_snapshot, require_local_models, SetupUn
 HEADERS = {"X-YomiScan-Client": "study-extension-v1"}
 
 
+@pytest.mark.reference
 def test_detector_readiness_requires_the_safetensors_artifact_used_by_its_loader(monkeypatch, tmp_path):
     import huggingface_hub
     for name in ("config.json", "preprocessor_config.json", "pytorch_model.bin"):
@@ -47,6 +48,7 @@ def test_registry_is_bounded_expiring_and_distinguishes_cache_from_computation()
     assert JobRegistry().instance != jobs.instance
 
 
+@pytest.mark.reference
 def test_readiness_uses_only_local_metadata_preserves_paths_and_reports_capabilities(monkeypatch, tmp_path):
     import huggingface_hub
     monkeypatch.setattr(huggingface_hub, "snapshot_download", lambda *a, **k: pytest.fail("readiness must not download"))

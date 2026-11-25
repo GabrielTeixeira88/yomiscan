@@ -7,7 +7,6 @@ from pathlib import Path
 import subprocess
 import sys
 
-from huggingface_hub import hf_hub_download, snapshot_download
 from yomiscan.translation.manga import HY_MODEL, HY_REVISION, Q25_MODEL, Q25_REVISION, Q25_BASE, Q25_BASE_REVISION
 from yomiscan.translation.nmt import NMT_MODELS
 from yomiscan.translation.marian import OPUS_EXPERIMENTS
@@ -19,6 +18,10 @@ def main() -> None:
     parser.add_argument("--llama-source", type=Path, help="For Qwen: official llama.cpp b11380 checkout (converter plus gguf-py)")
     parser.add_argument("--output-dir", type=Path, default=Path("models/manga"))
     args = parser.parse_args()
+    try:
+        from huggingface_hub import hf_hub_download, snapshot_download
+    except ImportError as exc:
+        raise SystemExit("These optional translators need the PyTorch `reference` dependency group: run uv sync") from exc
     if args.engine in ("opus-ja-pt", "opus-ja-es"):
         spec = OPUS_EXPERIMENTS["pt-BR" if args.engine == "opus-ja-pt" else "es"]
         print("Explicitly preparing one experimental Apache-2.0 OPUS checkpoint; Portuguese regional quality is unverified.")

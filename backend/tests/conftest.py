@@ -1,8 +1,23 @@
 """Small hand-authored XML fixture; no downloaded dictionary required for tests."""
 
+from importlib.util import find_spec
+
 import pytest
 
 from yomiscan.dictionary.importer import import_jmdict
+
+# Tests of the PyTorch reference adapters (dependency group `reference`). They fake the models
+# but import torch, transformers or huggingface_hub, so a Torch-free install skips them.
+REFERENCE_AVAILABLE = all(find_spec(name) is not None for name in ("torch", "transformers", "huggingface_hub", "manga_ocr"))
+
+
+def pytest_collection_modifyitems(config, items):
+    if REFERENCE_AVAILABLE:
+        return
+    skip = pytest.mark.skip(reason="needs the PyTorch `reference` dependency group (uv sync installs it by default)")
+    for item in items:
+        if "reference" in item.keywords:
+            item.add_marker(skip)
 
 
 @pytest.fixture

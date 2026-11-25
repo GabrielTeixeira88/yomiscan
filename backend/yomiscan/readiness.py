@@ -14,6 +14,17 @@ from .vision_models import MODELS
 from .detection.rtdetr import MODEL_ID as DETECTOR_MODEL, MODEL_REVISION as DETECTOR_REVISION
 
 
+# (catalog id, kind, local-bundle component) of the default Torch-free engines.
+ENGINE_DEFAULTS = (("detector-pinned", "detection", "detector-fp32"), ("ocr-pinned", "ocr", "ocr-int8"),
+                   ("opus-pinned", "translation", "translation-opus-ja-en-fp32"))
+
+
+def prepare_command(environment: dict[str, str] | None = None) -> str:
+    """The command that downloads the default models: the packaged engine sets its own."""
+    environment = dict(os.environ) if environment is None else environment
+    return environment.get("YOMISCAN_PREPARE_COMMAND", "yomiscan-prepare-defaults")
+
+
 class SetupUnavailable(RuntimeError):
     def __init__(self, code: str) -> None:
         super().__init__("Local setup is incomplete; inspect readiness and run the explicit preparation command")
@@ -41,35 +52,37 @@ class ModelDescriptor:
 
 
 def model_catalog() -> tuple[ModelDescriptor, ...]:
-    catalog = [
+    # Defaults first (Stage 5b): the Torch-free engines on the pinned local bundle.
+    from .engine_models import default_host, load_bundle
+    host, bundle = default_host(), load_bundle()
+    catalog = [ModelDescriptor(identifier, kind, host["repository"] or "loopback", host["revision"] or bundle.name,
+        bundle.components[component].license, tuple(f.path for f in bundle.components[component].files),
+        dependency="onnxruntime", devices=("cpu",), targets=("en",) if kind == "translation" else (),
+        approximate_download_bytes=bundle.components[component].size,
+        setup_command=prepare_command()+" --component "+kind, engine_component=component)
+        for identifier, kind, component in ENGINE_DEFAULTS]
+    # PyTorch references (dependency group `reference`): parity checks and CUDA.
+    catalog += [
         ModelDescriptor("ocr-current", "ocr", MODELS["ocr-original"].repository, MODELS["ocr-original"].revision, "Apache-2.0",
-            MODELS["ocr-original"].files, setup_command="yomiscan-prepare-vision ocr-original"),
+            MODELS["ocr-original"].files, dependency="manga_ocr", setup_command="yomiscan-prepare-vision ocr-original"),
         ModelDescriptor("detector-current", "detection", DETECTOR_MODEL, DETECTOR_REVISION, "Apache-2.0",
-            ("config.json", "preprocessor_config.json"), ("model.safetensors",),
-            approximate_download_bytes=172_000_000, setup_command="yomiscan-prepare-defaults --component detection"),
+            ("config.json", "preprocessor_config.json"), ("model.safetensors",), dependency="transformers",
+            approximate_download_bytes=172_000_000, setup_command="yomiscan-prepare-defaults --reference --component detection"),
         ModelDescriptor("current", "translation", DEFAULT_MODEL, MODEL_REVISION, "Apache-2.0",
             ("config.json", "source.spm", "target.spm", "vocab.json"), ("pytorch_model.bin", "model.safetensors"), targets=("en",),
-            approximate_download_bytes=312_000_000, setup_command="yomiscan-prepare-defaults --component translation"),
+            dependency="transformers", approximate_download_bytes=312_000_000,
+            setup_command="yomiscan-prepare-defaults --reference --component translation"),
     ]
     for identifier, key in (("ocr-2025", "ocr-2025"), ("ocr-onnx", "ocr-onnx"), ("detector-onnx", "detector")):
         spec = MODELS[key]
         catalog.append(ModelDescriptor(identifier, "detection" if identifier.startswith("detector") else "ocr",
             spec.repository, spec.revision, spec.license, spec.files, experimental=True,
-            dependency="onnxruntime" if "onnx" in identifier else None,
+            dependency="onnxruntime" if "onnx" in identifier else "transformers",
             devices=("cpu",) if "onnx" in identifier else ("cpu", "cuda"), setup_command="yomiscan-prepare-vision "+key))
-    from .engine_models import default_host, load_bundle
-    host, bundle = default_host(), load_bundle()
-    for identifier, kind, component in (("detector-pinned", "detection", "detector-fp32"), ("ocr-pinned", "ocr", "ocr-int8"),
-                                        ("opus-pinned", "translation", "translation-opus-ja-en-fp32")):
-        catalog.append(ModelDescriptor(identifier, kind, host["repository"] or "loopback", host["revision"] or bundle.name,
-            bundle.components[component].license, tuple(f.path for f in bundle.components[component].files),
-            experimental=True, dependency="onnxruntime", devices=("cpu",), targets=("en",) if kind == "translation" else (),
-            approximate_download_bytes=bundle.components[component].size,
-            setup_command="yomiscan-prepare-engine "+component, engine_component=component))
     for name, spec in NMT_MODELS.items():
         files = ("config.json", "tokenizer_config.json", "sentencepiece.bpe.model", "tokenizer.json") if name == "nllb-600m" else ("config.json", "source.spm", "target.spm", "vocab.json")
         catalog.append(ModelDescriptor(name, "translation", spec.model, spec.revision, spec.license, files,
-            ("pytorch_model.bin", "model.safetensors"), experimental=True,
+            ("pytorch_model.bin", "model.safetensors"), experimental=True, dependency="transformers",
             targets=("en", "pt-BR", "es") if name == "nllb-600m" else ("en",),
             approximate_download_bytes=2_460_457_927 if name == "nllb-600m" else None,
             setup_command="yomiscan-prepare-translation --engine "+name))
@@ -77,7 +90,7 @@ def model_catalog() -> tuple[ModelDescriptor, ...]:
         name = "opus-ja-pt" if target == "pt-BR" else "opus-ja-es"
         catalog.append(ModelDescriptor(name, "translation", spec["model"], spec["revision"], "Apache-2.0",
             ("config.json", "source.spm", "target.spm", "vocab.json"), ("pytorch_model.bin",), experimental=True,
-            targets=(target,), approximate_download_bytes=311_664_297 if target == "pt-BR" else 305_760_693,
+            dependency="transformers", targets=(target,), approximate_download_bytes=311_664_297 if target == "pt-BR" else 305_760_693,
             setup_command="yomiscan-prepare-translation --engine "+name))
     for name, model, revision, license in (("hy-mt2-manga", HY_MODEL, HY_REVISION, "Apache-2.0"),
         ("qwen25-manga", Q25_MODEL, Q25_REVISION, "Apache-2.0"), ("qwen35-vntl", VNTL_MODEL, VNTL_REVISION, "Apache-2.0 publisher claim; artifact unavailable")):
@@ -94,6 +107,8 @@ def local_artifacts(spec: ModelDescriptor, environment: dict[str, str]) -> tuple
     if spec.engine_component is not None:
         from .engine_models import installed_files
         return installed_files(spec.engine_component, environment)
+    if spec.dependency != "llama.cpp" and find_spec("huggingface_hub") is None:
+        return [], False  # Hugging Face cache models need the `reference` dependency group
     if spec.dependency == "llama.cpp":
         key = {"hy-mt2-manga": "HY_MT2", "qwen25-manga": "QWEN25", "qwen35-vntl": "QWEN35"}[spec.id]
         raw = environment.get("YOMISCAN_"+key+"_GGUF", "")
@@ -128,13 +143,13 @@ def local_artifacts(spec: ModelDescriptor, environment: dict[str, str]) -> tuple
 
 
 def selected_models(environment: dict[str, str]) -> dict[str, str]:
-    ocr = environment.get("YOMISCAN_OCR", "current")
-    detector = environment.get("YOMISCAN_DETECTOR", "current")
+    ocr = environment.get("YOMISCAN_OCR", "pinned")
+    detector = environment.get("YOMISCAN_DETECTOR", "pinned")
     return {"ocr": "ocr-current" if ocr in ("current", "original-rgb") else "ocr-2025" if ocr in ("2025", "2025-greedy") else
                 "ocr-onnx" if ocr in ("2025-onnx", "2025-onnx-no-cache") else "ocr-pinned" if ocr == "pinned" else "invalid",
         "detection": "detector-current" if detector == "current" else "detector-onnx" if detector == "onnx-int8" else
                 "detector-pinned" if detector == "pinned" else "invalid",
-        "translation": environment.get("YOMISCAN_TRANSLATION_ENGINE", "current")}
+        "translation": environment.get("YOMISCAN_TRANSLATION_ENGINE", "opus-pinned")}
 
 
 def storage_status(path: Path) -> str:
@@ -172,12 +187,13 @@ def readiness_snapshot(*, initialization: str, busy: bool, failure_code: str | N
             "warnings": (["Noncommercial model license"] if spec.license == "CC-BY-NC-4.0" else [])+
                 (["Brazilian Portuguese quality is unverified"] if "pt-BR" in spec.targets else [])+
                 (["Valid structured output does not guarantee accurate meaning"] if spec.structured else [])})
-    dictionary = Path(environment.get("YOMISCAN_DICTIONARY", "data/jmdict.sqlite3"))
+    from .engine_models import default_dictionary
+    dictionary = default_dictionary(environment)
     return {"schema": 1, "version": version("yomiscan"), "initialization": initialization, "busy": busy,
         "failure_code": failure_code, "configuration_valid": valid, "selected_device": requested_device if valid else "invalid",
         "selected": selected, "models": models,
         "dictionary": {"installed": dictionary.is_file(), "loaded": initialization == "ready",
-            "setup_command": "yomiscan-import-jmdict <JMdict_e.xml.gz> --output data/jmdict.sqlite3"},
+            "setup_command": prepare_command(environment)+" --component dictionary"},
         "tokenizer": {"installed": find_spec("fugashi") is not None and find_spec("unidic_lite") is not None,
             "loaded": initialization == "ready", "setup_command": "uv sync --frozen"},
         "storage": {"processing_cache": {

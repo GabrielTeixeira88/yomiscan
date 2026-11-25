@@ -47,6 +47,7 @@ def upstream(monkeypatch):
 
 
 @pytest.mark.parametrize("name", ["fugumt", "nllb-600m"])
+@pytest.mark.reference
 def test_lazy_factory_batches_once_and_preserves_order(upstream, name):
     engine = create_translation_engine(name, device="cpu")
     upstream.model_factory.from_pretrained.assert_not_called()
@@ -73,6 +74,7 @@ def test_lazy_factory_batches_once_and_preserves_order(upstream, name):
     assert engine._model is None and engine._tokenizer is None
 
 
+@pytest.mark.reference
 def test_nllb_source_and_forced_target_are_explicit(upstream):
     engine = NMTTranslationEngine("nllb-600m", local_files_only=True)
     engine.translate_many(["一", "二"])
@@ -84,6 +86,7 @@ def test_nllb_source_and_forced_target_are_explicit(upstream):
     assert upstream.model.generate.call_args.kwargs["forced_bos_token_id"] == 256047
 
 
+@pytest.mark.reference
 def test_fugu_has_no_multilingual_language_override(upstream):
     NMTTranslationEngine("fugumt").translate("はい")
     assert "src_lang" not in upstream.token_factory.from_pretrained.call_args.kwargs
@@ -100,6 +103,7 @@ def test_cache_failure_retains_cause_and_never_falls_back(upstream):
 
 
 @pytest.mark.parametrize("failure", ["empty", "count", "unfinished", "inference", "too_long"])
+@pytest.mark.reference
 def test_bad_inference_is_explicit(upstream, failure):
     if failure == "empty": upstream.tokenizer.batch_decode.side_effect = lambda *a, **k: [""]
     if failure == "count": upstream.tokenizer.batch_decode.side_effect = lambda *a, **k: []
@@ -118,6 +122,7 @@ def test_nllb_rejects_missing_language_id(upstream):
     upstream.model_factory.from_pretrained.assert_not_called()
 
 
+@pytest.mark.reference
 def test_cuda_and_cleanup(upstream):
     upstream.torch.cuda.is_available.return_value = True
     engine = NMTTranslationEngine("fugumt", device="cuda")
@@ -129,6 +134,7 @@ def test_cuda_and_cleanup(upstream):
 
 
 @pytest.mark.parametrize("name", ["fugumt", "nllb-600m"])
+@pytest.mark.reference
 def test_benchmark_serializes_nmt_results(upstream, name):
     import json
     report = evaluate_engine(name, [EvaluationCase("test", "casual", ("はい", "いい"))])
@@ -146,6 +152,7 @@ def test_requested_cuda_unavailable_does_not_load_weights(upstream):
 
 @pytest.mark.parametrize("name", ["fugumt", "nllb-600m"])
 @pytest.mark.parametrize("mode,glossary", [("page", False), ("isolated", True)])
+@pytest.mark.reference
 def test_benchmark_does_not_claim_context_or_glossary(upstream, name, mode, glossary):
     report = evaluate_engine(name, [EvaluationCase("test", "context", ("はい",))], mode=mode, glossary=glossary)
     assert report["status"] == "unsupported"

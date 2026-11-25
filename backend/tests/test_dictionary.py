@@ -63,7 +63,7 @@ def test_failed_import_preserves_database(content, dictionary_path, tmp_path):
 
 def test_missing_database_is_not_created(tmp_path):
     path = tmp_path / "absent.sqlite3"
-    with pytest.raises(DictionaryError, match="import_jmdict"):
+    with pytest.raises(DictionaryError, match="--component dictionary"):
         SQLiteDictionary(path)
     assert not path.exists()
 

@@ -12,6 +12,7 @@ from yomiscan.translation.options import TranslationOptions, capabilities, valid
 from yomiscan.rendering.typesetting import PillowTypesetter
 
 
+@pytest.mark.reference
 def test_nllb_switches_forced_target_without_reloading_or_mutating_english(nmt_upstream):
     ids = {"eng_Latn": 256047, "por_Latn": 256141, "spa_Latn": 256161}
     nmt_upstream.tokenizer.convert_tokens_to_ids.side_effect = ids.get

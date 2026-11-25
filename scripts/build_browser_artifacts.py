@@ -82,7 +82,7 @@ def local_components(stage2: Path) -> tuple[Component, ...]:
 
 
 # Browser-bundle components the local engine reuses unchanged (same paths and hashes).
-LOCAL_SHARED = ("ocr-int8",)
+LOCAL_SHARED = ("ocr-int8", "dictionary")
 
 
 def sha256(path: Path) -> str:

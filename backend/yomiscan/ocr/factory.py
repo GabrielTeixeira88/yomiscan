@@ -1,4 +1,5 @@
-"""Opt-in OCR experiments; ordinary startup preserves the original manga-ocr path."""
+"""OCR engine selection. The default is the Torch-free pinned manga-ocr export (Stage 5b);
+"current" is the PyTorch manga-ocr reference (dependency group `reference`)."""
 
 import os
 from .base import OCREngine, OCRInitializationError
@@ -9,7 +10,7 @@ OCR_NAMES = ("current", "current-published", "original-rgb", "2025", "2025-greed
 
 def create_ocr_engine(name: str | None = None, *, device: str = "auto", threads: int | None = None,
                       pinned: bool = False) -> OCREngine:
-    name = name or os.environ.get("YOMISCAN_OCR", "current")
+    name = name or os.environ.get("YOMISCAN_OCR", "pinned")
     if name not in OCR_NAMES:
         raise ValueError(f"Unknown OCR engine {name!r}; choose {OCR_NAMES}")
     if device not in ("auto", "cpu", "cuda"):

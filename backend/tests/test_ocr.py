@@ -10,6 +10,7 @@ from yomiscan.ocr import (
 )
 
 
+@pytest.mark.reference
 def test_adapter_reuses_model_and_returns_contract(monkeypatch):
     model = Mock(return_value="面白い")
     factory = Mock(return_value=model)
@@ -35,6 +36,7 @@ def test_initialization_failure_preserves_cause(monkeypatch):
     assert caught.value.__cause__ is cause
 
 
+@pytest.mark.reference
 def test_recognition_failure_preserves_cause(monkeypatch):
     cause = RuntimeError("inference failed")
     factory = Mock(return_value=Mock(side_effect=cause))

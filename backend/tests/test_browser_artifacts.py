@@ -35,8 +35,9 @@ def test_builder_copies_exports_and_pins_size_and_sha256(tmp_path):
             assert entry["bytes"] == len(data) and entry["sha256"] == hashlib.sha256(data).hexdigest()
     local = json.loads((tmp_path / "local-manifest.json").read_text(encoding="utf-8"))
     assert local == json.loads((output / "local-manifest.json").read_text(encoding="utf-8"))
-    assert local["bundle"] == builder.LOCAL_BUNDLE and [c["id"] for c in local["components"]] == ["detector-fp32", "translation-opus-ja-en-fp32", "ocr-int8"]
-    assert local["components"][2] == manifest["components"][2]  # shared files keep identical pins
+    assert local["bundle"] == builder.LOCAL_BUNDLE and [c["id"] for c in local["components"]] == ["detector-fp32", "translation-opus-ja-en-fp32", "ocr-int8", "dictionary"]
+    shared = {c["id"]: c for c in manifest["components"]}
+    assert all(c == shared[c["id"]] for c in local["components"][2:])  # shared files keep identical pins
     assert (output / "detector-fp32" / "detector.onnx").is_file()
 
 

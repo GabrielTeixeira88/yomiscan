@@ -10,25 +10,24 @@ readme = "README.md"
 requires-python = ">=3.13,<3.14"
 license = "MIT"
 dependencies = [
-    "manga-ocr>=0.1.16,<0.2",
     "Pillow>=11",
     "fugashi>=1.5,<2",
     "unidic-lite>=1.0.8,<2",
-    "torch>=2.6,<3",
-    "transformers>=5.17,<6",
     "sentencepiece>=0.2.1,<0.3",
-    "sacremoses>=0.1.1,<0.2",
+    "jaconv>=0.4,<1",
     "fastapi>=0.115,<1",
     "pydantic>=2.10,<3",
     "uvicorn>=0.34,<1",
     "python-multipart>=0.0.20,<1",
     "opencv-python-headless>=4.13,<5",
     "numpy>=2,<3",
+    # One ONNX Runtime version everywhere (Stage 5b): the DirectML build adds any-GPU support on Windows.
+    "onnxruntime==1.24.4; sys_platform != 'win32'",
+    "onnxruntime-directml==1.24.4; sys_platform == 'win32'",
 ]
 
 [project.optional-dependencies]
 benchmark = ["psutil>=7,<8"]
-vision = ["onnxruntime>=1.32,<2"]
 
 [project.scripts]
 yomiscan-server = "yomiscan.cli:server_main"
@@ -36,11 +35,24 @@ yomiscan-import-jmdict = "yomiscan.dictionary.cli:main"
 yomiscan-prepare-defaults = "yomiscan.cli:prepare_defaults"
 yomiscan-prepare-vision = "yomiscan.vision_models:main"
 yomiscan-prepare-engine = "yomiscan.engine_models:main"
+yomiscan-engine = "yomiscan.engine_main:main"
 yomiscan-prepare-translation = "yomiscan.translation.setup_models:main"
 yomiscan-translate = "yomiscan.translation.cli:main"
 
 [dependency-groups]
 dev = ["pytest>=8", "httpx>=0.28,<1"]
+# The PyTorch reference engines (Stage 5b): parity checks, CUDA, and the experimental
+# translators. Installed by default for development; never part of the package or the frozen engine.
+reference = [
+    "manga-ocr>=0.1.16,<0.2",
+    "torch>=2.6,<3",
+    "transformers>=5.17,<6",
+    "sacremoses>=0.1.1,<0.2",
+]
+freeze = ["pyinstaller>=6.22,<7"]
+
+[tool.uv]
+default-groups = ["dev", "reference"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["backend/yomiscan"]
@@ -50,3 +62,4 @@ include = ["/backend/yomiscan", "/scripts", "/docs", "/README.md", "/LICENSE", "
 
 [tool.pytest.ini_options]
 testpaths = ["backend/tests"]
+markers = ["reference: needs the PyTorch reference dependency group; skipped in a Torch-free install"]

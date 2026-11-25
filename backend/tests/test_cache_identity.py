@@ -137,6 +137,7 @@ def test_llama_identity_uses_effective_device_and_never_guesses_auto(tmp_path):
     assert before_load == component_identity(engine)
 
 
+@pytest.mark.reference
 def test_nmt_auto_identity_tracks_resolved_device_without_loading_weights(monkeypatch):
     from yomiscan.translation.nmt import NMTTranslationEngine
     import torch

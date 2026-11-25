@@ -140,7 +140,7 @@ def test_engine_refuses_long_input_unfinished_and_empty_output():
         _engine([4, 0]).translate("x")
     with pytest.raises(ValueError):
         _engine([0]).translate("   ")
-    with pytest.raises(TranslationInitializationError, match="yomiscan-prepare-engine translation-opus-ja-en-fp32"):
+    with pytest.raises(TranslationInitializationError, match="need a tokenizer"):
         PinnedOpusTranslationEngine(encoder=_Encoder(), decoder=_Decoder([0]), config=CONFIG)
 
 
@@ -151,7 +151,7 @@ def test_readiness_and_factory_offer_the_torch_free_translator(tmp_path):
     assert "opus-pinned" in ENGINE_NAMES
     spec = {s.id: s for s in model_catalog()}["opus-pinned"]
     assert spec.kind == "translation" and spec.targets == ("en",)
-    assert spec.setup_command == "yomiscan-prepare-engine translation-opus-ja-en-fp32"
+    assert spec.setup_command == "yomiscan-prepare-defaults --component translation" and not spec.experimental
     assert local_artifacts(spec, {"YOMISCAN_ENGINE_MODELS": str(tmp_path)}) == ([], False)
     files = {f.path.rsplit("/", 1)[1] for f in load_bundle().components["translation-opus-ja-en-fp32"].files}
     assert {"encoder_model.onnx", "decoder_model_merged.onnx", "source.spm", "target.spm", "vocab.json", "config.json"} <= files

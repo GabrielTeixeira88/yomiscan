@@ -23,7 +23,7 @@ def test_local_pins_share_the_browser_commit_and_files():
     assert engine_models.default_source().startswith("https://huggingface.co/")
     browser = engine_models.load_bundle(extension / "artifact-manifest.json")
     local = engine_models.load_bundle()
-    assert sorted(local.components) == ["detector-fp32", "ocr-int8", "translation-opus-ja-en-fp32"]
+    assert sorted(local.components) == ["detector-fp32", "dictionary", "ocr-int8", "translation-opus-ja-en-fp32"]
     assert local.components["ocr-int8"] == browser.components["ocr-int8"]
     assert {f.path for f in local.components["detector-fp32"].files} == {"detector-fp32/detector.onnx"}
 
@@ -105,18 +105,23 @@ def test_models_root_and_readiness_view(tmp_path):
 def test_readiness_selects_and_inspects_pinned_engines(tmp_path):
     from yomiscan.readiness import local_artifacts, model_catalog, selected_models
     assert selected_models({"YOMISCAN_OCR": "pinned", "YOMISCAN_DETECTOR": "pinned"}) == {
-        "ocr": "ocr-pinned", "detection": "detector-pinned", "translation": "current"}
+        "ocr": "ocr-pinned", "detection": "detector-pinned", "translation": "opus-pinned"}
+    assert selected_models({}) == selected_models({"YOMISCAN_OCR": "pinned", "YOMISCAN_DETECTOR": "pinned"})  # the defaults
     catalog = {spec.id: spec for spec in model_catalog()}
     spec = catalog["ocr-pinned"]
-    assert spec.kind == "ocr" and spec.setup_command == "yomiscan-prepare-engine ocr-int8"
-    assert catalog["detector-pinned"].setup_command == "yomiscan-prepare-engine detector-fp32"
+    assert spec.kind == "ocr" and spec.setup_command == "yomiscan-prepare-defaults --component ocr"
+    assert catalog["detector-pinned"].setup_command == "yomiscan-prepare-defaults --component detection"
+    assert [s.id for s in model_catalog()][:3] == ["detector-pinned", "ocr-pinned", "opus-pinned"]
+    assert catalog["ocr-current"].dependency == "manga_ocr" and catalog["current"].dependency == "transformers"
     assert spec.model == engine_models.default_host()["repository"]
     assert local_artifacts(spec, {"YOMISCAN_ENGINE_MODELS": str(tmp_path)}) == ([], False)
 
 
 def test_onnx_device_mapping():
     assert onnx_device("cpu", {"YOMISCAN_ONNX_DEVICE": "directml"}) == "cpu"
-    assert onnx_device("auto", {}) == "cpu"
+    assert onnx_device("auto", {}, available=["CPUExecutionProvider"]) == "cpu"
+    assert onnx_device("auto", {}, available=["DmlExecutionProvider", "CPUExecutionProvider"]) == "directml"
+    assert onnx_device("auto", {"YOMISCAN_ONNX_DEVICE": "cpu"}, available=["DmlExecutionProvider"]) == "cpu"
     assert onnx_device("auto", {"YOMISCAN_ONNX_DEVICE": "directml"}) == "directml"
     with pytest.raises(ValueError, match="no CUDA path"):
         onnx_device("cuda", {})
