@@ -69,7 +69,8 @@ ZIP/backend distributions include checksums and installation checks. See
 | Setup/readiness and page stages | Implemented; local checks, real stage/cache observations, no automatic weight download |
 | Saved words and sentences | Stage 6: explicit Save per word or sentence; Saved page with search, CSV export, JSON backup and restore; up to 50,000 words and 2,000 sentences |
 | Unsigned extension ZIP, backend wheel/sdist | Build workflow and installation checks; separate model/JMdict preparation |
-| Anki export, known words (Stage 6, next increments) | Planned |
+| Export for Anki (Stage 6): a CSV with Anki's import header lines, for File > Import | Done |
+| Known words (Stage 6, next increment) | Planned |
 | Narrative context, new production models, JLPT grading, full graphical model manager | Future work |
 
 The purpose is to help Japanese learners study manga without paid APIs or per-request
@@ -200,8 +201,9 @@ See the [Stage 5b record](docs/decisions/stage-5b-local-engine.md).
 **☆ Save word**, and the sentence has **Save sentence**. A saved word keeps its dictionary form
 with that form's reading (食べた → 食べる, たべる), the best dictionary entry's meanings, and the
 sentence it came from. **YomiScan → Open Saved** lists everything, with search. It exports words
-or sentences as CSV (UTF-8, for Anki or a spreadsheet) and backs up or restores everything as
-one JSON file. Nothing is saved without a click, and nothing leaves the browser. Entries from the
+or sentences as CSV for a spreadsheet, or with **Export for Anki** as a CSV that Anki 2.1.54 or
+later reads on File > Import (columns already named, plain text, tagged `yomiscan`; choose a
+note type and deck there). It backs up or restores everything as one JSON file. Nothing is saved without a click, and nothing leaves the browser. Entries from the
 old opt-in Study history become saved sentences. See the
 [Stage 6 record](docs/decisions/stage-6-capture-release.md).
 

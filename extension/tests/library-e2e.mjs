@@ -132,6 +132,12 @@ try {
   assert.ok(wordsCsv.startsWith("﻿\"Expression\",\"Reading\",\"Meaning\""));
   assert.equal(wordsCsv.trim().split("\r\n").length, 3);
   for (const label of labels) assert.ok(wordsCsv.includes(`\r\n"${label}",`), `${label} in the CSV`);
+  await click(library, "Export for Anki");
+  const ankiCsv = await readFile(path.join(downloads, await downloaded("yomiscan-anki-words-")), "utf8");
+  assert.ok(ankiCsv.startsWith("﻿#separator:comma\r\n#html:false\r\n#tags:yomiscan\r\n#columns:Expression,Reading,"));
+  assert.equal(ankiCsv.trim().split("\r\n").length, 6);
+  for (const label of labels) assert.ok(ankiCsv.includes(`\r\n"${label}",`), `${label} in the Anki file`);
+  report.checks.push("Export for Anki: Anki header lines, then one row per saved word");
   await click(library, "Sentences");
   assert.ok((await page()).includes("昔の文です"));
   await click(library, "Export CSV");

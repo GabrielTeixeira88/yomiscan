@@ -243,20 +243,41 @@ export function libraryRequest(library: Library, request: LibraryRequest): Promi
 
 /** RFC 4180: every field quoted, CRLF rows, with a byte-order mark so spreadsheet programs read UTF-8. */
 export function csv(rows: (string | null)[][]): string {
-  return '﻿' + rows.map(row => row.map(cell => `"${(cell ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n') + '\r\n';
+  return '﻿' + rows.map(record).join('\r\n') + '\r\n';
 }
 
+const record = (row: (string | null)[]) => row.map(cell => `"${(cell ?? '').replace(/"/g, '""')}"`).join(',');
 const day = (iso: string) => iso.slice(0, 10);
 
+/**
+ * A CSV file for Anki's File > Import (Anki 2.1.54 or later reads these header lines): comma
+ * separated, plain text rather than HTML, a "yomiscan" tag on every note, and named columns, which
+ * Anki maps to note fields of the same name. The user still picks the note type and deck there.
+ * Anki treats a line starting with # as a header or comment, so there is no column-name row.
+ */
+export function ankiCsv(columns: readonly string[], rows: (string | null)[][]): string {
+  if (columns.some(name => /[,\r\n"]/.test(name))) throw new Error('Anki column names cannot contain commas, quotes or line breaks.');
+  const header = ['#separator:comma', '#html:false', '#tags:yomiscan', '#columns:' + columns.join(',')];
+  return '﻿' + header.join('\r\n') + '\r\n' + rows.map(record).join('\r\n') + (rows.length ? '\r\n' : '');
+}
+
+const WORD_COLUMNS = ['Expression', 'Reading', 'Meaning', 'Part of speech', 'Sentence', 'Sentence translation'] as const;
+const wordRow = (w: SavedWord) => [w.expression, w.reading, w.meanings.join(' / '), w.parts_of_speech.join(', '), w.sentence,
+  w.sentence_translation];
+const SENTENCE_COLUMNS = ['Japanese', 'Translation'] as const;
+const sentenceRow = (s: SentenceSummary) => [s.original_text, s.translation];
+
 export function wordsCsv(words: SavedWord[]): string {
-  return csv([['Expression', 'Reading', 'Meaning', 'Part of speech', 'Sentence', 'Sentence translation', 'Added'],
-    ...words.map(w => [w.expression, w.reading, w.meanings.join(' / '), w.parts_of_speech.join(', '), w.sentence,
-      w.sentence_translation, day(w.created_at)])]);
+  return csv([[...WORD_COLUMNS, 'Added'], ...words.map(w => [...wordRow(w), day(w.created_at)])]);
 }
 
 export function sentencesCsv(sentences: SentenceSummary[]): string {
-  return csv([['Japanese', 'Translation', 'Added'], ...sentences.map(s => [s.original_text, s.translation, day(s.created_at)])]);
+  return csv([[...SENTENCE_COLUMNS, 'Added'], ...sentences.map(s => [...sentenceRow(s), day(s.created_at)])]);
 }
+
+/** The same columns without the date, which a flashcard does not need. */
+export const wordsAnki = (words: SavedWord[]) => ankiCsv(WORD_COLUMNS, words.map(wordRow));
+export const sentencesAnki = (sentences: SentenceSummary[]) => ankiCsv(SENTENCE_COLUMNS, sentences.map(sentenceRow));
 
 // ---- in-memory store (tests and fallbacks) ---------------------------------------------------
 

@@ -1,7 +1,7 @@
 // The Saved page (library.html): every saved word and sentence, search, CSV export, backup and
 // restore. It opens the same IndexedDB database as the service worker (library-idb.ts).
 import {furigana, hiragana} from './furigana';
-import {Library, sentencesCsv, wordsCsv, type SavedWord, type SentenceSummary} from './library';
+import {Library, sentencesAnki, sentencesCsv, wordsAnki, wordsCsv, type SavedWord, type SentenceSummary} from './library';
 import {IndexedDbStore} from './library-idb';
 import {element, StudyPopup, styles} from './popup';
 
@@ -151,6 +151,12 @@ $('export').addEventListener('click', () => {
   if (tab === 'words') download(`yomiscan-words-${stamp()}.csv`, wordsCsv(words), 'text/csv;charset=utf-8');
   else download(`yomiscan-sentences-${stamp()}.csv`, sentencesCsv(sentences), 'text/csv;charset=utf-8');
   say(`Exported ${tab === 'words' ? words.length + ' words' : sentences.length + ' sentences'} as CSV.`);
+});
+$('anki').addEventListener('click', () => {
+  if (tab === 'words') download(`yomiscan-anki-words-${stamp()}.csv`, wordsAnki(words), 'text/csv;charset=utf-8');
+  else download(`yomiscan-anki-sentences-${stamp()}.csv`, sentencesAnki(sentences), 'text/csv;charset=utf-8');
+  say(`Exported ${tab === 'words' ? words.length + ' words' : sentences.length + ' sentences'} for Anki. In Anki, choose ` +
+    'File > Import, pick this file, then choose a note type and deck; columns go to fields with the same name.');
 });
 $('backup').addEventListener('click', () => {
   void library.backup().then(data => {
