@@ -262,7 +262,8 @@ Increment 1 lets a learner keep words and sentences:
   only for uninflected words.
 - **Library:** `library.ts` holds the rules: word identity (`jmdict:<entry id>`, else the form and
   reading), field-by-field validation, limits (50,000 words, 2,000 sentences of at most 128 KiB),
-  the sentence sanitizer (formerly `history.ts`), backup and restore, CSV, and the one-time move
+  the sentence sanitizer (formerly `history.ts`), backup and restore, CSV (plain, and for Anki
+  with its `#separator`/`#html`/`#tags`/`#columns` import header lines), and the one-time move
   of the old `chrome.storage.local` Study history into saved sentences. `library-idb.ts` stores
   it in the extension's IndexedDB database `yomiscan-library`.
 - **Access:** content scripts reach the library only through the service worker's `library`

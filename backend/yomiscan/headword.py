@@ -1,4 +1,4 @@
-"""The reading of a word's dictionary form (食べた -> 食べる, たべる), for saved words and Anki.
+"""The reading of a word's dictionary form (食べた -> 食べる, たべる), for saved words and their exports.
 
 The browser engine mirrors this rule in extension/src/engine/lexicon.ts (`dictionaryReading`);
 both are tested on the same cases.

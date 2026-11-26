@@ -13,13 +13,13 @@ data attributions, a first-run welcome and a README written for users.
 
 ## Goal
 
-While reading, a learner saves a word or a sentence with one click, sends saved words to Anki
-(through the AnkiConnect add-on) or exports them as CSV, and marks words as known so furigana
-appears only over words they do not know yet. The extension can then be submitted to the Chrome
-Web Store with its privacy policy and attributions.
+While reading, a learner saves a word or a sentence with one click, exports saved items as CSV
+(including a file Anki imports directly), and marks words as known so furigana appears only over
+words they do not know yet. The extension can then be submitted to the Chrome Web Store with its
+privacy policy and attributions.
 
-Everything stays local: saved words live in the extension's own storage, Anki is reached on the
-user's own computer, and nothing is sent anywhere else.
+Everything stays local: saved words live in the extension's own storage, and nothing is sent
+anywhere else.
 
 ## Increments
 
@@ -28,7 +28,7 @@ Each increment is merged only with its tests and a check in real Chrome.
 | # | Scope | Status |
 |---|---|---|
 | 1 | **Saved words and sentences.** "Save word" on every word and expression in the study card, "Save sentence" for the whole card (replacing Save to History; old history entries become saved sentences). A local library in the extension's IndexedDB, a full-page **Saved** view (search, delete, reopen a sentence), CSV export of words and sentences, and a JSON backup and restore. Each word carries its dictionary form *and that form's reading* (食べた → 食べる, たべる), which both engines now report. | Done: real Chrome end to end; lookup 1–2 ms with 10,002 saved words (see increment 1) |
-| 2 | **Anki export.** AnkiConnect on the user's computer: check it is running, create a YomiScan note type and deck on first use (names configurable), add a saved word from the card or send all words not yet sent, with duplicate detection. | Planned |
+| 2 | ~~**Anki export** through the AnkiConnect add-on.~~ Replaced by an **Export for Anki** CSV file on the Saved page (see increment 2). | Dropped by the owner (2026-11-25); Anki CSV done |
 | 3 | **Known words and furigana.** Mark a word as known from the card or the Saved view; import a known-word list (one word per line). The card's Japanese sentence gets furigana with a setting: off, unknown words only (default), all words. Known words fold away in the word breakdown. | Planned |
 | 4 | **Release preparation.** Welcome page on install (shortcut, reading modes, model download, privacy), an About & licenses page in the extension, `PRIVACY.md`, the Web Store listing text and permission justifications, a store-package script with checks (no remote code, manifest, size) built by CI, screenshots from the synthetic fixtures, and a user-first README. | Planned |
 | 5 | **Submission (owner).** The owner registers a Chrome Web Store developer account and submits the package. Once the store ID is known, the companion installer is rebuilt with it pre-filled and attached to a GitHub release. | Waits for the owner |
@@ -40,7 +40,6 @@ Each increment is merged only with its tests and a check in real Chrome.
 | No regressions | `uv run pytest`, the extension tests, the lexical parity harness and the mocked Chrome fixture pass. |
 | Saved words in real Chrome | Save, reopen, delete and export work end to end with the real browser engine on sample pages. |
 | Card speed | With 10,000 saved words, the card's saved/known lookup adds ≤ 50 ms. |
-| Anki | A real Anki + AnkiConnect round trip when Anki is available on the development machine. If it is not, a mocked AnkiConnect test, with the gap reported. |
 | Store package | No remotely hosted code, every permission justified in the listing, package size reported. |
 
 ## Proposed owner decisions
@@ -50,9 +49,6 @@ None of these block increments 1–3; they are needed by increments 4 and 5.
 - **Saving needs no separate opt-in.** Study history was off by default and needed a switch
   *and* a Save click. A Save click alone is now the consent: nothing is stored without one. The
   Saved view deletes and exports everything, and uninstalling removes it.
-- **Anki note type.** YomiScan creates its own note type ("YomiScan Vocabulary") and deck
-  ("YomiScan") instead of asking the user to map fields to an existing note type. Both names
-  can be changed.
 - **Web Store.** The owner registers the developer account (Google charges a one-time
   registration fee; it is the only cost in this stage), chooses the publisher name, and
   submits. Proposed: version 1.0.0, first listed as *unlisted* for a trial, then public.
@@ -111,3 +107,35 @@ None of these block increments 1–3; they are needed by increments 4 and 5.
   passed twice (its Study history steps now save a sentence and a word and check the saved mark
   on reopening).
 - The developer ZIP from scripts/build_distribution.py lists extension files explicitly and has lacked the browser engine's ort/ and sqlite/ folders since Stage 5a; increment 4's store package replaces it.
+
+## Increment 2: dropped; Anki-ready CSV instead
+
+**Decision (owner, 2026-11-25).** No AnkiConnect integration. Sending notes into Anki would
+depend on a third-party add-on and on YomiScan writing into another program's collection, for
+something a file import already does. No AnkiConnect code was ever written; the engine's default
+port (47615, not AnkiConnect's 8765) stays, since it avoids a clash for anyone running both.
+
+**What replaces it.** The Saved page has **Export for Anki** next to Export CSV, on both tabs. It
+writes a CSV with the header lines Anki 2.1.54 and later reads on **File > Import**
+([Anki manual, "File Headers"](https://docs.ankiweb.net/importing/text-files.html)):
+
+    #separator:comma
+    #html:false
+    #tags:yomiscan
+    #columns:Expression,Reading,Meaning,Part of speech,Sentence,Sentence translation
+
+then one quoted row per word (sentences: `Japanese,Translation`). There is no column-name row,
+which Anki would import as a note, and no date column. The facts it relies on, from Anki's
+`rslib/src/import_export/text/csv/metadata.rs` and `import.rs`: header keys and the separator
+name are case-insensitive; a UTF-8 byte-order mark before the first header line is stripped;
+`#columns` names map to note fields with exactly the same name (unmatched columns are left out,
+and the first field takes column 1 by default); with `#html:false` Anki escapes the text and
+turns line breaks into `<br>`; quoted fields may contain line breaks; the import dialog still
+lets the user change note type, deck and field mapping. The plain **Export CSV** keeps its
+column-name row and date for spreadsheets.
+
+**Checks.** Unit test of both files' exact bytes; `library-e2e.mjs` downloads Export for Anki in
+real Chrome and checks the header lines and one row per saved word (passed twice on 2026-11-25
+with the installed companion; the rest of that run unchanged). Extension tests 128/128, `uv run
+pytest` 445 passed, 1 skipped. Importing the file into a
+real Anki was not run (the owner chose not to use AnkiConnect, and no Anki import was automated).

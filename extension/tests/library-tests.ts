@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type {Analysis, Meaning, Token} from '../src/api';
-import {HISTORY_KEY, Library, MemoryStore, WORD_LIMIT, csv, libraryRequest, savedAnalysis, sentencesCsv, tokenWord, unitWord,
-  wordsCsv, type SavedWord} from '../src/library';
+import {HISTORY_KEY, Library, MemoryStore, WORD_LIMIT, ankiCsv, csv, libraryRequest, savedAnalysis, sentencesAnki, sentencesCsv,
+  tokenWord, unitWord, wordsAnki, wordsCsv, type SavedWord} from '../src/library';
 
 const meaning = (entry_id: number, ...glosses: string[]): Meaning =>
   ({entry_id, glosses, parts_of_speech: ['verb'], spellings: [], readings: [], notes: [], labels: []});
@@ -114,6 +114,18 @@ test('CSV quotes every field, uses CRLF and starts with a byte-order mark', () =
   assert.equal(wordsCsv([word]).split('\r\n')[1], '"食べる","たべる","to eat / to live on","verb, transitive","食べた","","2026-01-02"');
   assert.equal(sentencesCsv([{id: 'x', created_at: '2026-01-02T10:00:00.000Z', original_text: '猫', translation: 'Cat'}]).split('\r\n')[1],
     '"猫","Cat","2026-01-02"');
+});
+
+test('the Anki export starts with the header lines Anki reads and has no column-name row or date', () => {
+  const word: SavedWord = {key: 'jmdict:1', expression: '食べる', reading: 'たべる', surface: '食べた', meanings: ['to eat', '<b>x</b>'],
+    parts_of_speech: ['verb'], entry_id: 1, sentence: '食べた', sentence_translation: 'Ate "it".', created_at: '2026-01-02T10:00:00.000Z'};
+  assert.equal(wordsAnki([word]), '﻿#separator:comma\r\n#html:false\r\n#tags:yomiscan\r\n' +
+    '#columns:Expression,Reading,Meaning,Part of speech,Sentence,Sentence translation\r\n' +
+    '"食べる","たべる","to eat / <b>x</b>","verb","食べた","Ate ""it""."\r\n');
+  assert.equal(sentencesAnki([{id: 'x', created_at: '2026-01-02T10:00:00.000Z', original_text: '猫\n犬', translation: null}]),
+    '﻿#separator:comma\r\n#html:false\r\n#tags:yomiscan\r\n#columns:Japanese,Translation\r\n"猫\n犬",""\r\n');
+  assert.equal(wordsAnki([]).endsWith('Sentence translation\r\n'), true);
+  assert.throws(() => ankiCsv(['a,b'], []), /commas/);
 });
 
 test('service-worker requests are checked before they reach storage', async () => {
