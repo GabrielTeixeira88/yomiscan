@@ -1,3 +1,4 @@
+import type {Counts} from '../library';
 /** The panel's way to the Saved page (library.html), with how much is saved. */
 export class SavedControls {
   readonly element = document.createElement('div');
@@ -18,9 +19,10 @@ export class SavedControls {
   async refresh(): Promise<void> {
     const reply = await chrome.runtime.sendMessage({type: 'library', operation: 'counts'}).catch(() => null);
     if (!reply?.ok) {this.summary.textContent = reply?.error ?? 'Saved words unavailable. Reload the extension.'; return;}
-    const {words, sentences} = reply.data as {words: number; sentences: number};
-    this.summary.textContent = words || sentences
+    const {words, sentences, known} = reply.data as Counts;
+    this.summary.textContent = (words || sentences
       ? `${words} ${words === 1 ? 'word' : 'words'} and ${sentences} ${sentences === 1 ? 'sentence' : 'sentences'} saved.`
-      : 'Nothing saved yet: use ☆ Save word or Save sentence in a study card.';
+      : 'Nothing saved yet: use ☆ Save word or Save sentence in a study card.')
+      + (known ? ` ${known.toLocaleString()} known ${known === 1 ? 'word' : 'words'}.` : '');
   }
 }

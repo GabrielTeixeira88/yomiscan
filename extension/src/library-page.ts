@@ -1,7 +1,8 @@
 // The Saved page (library.html): every saved word and sentence, search, CSV export, backup and
 // restore. It opens the same IndexedDB database as the service worker (library-idb.ts).
 import {furigana, hiragana} from './furigana';
-import {Library, sentencesAnki, sentencesCsv, wordsAnki, wordsCsv, type SavedWord, type SentenceSummary} from './library';
+import {Library, knownForm, knownText, sentencesAnki, sentencesCsv, wordsAnki, wordsCsv, type KnownWord, type SavedWord,
+  type SentenceSummary} from './library';
 import {IndexedDbStore} from './library-idb';
 import {element, StudyPopup, styles} from './popup';
 
@@ -9,9 +10,10 @@ const PAGE = 200;
 const library = new Library(new IndexedDbStore());
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const list = $('list'), status = $('status'), search = $<HTMLInputElement>('search'), more = $<HTMLButtonElement>('more');
-const tabs = {words: $<HTMLButtonElement>('tab-words'), sentences: $<HTMLButtonElement>('tab-sentences')};
+const tabs = {words: $<HTMLButtonElement>('tab-words'), sentences: $<HTMLButtonElement>('tab-sentences'), known: $<HTMLButtonElement>('tab-known')};
 let tab: keyof typeof tabs = 'words', shown = PAGE;
-let words: SavedWord[] = [], sentences: SentenceSummary[] = [];
+let words: SavedWord[] = [], sentences: SentenceSummary[] = [], known: KnownWord[] = [];
+let knownSet = new Set<string>();
 
 function say(message: string, error = false): void {
   status.textContent = message;
@@ -66,8 +68,42 @@ function wordItem(word: SavedWord): HTMLElement {
       say(`Deleted ${word.expression}.`); render();
     }, error => say(error.message, true));
   });
-  meta.append(element('span', added(word.created_at)), element('span', undefined, 'spacer'), remove);
+  meta.append(element('span', added(word.created_at)), element('span', undefined, 'spacer'));
+  const form = knownForm(word.expression);
+  if (form) meta.append(knownToggle(form));
+  meta.append(remove);
   item.append(meta);
+  return item;
+}
+
+/** Marks a word known or not known; the study card then folds it and leaves out its furigana. */
+function knownToggle(form: string): HTMLButtonElement {
+  const isKnown = knownSet.has(form);
+  const button = element('button', isKnown ? '✓ Known' : 'Mark known');
+  button.setAttribute('aria-pressed', String(isKnown));
+  button.setAttribute('aria-label', isKnown ? `${form} is known; click to undo` : `Mark ${form} as known`);
+  button.addEventListener('click', () => {
+    button.disabled = true;
+    void library.setKnown(form, !isKnown).then(async () => {
+      known = await library.knownWords(); knownSet = new Set(known.map(k => k.form));
+      say(isKnown ? `${form} is no longer marked known.` : `Marked ${form} as known.`); render();
+    }, error => {say(error.message, true); button.disabled = false;});
+  });
+  return button;
+}
+
+function knownItem(word: KnownWord): HTMLElement {
+  const item = element('article', undefined, 'item known');
+  const form = element('span', word.form, 'expression'); form.lang = 'ja';
+  const remove = element('button', 'Not known');
+  remove.setAttribute('aria-label', `Remove ${word.form} from your known words`);
+  remove.addEventListener('click', () => {
+    void library.setKnown(word.form, false).then(() => {
+      known = known.filter(k => k.form !== word.form); knownSet.delete(word.form);
+      say(`${word.form} is no longer marked known.`); render();
+    }, error => say(error.message, true));
+  });
+  item.append(form, element('span', added(word.created_at), 'added'), element('span', undefined, 'spacer'), remove);
   return item;
 }
 
@@ -111,21 +147,30 @@ async function openSentence(id: string, from: HTMLElement): Promise<void> {
 
 function render(): void {
   const query = fold(search.value.trim());
-  const items = tab === 'words'
+  const items: (SavedWord | SentenceSummary | KnownWord)[] = tab === 'words'
     ? words.filter(w => matches(query, w.expression, w.reading, w.surface, w.sentence, w.sentence_translation, ...w.meanings))
-    : sentences.filter(s => matches(query, s.original_text, s.translation));
+    : tab === 'sentences' ? sentences.filter(s => matches(query, s.original_text, s.translation))
+    : known.filter(k => matches(query, k.form));
   const count = (n: number, one: string, many: string) => `${n.toLocaleString()} ${n === 1 ? one : many}`;
-  $('counts').textContent = `${count(words.length, 'word', 'words')} · ${count(sentences.length, 'sentence', 'sentences')}`;
+  $('counts').textContent = `${count(words.length, 'word', 'words')} · ${count(sentences.length, 'sentence', 'sentences')} · `
+    + `${count(known.length, 'known word', 'known words')}`;
   for (const [name, button] of Object.entries(tabs)) button.setAttribute('aria-selected', String(name === tab));
+  // The toolbar follows the tab: a known-word list is plain text, imported and exported one word per line.
+  $('export').textContent = tab === 'known' ? 'Export list' : 'Export CSV';
+  $('anki').hidden = tab === 'known';
+  $('import-known').hidden = tab !== 'known';
   list.setAttribute('aria-labelledby', tabs[tab].id);
   list.replaceChildren();
   if (!items.length) {
     list.append(element('p', query ? 'Nothing matches this search.' : tab === 'words'
       ? 'No saved words yet. In a study card, click ☆ Save word next to a word.'
-      : 'No saved sentences yet. In a study card, click Save sentence.', 'empty'));
+      : tab === 'sentences' ? 'No saved sentences yet. In a study card, click Save sentence.'
+      : 'No known words yet. In a study card, click Mark known next to a word, or use Import list: a text or CSV file '
+        + 'with one word per line (the first column is used; lines starting with # are skipped).', 'empty'));
   }
   for (const item of items.slice(0, shown))
-    list.append(tab === 'words' ? wordItem(item as SavedWord) : sentenceItem(item as SentenceSummary));
+    list.append(tab === 'words' ? wordItem(item as SavedWord) : tab === 'sentences' ? sentenceItem(item as SentenceSummary)
+      : knownItem(item as KnownWord));
   more.hidden = items.length <= shown;
   more.textContent = `Show more (${items.length - shown} left)`;
 }
@@ -133,7 +178,8 @@ function render(): void {
 async function load(): Promise<void> {
   const moved = await library.migrateHistory({get: key => chrome.storage.local.get(key), remove: key => chrome.storage.local.remove(key)});
   if (moved?.moved) say(`Your ${moved.moved} Study history ${moved.moved === 1 ? 'entry is' : 'entries are'} now saved sentences.`);
-  [words, sentences] = await Promise.all([library.words(), library.sentences()]);
+  [words, sentences, known] = await Promise.all([library.words(), library.sentences(), library.knownWords()]);
+  knownSet = new Set(known.map(k => k.form));
   render();
 }
 
@@ -148,6 +194,11 @@ for (const [name, button] of Object.entries(tabs)) button.addEventListener('clic
 search.addEventListener('input', () => {shown = PAGE; render();});
 more.addEventListener('click', () => {shown += PAGE; render();});
 $('export').addEventListener('click', () => {
+  if (tab === 'known') {
+    download(`yomiscan-known-${stamp()}.txt`, knownText(known), 'text/plain;charset=utf-8');
+    say(`Exported ${known.length} known words, one per line.`);
+    return;
+  }
   if (tab === 'words') download(`yomiscan-words-${stamp()}.csv`, wordsCsv(words), 'text/csv;charset=utf-8');
   else download(`yomiscan-sentences-${stamp()}.csv`, sentencesCsv(sentences), 'text/csv;charset=utf-8');
   say(`Exported ${tab === 'words' ? words.length + ' words' : sentences.length + ' sentences'} as CSV.`);
@@ -161,7 +212,7 @@ $('anki').addEventListener('click', () => {
 $('backup').addEventListener('click', () => {
   void library.backup().then(data => {
     download(`yomiscan-backup-${stamp()}.json`, JSON.stringify(data, null, 1), 'application/json');
-    say(`Backed up ${data.words.length} words and ${data.sentences.length} sentences.`);
+    say(`Backed up ${data.words.length} words, ${data.sentences.length} sentences and ${data.known.length} known words.`);
   }, error => say(error.message, true));
 });
 $<HTMLInputElement>('restore').addEventListener('change', event => {
@@ -173,12 +224,25 @@ $<HTMLInputElement>('restore').addEventListener('change', event => {
     try {data = JSON.parse(text);} catch {throw new Error('This file is not a YomiScan backup (it is not JSON).');}
     return library.restore(data);
   }).then(async added => {
-    say(`Restored ${added.words} words and ${added.sentences} sentences (items you already had were kept).`);
+    say(`Restored ${added.words} words, ${added.sentences} sentences and ${added.known} known words (items you already had were kept).`);
+    await load();
+  }, error => say(error.message, true));
+});
+$<HTMLInputElement>('import-known-file').addEventListener('change', event => {
+  const input = event.target as HTMLInputElement, file = input.files?.[0];
+  input.value = '';
+  if (!file) return;
+  if (file.size > 8 * 1024 * 1024) {say('This list is over 8 MB; split it into smaller files.', true); return;}
+  void file.text().then(text => library.importKnown(text)).then(async result => {
+    const n = (count: number, one: string, many: string) => `${count.toLocaleString()} ${count === 1 ? one : many}`;
+    say(`Imported ${n(result.added, 'known word', 'known words')}` + (result.already ? `; ${n(result.already, 'was', 'were')} already known` : '')
+      + (result.skipped ? `; skipped ${n(result.skipped, 'line that is', 'lines that are')} not a Japanese word` : '') + '.');
     await load();
   }, error => say(error.message, true));
 });
 $('clear').addEventListener('click', () => {
-  if (!confirm(`Delete all ${words.length} saved words and ${sentences.length} saved sentences? This cannot be undone. Use Back up all first to keep a copy.`)) return;
+  if (!confirm(`Delete all ${words.length} saved words, ${sentences.length} saved sentences and ${known.length} known words? `
+    + 'This cannot be undone. Use Back up all first to keep a copy.')) return;
   void library.clear().then(async () => {say('Deleted everything saved.'); await load();}, error => say(error.message, true));
 });
 document.addEventListener('keydown', event => {if (event.key === 'Escape') closeCard();});

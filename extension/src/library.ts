@@ -25,8 +25,50 @@ export interface SavedWord {
 }
 export interface SavedSentence {id: string; created_at: string; analysis: Analysis}
 export interface SentenceSummary {id: string; created_at: string; original_text: string; translation: string | null}
-export type StoreName = 'words' | 'sentences';
-type Records = {words: SavedWord; sentences: SavedSentence};
+/** A word the learner already knows, by its dictionary form (食べる), so a plain imported list
+ * matches the card. It folds away in the card and gets no furigana in "unknown words" mode. */
+export interface KnownWord {form: string; created_at: string}
+export type StoreName = 'words' | 'sentences' | 'known';
+type Records = {words: SavedWord; sentences: SavedSentence; known: KnownWord};
+
+export const KNOWN_LIMIT = 100_000;
+const JAPANESE = /[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}々〆ヶ]/u;
+
+/** The stored form of a known word (NFKC, trimmed, no spaces, at most 50 characters, some
+ * Japanese), or null when the value cannot be one. The card and imports both go through it. */
+export function knownForm(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const form = value.normalize('NFKC').trim();
+  return form.length <= 50 && !/\s/u.test(form) && JAPANESE.test(form) ? form : null;
+}
+
+/**
+ * Words from a known-word list: one per line. The first column of a tab, comma or semicolon
+ * separated line is used (so an Anki or spreadsheet export works), lines starting with # are
+ * headers or comments, and quotes, HTML tags and Anki's bracket furigana (食べる[たべる],
+ * 食[た]べる) are removed. Lines that are not a Japanese word are counted as skipped.
+ */
+export function parseKnownList(text: string): {forms: string[]; skipped: number} {
+  const forms = new Set<string>();
+  let skipped = 0;
+  for (const line of text.replace(/^﻿/, '').split(/\r?\n/)) {
+    if (!line.trim() || line.trimStart().startsWith('#')) continue;
+    const field = line.split(/[\t,;]/)[0].trim().replace(/^"(.*)"$/, '$1').replace(/<[^>]*>/g, '').replace(/\[[^\]]*\]/g, '').replace(/\s+/gu, '');
+    const form = knownForm(field);
+    if (form) forms.add(form); else skipped++;
+  }
+  return {forms: [...forms], skipped};
+}
+
+/** One known word per line, newest first: the format parseKnownList reads back. */
+export const knownText = (words: KnownWord[]) => words.map(w => w.form).join('\r\n') + (words.length ? '\r\n' : '');
+
+function validKnown(value: unknown): KnownWord {
+  const k = value as Record<string, unknown>;
+  const form = knownForm(k?.form);
+  if (!form || form !== k.form || !date(k.created_at)) throw new Error('Invalid known word.');
+  return {form, created_at: k.created_at as string};
+}
 
 export interface LibraryStore {
   get<S extends StoreName>(store: S, key: string): Promise<Records[S] | undefined>;
@@ -131,7 +173,10 @@ export function validSentence(value: unknown): SavedSentence {
 export const summary = (s: SavedSentence): SentenceSummary =>
   ({id: s.id, created_at: s.created_at, original_text: s.analysis.original_text, translation: s.analysis.translation});
 
-export interface Backup {format: typeof BACKUP_FORMAT; schema: 1; exported_at: string; words: SavedWord[]; sentences: SavedSentence[]}
+/** Schema 2 adds known words; schema 1 backups (no known words) still restore. */
+export interface Backup {format: typeof BACKUP_FORMAT; schema: 2; exported_at: string; words: SavedWord[]; sentences: SavedSentence[];
+  known: KnownWord[]}
+export interface Counts {words: number; sentences: number; known: number}
 
 export class Library {
   constructor(private store: LibraryStore, private now: () => Date = () => new Date()) {}
@@ -171,34 +216,75 @@ export class Library {
   async sentences(): Promise<SentenceSummary[]> {
     return (await this.store.all('sentences')).map(summary).sort((a, b) => b.created_at.localeCompare(a.created_at));
   }
-  async counts(): Promise<{words: number; sentences: number}> {
-    return {words: await this.store.count('words'), sentences: await this.store.count('sentences')};
+  async counts(): Promise<Counts> {
+    return {words: await this.store.count('words'), sentences: await this.store.count('sentences'), known: await this.store.count('known')};
+  }
+
+  /** Which of these forms are known (the card folds them and leaves out their furigana). */
+  async known(forms: string[]): Promise<string[]> {
+    if (!Array.isArray(forms) || forms.length > 1000 || !forms.every(f => shortString(f, 200))) throw new Error('Invalid known-word lookup.');
+    const stored = forms.map(knownForm);
+    const found = new Set(await this.store.has('known', [...new Set(stored.filter((f): f is string => f !== null))]));
+    return forms.filter((_, i) => stored[i] !== null && found.has(stored[i]!));
+  }
+
+  /** Marks a word as known, or not known any more. Marking it again keeps the first date. */
+  async setKnown(form: unknown, known: boolean): Promise<void> {
+    const value = knownForm(form);
+    if (!value) throw new Error('Choose a Japanese word to mark as known.');
+    if (!known) return this.store.delete('known', value);
+    if (await this.store.get('known', value)) return;
+    if (await this.store.count('known') >= KNOWN_LIMIT)
+      throw new Error(`You have ${KNOWN_LIMIT.toLocaleString('en')} known words, the limit. Remove some first.`);
+    await this.store.put('known', [{form: value, created_at: this.now().toISOString()}]);
+  }
+
+  /** Newest first. */
+  async knownWords(): Promise<KnownWord[]> {return (await this.store.all('known')).sort((a, b) => b.created_at.localeCompare(a.created_at));}
+
+  /** Adds a known-word list (parseKnownList) in one write; words already known are left as they are. */
+  async importKnown(text: string): Promise<{added: number; already: number; skipped: number}> {
+    const {forms, skipped} = parseKnownList(text);
+    const existing = new Set(await this.store.has('known', forms));
+    const fresh = forms.filter(f => !existing.has(f));
+    if (await this.store.count('known') + fresh.length > KNOWN_LIMIT)
+      throw new Error(`This list would go over ${KNOWN_LIMIT.toLocaleString('en')} known words; nothing was imported.`);
+    const created_at = this.now().toISOString();
+    await this.store.put('known', fresh.map(form => ({form, created_at})));
+    return {added: fresh.length, already: forms.length - fresh.length, skipped};
   }
 
   async backup(): Promise<Backup> {
-    return {format: BACKUP_FORMAT, schema: 1, exported_at: this.now().toISOString(), words: await this.words(),
-      sentences: (await this.store.all('sentences')).sort((a, b) => b.created_at.localeCompare(a.created_at))};
+    return {format: BACKUP_FORMAT, schema: 2, exported_at: this.now().toISOString(), words: await this.words(),
+      sentences: (await this.store.all('sentences')).sort((a, b) => b.created_at.localeCompare(a.created_at)),
+      known: await this.knownWords()};
   }
 
-  /** Adds a backup's words and sentences; a word already saved keeps its current version. Checks everything before writing. */
-  async restore(value: unknown): Promise<{words: number; sentences: number}> {
-    const data = value as Partial<Backup>;
-    if (!data || data.format !== BACKUP_FORMAT || data.schema !== 1 || !Array.isArray(data.words) || !Array.isArray(data.sentences))
+  /** Adds a backup's words, sentences and known words; an item already here keeps its current version. Checks everything before writing. */
+  async restore(value: unknown): Promise<{words: number; sentences: number; known: number}> {
+    const data = value as Partial<Omit<Backup, 'schema'>> & {schema?: unknown};
+    if (!data || data.format !== BACKUP_FORMAT || !(data.schema === 1 || data.schema === 2) || !Array.isArray(data.words)
+      || !Array.isArray(data.sentences) || !(data.schema === 1 || Array.isArray(data.known)))
       throw new Error('This is not a YomiScan backup file.');
     const words = data.words.map(w => validWord(w)), sentences = data.sentences.map(validSentence);
+    const knownWords = (data.schema === 2 ? data.known! : []).map(validKnown);
     const existing = new Set(await this.store.has('words', words.map(w => w.key)));
     const newWords = [...new Map(words.filter(w => !existing.has(w.key)).map(w => [w.key, w])).values()];
-    const known = new Set(await this.store.has('sentences', sentences.map(s => s.id)));
-    const newSentences = sentences.filter(s => !known.has(s.id));
+    const present = new Set(await this.store.has('sentences', sentences.map(s => s.id)));
+    const newSentences = sentences.filter(s => !present.has(s.id));
+    const knownHere = new Set(await this.store.has('known', knownWords.map(k => k.form)));
+    const newKnown = [...new Map(knownWords.filter(k => !knownHere.has(k.form)).map(k => [k.form, k])).values()];
     const counts = await this.counts();
-    if (counts.words + newWords.length > WORD_LIMIT || counts.sentences + newSentences.length > SENTENCE_LIMIT)
+    if (counts.words + newWords.length > WORD_LIMIT || counts.sentences + newSentences.length > SENTENCE_LIMIT
+      || counts.known + newKnown.length > KNOWN_LIMIT)
       throw new Error('The backup would go over the saved-item limits; nothing was restored.');
     await this.store.put('words', newWords);
     await this.store.put('sentences', newSentences);
-    return {words: newWords.length, sentences: newSentences.length};
+    await this.store.put('known', newKnown);
+    return {words: newWords.length, sentences: newSentences.length, known: newKnown.length};
   }
 
-  async clear(): Promise<void> {await this.store.clear('words'); await this.store.clear('sentences');}
+  async clear(): Promise<void> {await this.store.clear('words'); await this.store.clear('sentences'); await this.store.clear('known');}
 
   /** Moves the old opt-in Study history into saved sentences, once. Invalid old entries are skipped and counted. */
   async migrateHistory(storage: {get(key: string): Promise<Record<string, unknown>>; remove(key: string): Promise<void>}):
@@ -224,6 +310,8 @@ export type LibraryRequest =
   | {operation: 'save-word'; word: unknown}
   | {operation: 'delete-word'; key: string}
   | {operation: 'save-sentence'; analysis: unknown}
+  | {operation: 'known'; forms: string[]}
+  | {operation: 'set-known'; form: string; known: boolean}
   | {operation: 'counts'};
 
 export function libraryRequest(library: Library, request: LibraryRequest): Promise<unknown> {
@@ -234,6 +322,10 @@ export function libraryRequest(library: Library, request: LibraryRequest): Promi
       if (!shortString(request.key, 420)) return Promise.reject(new Error('Choose a saved word to remove.'));
       return library.deleteWord(request.key).then(() => null);
     case 'save-sentence': return library.saveSentence(request.analysis);
+    case 'known': return library.known(request.forms);
+    case 'set-known':
+      if (typeof request.known !== 'boolean') return Promise.reject(new Error('Choose known or not known.'));
+      return library.setKnown(request.form, request.known).then(() => null);
     case 'counts': return library.counts();
     default: return Promise.reject(new Error('Unknown saved-word operation.'));
   }
@@ -282,8 +374,9 @@ export const sentencesAnki = (sentences: SentenceSummary[]) => ankiCsv(SENTENCE_
 // ---- in-memory store (tests and fallbacks) ---------------------------------------------------
 
 export class MemoryStore implements LibraryStore {
-  private data = {words: new Map<string, SavedWord>(), sentences: new Map<string, SavedSentence>()};
-  private id = (store: StoreName, value: SavedWord | SavedSentence) => store === 'words' ? (value as SavedWord).key : (value as SavedSentence).id;
+  private data = {words: new Map<string, SavedWord>(), sentences: new Map<string, SavedSentence>(), known: new Map<string, KnownWord>()};
+  private id = (store: StoreName, value: Records[StoreName]) =>
+    store === 'words' ? (value as SavedWord).key : store === 'known' ? (value as KnownWord).form : (value as SavedSentence).id;
   async get<S extends StoreName>(store: S, key: string) {return structuredClone(this.data[store].get(key)) as Records[S] | undefined;}
   async all<S extends StoreName>(store: S) {return structuredClone([...this.data[store].values()]) as Records[S][];}
   async put<S extends StoreName>(store: S, values: Records[S][]) {

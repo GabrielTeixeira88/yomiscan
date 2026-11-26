@@ -70,7 +70,7 @@ ZIP/backend distributions include checksums and installation checks. See
 | Saved words and sentences | Stage 6: explicit Save per word or sentence; Saved page with search, CSV export, JSON backup and restore; up to 50,000 words and 2,000 sentences |
 | Unsigned extension ZIP, backend wheel/sdist | Build workflow and installation checks; separate model/JMdict preparation |
 | Export for Anki (Stage 6): a CSV with Anki's import header lines, for File > Import | Done |
-| Known words (Stage 6, next increment) | Planned |
+| Known words and furigana (Stage 6) | Mark known in the card or the Saved page, or import a list; known words fold away; sentence furigana off / unknown words (default) / all words; up to 100,000 known words |
 | Narrative context, new production models, JLPT grading, full graphical model manager | Future work |
 
 The purpose is to help Japanese learners study manga without paid APIs or per-request
@@ -206,6 +206,15 @@ later reads on File > Import (columns already named, plain text, tagged `yomisca
 note type and deck there). It backs up or restores everything as one JSON file. Nothing is saved without a click, and nothing leaves the browser. Entries from the
 old opt-in Study history become saved sentences. See the
 [Stage 6 record](docs/decisions/stage-6-capture-release.md).
+
+**Known words and furigana (Stage 6).** **Mark known** next to a word in the study card (or on
+the Saved page) records that you know it. Known words fold into a "N known" line in the card,
+and the Japanese sentence shows furigana only over the words you have not marked. The
+**Furigana** menu next to the sentence switches between *Unknown words* (the default), *All
+words* and *Off*. The Saved page's **Known** tab lists them, and **Import list** reads a text or
+CSV file with one word per line (the first column is used, and lines starting with `#` are
+skipped, so an Anki "Notes in Plain Text" export works). Known words are matched by dictionary
+form, so marking 食べる covers 食べた. Like saved words, they stay in this browser.
 
 Open an image-based chapter and click YomiScan → **Translate Chapter** to replace every
 page with English instead. Visible pages process first, one at a time. **Original /

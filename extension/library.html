@@ -45,7 +45,12 @@
   .meta .spacer { flex: 1; }
   .empty { padding: 32px 16px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: 12px; }
   #more { display: block; margin: 12px auto; }
-  #more[hidden] { display: none; }
+  #more[hidden], .toolbar [hidden] { display: none; }
+  button[aria-pressed=true] { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+  .item.known { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; padding: 10px 16px; }
+  .item.known .expression { font-size: 20px; }
+  .item.known .added { font-size: 13px; color: var(--muted); }
+  .item.known .spacer { flex: 1; }
   footer { margin-top: 28px; font-size: 13px; color: var(--muted); }
   footer a { color: var(--accent); }
 </style>
@@ -58,11 +63,13 @@
   <div class="tabs" role="tablist" aria-label="Saved items">
     <button role="tab" id="tab-words" aria-controls="list" aria-selected="true">Words</button>
     <button role="tab" id="tab-sentences" aria-controls="list" aria-selected="false">Sentences</button>
+    <button role="tab" id="tab-known" aria-controls="list" aria-selected="false">Known</button>
   </div>
   <div class="toolbar">
     <input type="search" id="search" placeholder="Search words, readings, meanings, sentences" aria-label="Search saved items">
     <button id="export">Export CSV</button>
     <button id="anki" title="A CSV file with header lines that Anki 2.1.54 or later reads on File > Import">Export for Anki</button>
+    <label class="file" id="import-known" hidden>Import list<input type="file" id="import-known-file" accept=".txt,.csv,.tsv,text/plain,text/csv"></label>
     <button id="backup">Back up all</button>
     <label class="file">Restore backup<input type="file" id="restore" accept=".json,application/json"></label>
     <button id="clear" class="danger">Delete all…</button>
@@ -71,7 +78,7 @@
   <main id="list" role="tabpanel" aria-labelledby="tab-words"></main>
   <button id="more" hidden>Show more</button>
   <footer>
-    <p>Saved words and sentences stay in this browser, on this computer. YomiScan never sends them anywhere. Uninstalling the
+    <p>Saved words, sentences and known words stay in this browser, on this computer. YomiScan never sends them anywhere. Uninstalling the
       extension deletes them, so back them up first if you want to keep them.</p>
     <p>Meanings from <a href="https://www.edrdg.org/edrdg/licence.html" target="_blank" rel="noopener noreferrer">JMdict</a>
       © the Electronic Dictionary Research and Development Group, CC BY-SA 4.0.</p>

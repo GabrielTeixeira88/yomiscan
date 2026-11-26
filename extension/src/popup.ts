@@ -1,6 +1,6 @@
 import { parseAnalysis, type Analysis, type Meaning } from "./api";
-import {furigana} from "./furigana";
-import {tokenWord, unitWord, type SentenceSummary} from "./library";
+import {FURIGANA_KEY, furigana, furiganaMode, sentenceFurigana, type FuriganaMode, type FuriganaSegment} from "./furigana";
+import {knownForm, tokenWord, unitWord, type SentenceSummary} from "./library";
 import { constrainPopup, popupPosition, resizePopup, type Point, type Rect, type ResizeEdge } from "./geometry";
 
 export async function copyStudyText(text:string,write:(text:string)=>Promise<void>=value=>navigator.clipboard.writeText(value)):Promise<string> {
@@ -29,6 +29,13 @@ export const styles = `
   button.action { margin:0 16px 12px; }
   button.save-word { margin:2px 0 0; }
   button.save-word[aria-pressed=true] { background:#235d3c; border-color:#235d3c; color:#fff; }
+  button.known-word { margin:2px 0 0 4px; }
+  button.known-word[aria-pressed=true] { background:#e3ece5; border-color:#9fb8a6; color:#235d3c; }
+  .original rt { font-size: 10px; color: #5d6b62; }
+  .furigana-setting { font-size:12px; color:#526071; margin-left:6px; white-space:nowrap; }
+  .furigana-setting select { font: inherit; font-size:12px; color:#263d2b; background:#fff; border:1px solid #b8c7bc; border-radius:7px; padding:3px 4px; }
+  details.known-fold { margin-top: 8px; }
+  details.known-fold > summary { color: #526071; }
   .library-status { padding:0 16px 12px; }
   .entry-divider { list-style:none;margin:8px 0 2px -20px;font-size:11px;color:#637366; }
   .copy-feedback { font-size:12px;color:#637366; }
@@ -72,9 +79,20 @@ export function element<K extends keyof HTMLElementTagNameMap>(tag: K, text?: st
   return node;
 }
 
+/** Known status by dictionary form, shared by this page's cards; every new card asks again. */
+const knownCache = new Map<string, boolean>();
+/** The furigana setting, read again from chrome.storage.local for every new card. */
+let mode: FuriganaMode = "unknown";
+const FURIGANA_LABELS: [FuriganaMode, string][] = [["unknown", "Unknown words"], ["all", "All words"], ["off", "Off"]];
+const isKnown = (form: string | null) => form !== null && knownCache.get(form) === true;
+
 /** Word with furigana over its kanji runs, built as DOM nodes (never HTML strings). */
 function appendFurigana(parent: HTMLElement, surface: string, reading: string | null): void {
-  for (const segment of furigana(surface, reading)) {
+  appendSegments(parent, furigana(surface, reading));
+}
+
+function appendSegments(parent: HTMLElement, segments: FuriganaSegment[]): void {
+  for (const segment of segments) {
     if (!segment.reading) { parent.append(segment.text); continue; }
     const ruby = document.createElement("ruby");
     const rt = document.createElement("rt");
@@ -101,6 +119,11 @@ export class StudyPopup {
   private listeners = new AbortController();
   /** Save buttons by word key: a word can appear twice in a card (as a word and in an expression). */
   private saveButtons = new Map<string, HTMLButtonElement[]>();
+  /** Known toggles by form (knownForm). */
+  private knownButtons = new Map<string, HTMLButtonElement[]>();
+  /** The card on screen and which of its words are saved, so it can be drawn again (known words fold). */
+  private data: Analysis | null = null;
+  private savedKeys = new Set<string>();
   private libraryStatus = element("p", "", "copy-feedback library-status");
   /** Counts show() calls, so a late saved-words lookup never marks a newer card. */
   private shown = 0;
@@ -271,6 +294,7 @@ export class StudyPopup {
   }
 
   private markSaved(key: string, saved: boolean): void {
+    if (saved) this.savedKeys.add(key); else this.savedKeys.delete(key);
     for (const button of this.saveButtons.get(key) ?? []) {
       button.setAttribute("aria-pressed", String(saved));
       button.textContent = saved ? "★ Saved" : "☆ Save word";
@@ -292,19 +316,110 @@ export class StudyPopup {
         this.tell(saved ? `Removed ${word.expression} from your saved words.` : `Saved ${word.expression}.`);
       }, error => this.tell(error.message)).finally(() => {button.disabled = false;});
     });
-    this.markSaved(word.key, false);
+    this.markSaved(word.key, this.savedKeys.has(word.key));
     return button;
   }
 
+  /** "Mark known": the word folds away and, in "unknown words" mode, loses its furigana. Null for
+   * a form that cannot be a known word (punctuation, numbers, Latin text). */
+  private knownButton(expression: string): HTMLButtonElement | null {
+    const form = knownForm(expression);
+    if (!form) return null;
+    const known = isKnown(form);
+    const button = element("button", known ? "✓ Known" : "Mark known", "copy known-word");
+    button.lang = "en";
+    button.setAttribute("aria-pressed", String(known));
+    button.setAttribute("aria-label", known ? `${form} is known; click to undo` : `Mark ${form} as known`);
+    button.title = known ? "You know this word. Click to undo." : "You know this word: fold it away and leave out its furigana";
+    this.knownButtons.set(form, [...this.knownButtons.get(form) ?? [], button]);
+    button.addEventListener("click", () => {
+      button.disabled = true;
+      void this.library({operation: "set-known", form, known: !known}).then(() => {
+        knownCache.set(form, !known);
+        this.redraw();
+        this.tell(known ? `${form} is no longer marked known.` : `Marked ${form} as known.`);
+      }, error => {this.tell(error.message); button.disabled = false;});
+    });
+    return button;
+  }
+
+  /** The furigana setting, next to the sentence; it applies to every card. */
+  private furiganaSetting(): HTMLElement {
+    const label = element("label", "Furigana ", "furigana-setting");
+    label.lang = "en";
+    const select = element("select");
+    for (const [value, text] of FURIGANA_LABELS) {const option = element("option", text); option.value = value; select.append(option);}
+    select.value = mode;
+    select.addEventListener("keydown", event => event.stopPropagation(), {signal: this.listeners.signal});
+    select.addEventListener("change", () => {
+      mode = furiganaMode(select.value);
+      this.redraw();
+      void chrome.storage.local.set({[FURIGANA_KEY]: mode}).catch(error => this.tell(`The furigana setting was not saved: ${error.message}`));
+    });
+    label.append(select);
+    return label;
+  }
+
   status(message: string, error = false): void {
+    this.data = null; ++this.shown;
     this.body.replaceChildren(element("p", message, `status${error ? " error" : ""}`));
     this.position();
   }
 
   show(data: Analysis): void {
+    this.data = data;
+    this.savedKeys = new Set();
+    this.libraryStatus.textContent = "";
+    this.render(data);
+    // Which words are saved and known, and the furigana setting: one round of lookups per card.
+    // Known words and the setting change the layout, so the card is drawn again if they differ.
+    const keys = [...this.saveButtons.keys()], forms = [...this.knownButtons.keys()];
+    const shown = ++this.shown;
+    void Promise.all([keys.length ? this.library<string[]>({operation: "saved", keys}) : [],
+      forms.length ? this.library<string[]>({operation: "known", forms}) : [],
+      chrome.storage.local.get(FURIGANA_KEY).then(stored => furiganaMode(stored[FURIGANA_KEY]))]).then(([saved, known, stored]) => {
+      if (this.listeners.signal.aborted || shown !== this.shown) return;
+      for (const key of saved) this.markSaved(key, true);
+      const found = new Set(known);
+      let changed = stored !== mode;
+      mode = stored;
+      for (const form of forms) {
+        if (isKnown(form) !== found.has(form)) changed = true;
+        knownCache.set(form, found.has(form));
+      }
+      if (changed) this.redraw();
+    }, error => this.tell(error.message));
+  }
+
+  /** Draws the current card again in place (after a known word or the furigana setting changed). */
+  private redraw(): void {
+    if (!this.data) return;
+    const top = this.body.scrollTop;
+    this.render(this.data);
+    this.body.scrollTop = top;
+  }
+
+  /** Puts rows into the list, and known ones into a folded "N known" section after it. */
+  private appendRows(section: HTMLElement, rows: {row: HTMLElement; known: string | null}[]): void {
+    const list = element("div", undefined, "words"), folded = rows.filter(r => r.known);
+    for (const {row, known} of rows) if (!known) list.append(row);
+    section.append(list);
+    if (!folded.length) return;
+    const details = element("details", undefined, "known-fold");
+    const summary = element("summary", `${folded.length} known: `);
+    const forms = element("span", [...new Set(folded.map(r => r.known))].join(" · "));
+    forms.lang = "ja"; summary.append(forms);
+    const inner = element("div", undefined, "words");
+    for (const {row} of folded) inner.append(row);
+    details.append(summary, inner);
+    details.addEventListener("toggle", () => this.position());
+    section.append(details);
+  }
+
+  private render(data: Analysis): void {
     this.body.replaceChildren();
     this.saveButtons.clear();
-    this.libraryStatus.textContent = "";
+    this.knownButtons.clear();
     this.libraryStatus.setAttribute("role", "status");
     this.libraryStatus.lang = "en";
     // Reading mode: where this bubble sits in the chapter, and how to move on without dragging.
@@ -313,6 +428,12 @@ export class StudyPopup {
       const context = element("p", `Page ${reading.page} · bubble ${reading.bubble} of ${reading.bubbles} · J / K: next / previous`, "reading-context");
       context.lang = "en"; this.body.append(context);
     }
+    // Known words: by the token's own dictionary form, or the whole expression it belongs to.
+    const units = data.units ?? [];
+    const knownTokens = new Set<number>();
+    data.tokens.forEach((token, i) => {if (isKnown(knownForm(tokenWord(token, data).expression))) knownTokens.add(i);});
+    for (const unit of units) if (isKnown(knownForm(unit.dictionary_form)))
+      for (let i = unit.start_token; i < unit.end_token; i++) knownTokens.add(i);
     const target=data.target_language??'en',targetName=['pt-BR','por_Latn'].includes(target)?'Portuguese':
       ['es','spa_Latn'].includes(target)?'Spanish':'English';
     // Dedicated original section is the future OCR-edit hook; read-only in Phase 4.
@@ -321,7 +442,11 @@ export class StudyPopup {
       [targetName==='English'?"Translation":targetName+" translation (experimental)", data.translation ?? "No sentence translation available.", "translation"],
     ]) {
       const section = element("section");
-      section.append(element("h2", title), element("p", text, className));
+      const paragraph = element("p", undefined, className);
+      if (className === "original" && data.original_text && mode !== "off")
+        appendSegments(paragraph, sentenceFurigana(data.original_text, data.tokens, i => mode === "all" || !knownTokens.has(i)));
+      else paragraph.textContent = text;
+      section.append(element("h2", title), paragraph);
       const value=className==="original"?data.original_text:data.translation;
       const copy=element('button',className==="original"?'Copy Japanese':'Copy '+targetName,'copy');
       copy.setAttribute('aria-label',className==="original"?'Copy original Japanese':'Copy '+targetName+' sentence translation');
@@ -345,30 +470,29 @@ export class StudyPopup {
             .then(() => this.tell("Sentence saved. Open YomiScan → Saved to see it."), error => this.tell(error.message))
             .finally(() => {save.disabled = false;});
         });
-        section.append(" ", save);
+        section.append(" ", save, this.furiganaSetting());
       }
       section.append(feedback);
       if (className === "original") { section.lang = "ja"; this.appendEditor(section, data.original_text); }
       this.body.append(section);
     }
-    const units = data.units ?? [];
     if (units.length) {
       // Multi-word expressions first: their meaning differs from their parts (かもしれない).
       const expressions = element("section");
       expressions.append(element("h2", "Expressions"));
-      const list = element("div", undefined, "words");
-      for (const unit of units) {
+      const rows = units.map(unit => {
         const row = element("article");
         const surface = element("div", unit.surface, "surface");
         surface.lang = "ja";
-        row.append(surface, this.saveWordButton(unitWord(unit, data)));
+        const known = this.knownButton(unit.dictionary_form);
+        row.append(surface, this.saveWordButton(unitWord(unit, data)), ...known ? [known] : []);
         if (unit.dictionary_form !== unit.surface) row.append(element("p", `Dictionary form: ${unit.dictionary_form}`, "metadata"));
         const parts = data.tokens.slice(unit.start_token, unit.end_token).map(token => token.surface);
         row.append(element("p", `Words: ${parts.join(" + ")}`, "metadata"));
         this.appendMeanings(row, unit.meanings);
-        list.append(row);
-      }
-      expressions.append(list);
+        return {row, known: isKnown(knownForm(unit.dictionary_form)) ? knownForm(unit.dictionary_form) : null};
+      });
+      this.appendRows(expressions, rows);
       this.body.append(expressions);
     }
     const grammar = data.grammar ?? [];
@@ -392,16 +516,17 @@ export class StudyPopup {
     const breakdown = element("section");
     if(targetName!=='English')breakdown.append(element('p','Dictionary definitions remain English.'));
     breakdown.append(element("h2", "Word breakdown"));
-    const words = element("div", undefined, "words");
-    breakdown.append(words);
     const tokens = data.tokens.filter(token => !/^[\p{P}\p{S}\s]+$/u.test(token.surface));
     if (!tokens.length) breakdown.append(element("p", "No word breakdown available."));
+    const rows: {row: HTMLElement; known: string | null}[] = [];
     for (const token of tokens) {
       const row = element("article");
       const surface = element("div", undefined, "surface");
       surface.lang = "ja";
       appendFurigana(surface, token.surface, token.reading);
-      row.append(surface, this.saveWordButton(tokenWord(token, data)), element("p", `Reading: ${token.reading ?? "unavailable"}`, "metadata"));
+      const word = tokenWord(token, data), form = knownForm(word.expression), known = this.knownButton(word.expression);
+      rows.push({row, known: isKnown(form) ? form : null});
+      row.append(surface, this.saveWordButton(word), ...known ? [known] : [], element("p", `Reading: ${token.reading ?? "unavailable"}`, "metadata"));
       row.append(element("p", `Lemma: ${token.lemma ?? "unavailable"}`, "metadata"));
       if (token.dictionary_form && token.dictionary_form !== token.lemma) row.append(element("p", `Dictionary form: ${token.dictionary_form}`, "metadata"));
       row.append(element("p", `POS: ${token.part_of_speech ?? "unavailable"}`, "metadata"));
@@ -409,8 +534,8 @@ export class StudyPopup {
       if (token.conjugation_type || token.conjugation_form) row.append(element("p", `Conjugation: ${[token.conjugation_type, token.conjugation_form].filter(Boolean).join(" / ")}`, "metadata"));
       if (!token.meanings.length) row.append(element("p", "No dictionary match", "metadata"));
       this.appendMeanings(row, token.meanings);
-      words.append(row);
     }
+    this.appendRows(breakdown, rows);
     this.body.append(breakdown);
     const footer = element("footer");
     footer.append(element("p", "Dictionary candidates ranked by the word's form and grammar; the context-specific meaning is not checked."));
@@ -432,12 +557,5 @@ export class StudyPopup {
       footer.append(element("p", `Local processing · OCR ${Math.round(time.ocr_ms)} ms · Translation ${Math.round(time.translation_ms)} ms · Analysis ${Math.round(time.analysis_ms)} ms`));
     this.body.append(footer, this.libraryStatus);
     this.position();
-    // Mark the words already saved (one lookup for the whole card).
-    const keys = [...this.saveButtons.keys()];
-    const shown = ++this.shown;
-    if (keys.length) void this.library<string[]>({operation: "saved", keys}).then(saved => {
-      if (this.listeners.signal.aborted || shown !== this.shown) return;
-      for (const key of saved) this.markSaved(key, true);
-    }, error => this.tell(error.message));
   }
 }

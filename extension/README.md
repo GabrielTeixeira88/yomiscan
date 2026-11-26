@@ -135,7 +135,9 @@ with `chrome.tabs.captureVisibleTab`, verifies tab/viewport stability, crops thr
 Only the crop is sent; the full screenshot stays transiently in extension memory and
 is never returned to webpage code. No screenshot is stored. Text and analysis are stored only
 when you click **Save word** or **Save sentence**, in the extension's own IndexedDB; the Saved
-page (YomiScan → Open Saved) shows, exports and deletes them.
+page (YomiScan → Open Saved) shows, exports and deletes them. **Mark known** and Import list
+store known words (dictionary forms only) in the same database; the furigana setting is kept in
+`chrome.storage.local`.
 
 The additional `offscreen` permission provides an extension-origin Blob transport for
 long page-render requests. It calls only the fixed localhost render URL. Already-loaded
