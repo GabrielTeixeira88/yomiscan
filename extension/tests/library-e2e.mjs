@@ -1,8 +1,10 @@
-// Opt-in end-to-end check of saved words and sentences (Stage 6 increment 1) in real Chrome with a
+// Opt-in end-to-end check of saved words, sentences and known words (Stage 6) in real Chrome with a
 // real engine: Read Chapter, open a bubble with J, save words and the sentence from the study card,
 // then on the Saved page: the old Study history moved into saved sentences, words show their
 // dictionary form and reading, search, CSV export, backup, Delete all and restore, and a saved
-// sentence reopens in the study card. With 10,000 saved words it times the card's saved-word lookup.
+// sentence reopens in the study card. Known words (increment 3): Mark known folds a word and drops
+// its furigana, the furigana setting, the Known tab, list import and export, backup. With 10,000
+// saved and 10,000 known words it times the card's lookups.
 // Needs: extension/dist built; an engine Automatic can use (the installed companion, the browser
 // models or the developer backend); Chrome started with --remote-debugging-port (YOMISCAN_TEST_CDP_PORT,
 // default 9231) and --enable-unsafe-extension-debugging, with an isolated profile.
@@ -108,12 +110,39 @@ try {
   await until(async () => ((await text(reader, "panel")).match(/★ Saved/g) ?? []).length >= 2, 20000, "saved marks on reopen");
   report.checks.push("Reopening the bubble marks both words ★ Saved");
 
+  // Known words and furigana, on a sentence with kanji: Edit text re-analyzes it with the real engine.
+  await click(reader, "Edit text");
+  const editor = await until(() => find(reader, n => n.nodeName === "TEXTAREA"), 5000, "editor");
+  await invoke(reader, editor, "function(){this.value='猫が魚を食べた'}");
+  await click(reader, "Analyze edited text");
+  const rubies = async () => {const n = await find(reader, n => attr(n, "class") === "original"); return n ? invoke(reader, n, "function(){return [...this.querySelectorAll('rt')].map(r=>r.parentElement.firstChild.nodeValue).join(',')}") : null;};
+  const before = await until(async () => {const r = await rubies(); return r && r.includes("猫") ? r : "";}, 20000, "edited card with furigana");
+  assert.ok(before.split(",").length >= 3, `furigana over every kanji word by default: ${before}`);
+  const markCat = await until(() => find(reader, n => n.nodeName === "BUTTON" && attr(n, "aria-label") === "Mark 猫 as known"), 5000, "Mark known on 猫");
+  await invoke(reader, markCat, "function(){this.click()}");
+  const after = await until(async () => {const r = await rubies(); return r !== null && !r.includes("猫") ? r : "";}, 10000, "猫 loses its furigana");
+  assert.match(await text(reader, "panel"), /1 known: 猫/);
+  // Optional screenshots for a visual check: YOMISCAN_E2E_SHOTS=<folder>.
+  const shoot = async (session, name) => {if (process.env.YOMISCAN_E2E_SHOTS) await writeFile(path.join(process.env.YOMISCAN_E2E_SHOTS, name + ".png"),
+    Buffer.from((await call("Page.captureScreenshot", {format: "png"}, session)).data, "base64"));};
+  await shoot(reader, "known-card");
+  const setFurigana = async value => {const n = (await find(reader, n => attr(n, "class") === "furigana-setting")).children.find(c => c.nodeName === "SELECT"); await invoke(reader, n, `function(){this.value='${value}';this.dispatchEvent(new Event('change'))}`);};
+  await setFurigana("off");
+  await until(async () => (await rubies()) === "", 5000, "furigana off");
+  await setFurigana("all");
+  await until(async () => (await rubies()) === before, 5000, "furigana on all words");
+  await setFurigana("unknown");
+  await until(async () => (await rubies()) === after, 5000, "furigana on unknown words");
+  assert.equal(await evaluate(worker, "chrome.storage.local.get('yomiscanFurigana').then(d=>d.yomiscanFurigana)"), "unknown");
+  report.furigana = {all: before, unknown_after_marking_猫: after};
+  report.checks.push(`Mark known on 猫 folds it into "1 known: 猫" and removes its furigana (${before} → ${after}); the setting switches Off / All words / Unknown words and is stored`);
+
   const library = (await call("Target.attachToTarget", {targetId: (await call("Target.createTarget", {url: `chrome-extension://${extensionId}/library.html`})).targetId, flatten: true})).sessionId;
   await call("Page.enable", {}, library); await call("DOM.enable", {}, library);
   await call("Browser.setDownloadBehavior", {behavior: "allow", downloadPath: downloads, eventsEnabled: true});
   const page = () => evaluate(library, "document.body.innerText");
   const migrated = await until(async () => {const t = await page(); return t.includes("Your 1 Study history entry is now saved sentences") ? t : "";}, 15000, "migration");
-  assert.match(migrated, /2 words · 2 sentences/);
+  assert.match(migrated, /2 words · 2 sentences · 1 known word\b/);
   for (const label of labels) assert.ok(migrated.includes(label), `${label} listed`);
   const words = await evaluate(library, "[...document.querySelectorAll('.item')].map(i=>({expression:i.querySelector('.expression').innerText,reading:i.querySelector('.reading')?.innerText??null,meaning:i.querySelector('li')?.innerText??'',sentence:i.querySelector('.sentence').innerText,mark:i.querySelector('mark')?.innerText??null}))");
   report.saved_words = words;
@@ -145,7 +174,21 @@ try {
   assert.ok(sentencesCsv.includes("\"昔の文です\",\"An old sentence.\",\"2025-12-01\""));
   report.checks.push("CSV export: words (header, 2 rows, UTF-8 with BOM) and sentences, including the migrated one");
 
+  // The Known tab: 猫 from the card, a list import (first column, # lines skipped) and the plain-text export.
+  await click(library, "Known");
+  assert.ok((await page()).includes("猫"));
+  const list = path.join(downloads, "known-list.csv");
+  await writeFile(list, "#separator:comma\r\n食べる,to eat\r\n\"魚\",fish\r\n猫,cat\r\nhello,x\r\n");
+  await call("DOM.setFileInputFiles", {files: [list], backendNodeId: (await find(library, n => attr(n, "id") === "import-known-file")).backendNodeId}, library);
+  await until(async () => (await page()).includes("Imported 2 known words; 1 was already known; skipped 1 line that is not a Japanese word."), 10000, "known list imported");
+  assert.ok((await page()).includes("3 known words"));
+  await click(library, "Export list");
+  const knownList = await readFile(path.join(downloads, await downloaded("yomiscan-known-")), "utf8");
+  assert.deepEqual(knownList.trim().split("\r\n").sort(), ["猫", "食べる", "魚"].sort());
+  report.checks.push("Known tab: 猫 listed; importing a CSV list added 2 words (1 already known, 1 non-Japanese line skipped); Export list writes one word per line");
+
   // Open the saved real sentence in the study card.
+  await click(library, "Sentences");
   const openButtons = await findAll(library, n => n.nodeName === "BUTTON" && n.children?.some(c => c.nodeValue === "Open"));
   await invoke(library, openButtons[0], "function(){this.click()}");
   const reopened = await until(async () => {const t = await text(library, "panel"); return t.includes("WORD BREAKDOWN") || /Word breakdown/i.test(t) ? t : "";}, 10000, "saved sentence card");
@@ -156,16 +199,16 @@ try {
   await click(library, "Back up all");
   const backupName = await downloaded("yomiscan-backup-");
   const backup = JSON.parse(await readFile(path.join(downloads, backupName), "utf8"));
-  assert.equal(backup.words.length, 2); assert.equal(backup.sentences.length, 2);
+  assert.equal(backup.words.length, 2); assert.equal(backup.sentences.length, 2); assert.equal(backup.known.length, 3);
   assert.ok(!JSON.stringify(backup).includes("127.0.0.1"), "no page URL in the backup");
   listeners.push(m => {if (m.method === "Page.javascriptDialogOpening" && m.sessionId === library) void call("Page.handleJavaScriptDialog", {accept: true}, library);});
   await click(library, "Delete all…");
-  await until(async () => (await page()).includes("0 words · 0 sentences"), 10000, "deleted all");
+  await until(async () => (await page()).includes("0 words · 0 sentences · 0 known words"), 10000, "deleted all");
   const input = await find(library, n => attr(n, "id") === "restore");
   await call("DOM.setFileInputFiles", {files: [path.join(downloads, backupName)], backendNodeId: input.backendNodeId}, library);
-  await until(async () => (await page()).includes("Restored 2 words and 2 sentences"), 10000, "restored");
-  assert.ok((await page()).includes("2 words · 2 sentences"));
-  report.checks.push("Back up all, Delete all (after confirming) and Restore backup bring back both words and both sentences; the backup holds no page URL");
+  await until(async () => (await page()).includes("Restored 2 words, 2 sentences and 3 known words"), 10000, "restored");
+  assert.ok((await page()).includes("2 words · 2 sentences · 3 known words"));
+  report.checks.push("Back up all, Delete all (after confirming) and Restore backup bring back both words, both sentences and the 3 known words; the backup holds no page URL");
 
   // 10,000 saved words: the card's lookup (one message, up to 60 keys) and the Saved page load.
   await evaluate(library, `new Promise((resolve,reject)=>{const q=indexedDB.open('yomiscan-library');q.onsuccess=()=>{const t=q.result.transaction('words','readwrite'),s=t.objectStore('words');
@@ -180,5 +223,18 @@ try {
   await until(async () => (await evaluate(library, "document.body.innerText")).includes("10,002 words"), 30000, "10,002 words listed");
   report.saved_page_10k_ms = Date.now() - started;
   report.checks.push(`With 10,002 saved words the card's lookup of 60 words takes ${report.lookup_ms.median} ms (median of 20, max ${report.lookup_ms.max} ms); the Saved page loads in ${report.saved_page_10k_ms} ms`);
+
+  // 10,000 known words (imported as a list, as a learner would): the card's known lookup of 60 forms.
+  started = Date.now();
+  const bulk = await evaluate(library, `(async()=>{const words=Array.from({length:10000},(_, i)=>'語'+i.toString(36));
+    const file=new File([words.join('\\n')],'bulk.txt');const dt=new DataTransfer();dt.items.add(file);const input=document.getElementById('import-known-file');
+    input.files=dt.files;input.dispatchEvent(new Event('change'));return words.length})()`);
+  await until(async () => (await page()).includes("Imported 10,000 known words"), 60000, "10,000 known words imported");
+  report.known_import_10k_ms = Date.now() - started;
+  const forms = JSON.stringify([...Array.from({length: 58}, (_, i) => "語" + (i * 97).toString(36)), "未知", "猫"]);
+  const knownTimings = await evaluate(library, `(async()=>{const out=[];for(let i=0;i<20;i++){const t=performance.now();const r=await chrome.runtime.sendMessage({type:'library',operation:'known',forms:${forms}});if(!r.ok||r.data.length!==59)throw new Error(JSON.stringify(r));out.push(performance.now()-t)}return out.sort((a,b)=>a-b)})()`);
+  report.known_lookup_ms = {median: +knownTimings[10].toFixed(1), max: +knownTimings.at(-1).toFixed(1)};
+  assert.ok(report.known_lookup_ms.median <= 50, `known lookup median ${report.known_lookup_ms.median} ms`);
+  report.checks.push(`Importing a ${bulk}-word known list took ${report.known_import_10k_ms} ms; with 10,003 known words the card's known lookup of 60 forms takes ${report.known_lookup_ms.median} ms (median of 20, max ${report.known_lookup_ms.max} ms)`);
   console.log(JSON.stringify(report, null, 1));
 } finally {ws.close(); server.close();}

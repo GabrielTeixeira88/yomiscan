@@ -29,7 +29,7 @@ Each increment is merged only with its tests and a check in real Chrome.
 |---|---|---|
 | 1 | **Saved words and sentences.** "Save word" on every word and expression in the study card, "Save sentence" for the whole card (replacing Save to History; old history entries become saved sentences). A local library in the extension's IndexedDB, a full-page **Saved** view (search, delete, reopen a sentence), CSV export of words and sentences, and a JSON backup and restore. Each word carries its dictionary form *and that form's reading* (食べた → 食べる, たべる), which both engines now report. | Done: real Chrome end to end; lookup 1–2 ms with 10,002 saved words (see increment 1) |
 | 2 | ~~**Anki export** through the AnkiConnect add-on.~~ Replaced by an **Export for Anki** CSV file on the Saved page (see increment 2). | Dropped by the owner (2026-11-25); Anki CSV done |
-| 3 | **Known words and furigana.** Mark a word as known from the card or the Saved view; import a known-word list (one word per line). The card's Japanese sentence gets furigana with a setting: off, unknown words only (default), all words. Known words fold away in the word breakdown. | Planned |
+| 3 | **Known words and furigana.** Mark a word as known from the card or the Saved view; import a known-word list (one word per line). The card's Japanese sentence gets furigana with a setting: off, unknown words only (default), all words. Known words fold away in the word breakdown. | Done: real Chrome end to end; known lookup 1–2 ms with 10,003 known words (see increment 3) |
 | 4 | **Release preparation.** Welcome page on install (shortcut, reading modes, model download, privacy), an About & licenses page in the extension, `PRIVACY.md`, the Web Store listing text and permission justifications, a store-package script with checks (no remote code, manifest, size) built by CI, screenshots from the synthetic fixtures, and a user-first README. | Planned |
 | 5 | **Submission (owner).** The owner registers a Chrome Web Store developer account and submits the package. Once the store ID is known, the companion installer is rebuilt with it pre-filled and attached to a GitHub release. | Waits for the owner |
 
@@ -139,3 +139,44 @@ real Chrome and checks the header lines and one row per saved word (passed twice
 with the installed companion; the rest of that run unchanged). Extension tests 128/128, `uv run
 pytest` 445 passed, 1 skipped. Importing the file into a
 real Anki was not run (the owner chose not to use AnkiConnect, and no Anki import was automated).
+
+## Increment 3: known words and furigana
+
+**Design.**
+- **What a known word is.** Its dictionary form, normalized (NFKC, trimmed, no spaces, at most 50
+  characters, some kana or kanji): 食べる, not an entry ID. A plain list from elsewhere (an Anki
+  deck, a word list) has no JMdict IDs, and the form is what both the list and the card have.
+  Marking 食べる covers 食べた and 食べて. Homographs share a form (生 as なま and せい), which is
+  acceptable for "I know this word". A kana form is not matched to a kanji spelling (knowing たべる
+  does not hide furigana over 食べる), since that would mark every homophone known.
+- **Storage.** A third store, `known`, in the same IndexedDB database (version 2; the upgrade
+  keeps saved words and sentences). Up to 100,000 known words. Backups are schema 2 with a
+  `known` list; schema 1 backups still restore. Delete all also deletes known words.
+- **The card.** Every word and expression gets **Mark known** next to ☆ Save word. The card asks
+  the service worker once which of its forms are known (alongside the saved-word lookup), then
+  draws itself again if any are, keeping its scroll position. Known rows fold into "N known: …"
+  under their section. A token is known when its own dictionary form is, or when the expression
+  it belongs to is.
+- **Furigana.** The Japanese sentence now shows furigana, built from the tokens and their
+  readings (`sentenceFurigana`, which always joins back to exactly the original text; a token
+  the text does not contain is left plain). The **Furigana** menu next to the sentence chooses
+  *Unknown words* (the default), *All words* or *Off*; it is stored in `chrome.storage.local`
+  and applies to every card.
+- **Saved page.** A **Known** tab with search, **Not known** per word, **Import list** and **Export
+  list** (one word per line, which Import list reads back). Saved words get a Mark known toggle.
+  An imported list uses the first column of each line (tab, comma or semicolon separated), skips
+  lines starting with `#` (Anki export headers) and lines that are not a Japanese word, and
+  removes quotes, HTML tags and Anki's bracket furigana (食[た]べる).
+
+**Measurements (2026-11-25, development machine, real Chrome, installed companion engine).**
+- `extension/tests/library-e2e.mjs` (passed four times): Edit text turns a real card into
+  猫が魚を食べた, analyzed by the real engine. Furigana showed over 猫, 魚 and 食; after Mark known
+  on 猫 the card folded it into "1 known: 猫" and furigana stayed over 魚 and 食 only. Off removed
+  all furigana, All words brought 猫 back, and the setting was stored. The Known tab listed 猫;
+  importing a CSV list (a `#` header, 食べる, a quoted 魚, 猫 again and `hello`) added 2, counted 1
+  as already known and skipped 1; Export list wrote the 3 words back. Backup, Delete all and
+  Restore brought back all 3 known words with the saved words and sentences.
+- Importing a 10,000-word list took 0.6–1.2 s. With 10,003 known words the card's known lookup of
+  60 forms took 1.2–2.4 ms (median of 20; gate 50 ms; one run had a single 34.6 ms maximum).
+- Tests: extension 133/133 (known forms, list parsing, import limits, backup schema 2, sentence
+  furigana); the mocked Chrome fixture passed twice; `uv run pytest` 445 passed, 1 skipped.

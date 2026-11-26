@@ -30,3 +30,36 @@ export function furigana(surface: string, reading: string | null | undefined): F
   let group = 1;
   return runs.map(run => run.kanji ? {text: run.text, reading: match[group++]} : {text: run.text});
 }
+
+/** Card setting: furigana over the Japanese sentence for no words, unknown words only (the
+ * default: words not marked known), or all words. */
+export type FuriganaMode = 'off' | 'unknown' | 'all';
+export const FURIGANA_KEY = 'yomiscanFurigana';
+export const furiganaMode = (value: unknown): FuriganaMode => value === 'off' || value === 'all' ? value : 'unknown';
+
+/**
+ * The whole sentence as segments, with furigana over the tokens `wanted` picks. Each token is
+ * found in the text from where the previous one ended; text the tokens do not cover (spaces, line
+ * breaks, or a token the tokenizer normalized) stays plain, so the segments always join back to
+ * exactly `text`.
+ */
+export function sentenceFurigana(text: string, tokens: {surface: string; reading: string | null}[],
+  wanted: (index: number) => boolean): FuriganaSegment[] {
+  const segments: FuriganaSegment[] = [];
+  const plain = (part: string) => {
+    if (!part) return;
+    const last = segments.at(-1);
+    if (last && last.reading === undefined) last.text += part; else segments.push({text: part});
+  };
+  let at = 0;
+  tokens.forEach((token, index) => {
+    const found = token.surface ? text.indexOf(token.surface, at) : -1;
+    if (found < 0) return;
+    plain(text.slice(at, found));
+    for (const segment of wanted(index) ? furigana(token.surface, token.reading) : [{text: token.surface}])
+      if (segment.reading === undefined) plain(segment.text); else segments.push(segment);
+    at = found + token.surface.length;
+  });
+  plain(text.slice(at));
+  return segments;
+}

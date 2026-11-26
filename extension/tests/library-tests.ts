@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type {Analysis, Meaning, Token} from '../src/api';
-import {HISTORY_KEY, Library, MemoryStore, WORD_LIMIT, ankiCsv, csv, libraryRequest, savedAnalysis, sentencesAnki, sentencesCsv,
+import {HISTORY_KEY, KNOWN_LIMIT, Library, MemoryStore, WORD_LIMIT, ankiCsv, knownForm, knownText, parseKnownList, csv, libraryRequest, savedAnalysis, sentencesAnki, sentencesCsv,
   tokenWord, unitWord, wordsAnki, wordsCsv, type SavedWord} from '../src/library';
 
 const meaning = (entry_id: number, ...glosses: string[]): Meaning =>
@@ -86,13 +86,13 @@ test('backup and restore round-trip; restore keeps what is already saved and che
   const backup = JSON.parse(JSON.stringify(await source.backup()));
   const target = new Library(new MemoryStore(), clock('2026-04-01T00:00:00Z'));
   await target.saveWord({...tokenWord(token({meanings: [meaning(1, 'to eat')]}), analysis()), sentence: 'mine'});
-  assert.deepEqual(await target.restore(backup), {words: 0, sentences: 1});
+  assert.deepEqual(await target.restore(backup), {words: 0, sentences: 1, known: 0});
   assert.equal((await target.words())[0].sentence, 'mine');
-  assert.deepEqual(await target.restore(backup), {words: 0, sentences: 0});
+  assert.deepEqual(await target.restore(backup), {words: 0, sentences: 0, known: 0});
   await assert.rejects(target.restore({...backup, format: 'other'}), /not a YomiScan backup/);
   const empty = new Library(new MemoryStore());
   await assert.rejects(empty.restore({...backup, words: [...backup.words, {expression: ''}]}), /Invalid saved word/);
-  assert.deepEqual(await empty.counts(), {words: 0, sentences: 0});
+  assert.deepEqual(await empty.counts(), {words: 0, sentences: 0, known: 0});
 });
 
 test('the old Study history moves into saved sentences once; broken entries are skipped and counted', async () => {
@@ -133,5 +133,52 @@ test('service-worker requests are checked before they reach storage', async () =
   await assert.rejects(libraryRequest(library, {operation: 'drop-database'} as never), /Unknown/);
   await assert.rejects(libraryRequest(library, {operation: 'saved', keys: Array(501).fill('k')}), /Invalid word lookup/);
   await assert.rejects(libraryRequest(library, {operation: 'delete-word', key: 42 as never}), /Choose/);
-  assert.deepEqual(await libraryRequest(library, {operation: 'counts'}), {words: 0, sentences: 0});
+  assert.deepEqual(await libraryRequest(library, {operation: 'counts'}), {words: 0, sentences: 0, known: 0});
+  await assert.rejects(libraryRequest(library, {operation: 'set-known', form: '猫', known: 'yes' as never}), /known or not/);
+  await assert.rejects(libraryRequest(library, {operation: 'set-known', form: 'cat', known: true}), /Japanese word/);
+  await assert.rejects(libraryRequest(library, {operation: 'known', forms: Array(1001).fill('猫')}), /Invalid known-word lookup/);
+  await libraryRequest(library, {operation: 'set-known', form: '猫', known: true});
+  assert.deepEqual(await libraryRequest(library, {operation: 'known', forms: ['猫', '犬']}), ['猫']);
+});
+
+test('known words are matched by their NFKC dictionary form; marking twice keeps the first date; undo removes it', async () => {
+  assert.equal(knownForm(' 食べる '), '食べる'); assert.equal(knownForm('ｶﾞｯｺｳ'), 'ガッコウ');
+  for (const bad of ['', 'cat', '123', '食 べる', '猫'.repeat(51), null, 7]) assert.equal(knownForm(bad), null, String(bad));
+  const library = new Library(new MemoryStore(), clock('2026-05-01T00:00:00Z', '2026-06-01T00:00:00Z'));
+  await library.setKnown('食べる', true);
+  await library.setKnown('食べる', true);
+  assert.deepEqual(await library.knownWords(), [{form: '食べる', created_at: '2026-05-01T00:00:00.000Z'}]);
+  // Lookups keep the caller's spelling and skip forms that cannot be known words.
+  assert.deepEqual(await library.known(['食べる', ' 食べる', 'cat', '猫']), ['食べる', ' 食べる']);
+  await library.setKnown('食べる', false);
+  assert.deepEqual(await library.known(['食べる']), []);
+});
+
+test('a known-word list: first column, # lines skipped, quotes, HTML and Anki bracket furigana removed', async () => {
+  const text = '\ufeff#separator:tab\r\n#columns:Front\tBack\r\n食べる\tto eat\r\n"猫",cat\n<b>犬</b>;dog\n 食[た]べ 物[もの]\n'
+    + '日本[にほん]\nhello\n\n食べる\n42\n';
+  assert.deepEqual(parseKnownList(text), {forms: ['食べる', '猫', '犬', '食べ物', '日本'], skipped: 2});
+  const library = new Library(new MemoryStore(), clock('2026-05-01T00:00:00Z'));
+  await library.setKnown('猫', true);
+  assert.deepEqual(await library.importKnown(text), {added: 4, already: 1, skipped: 2});
+  assert.equal((await library.counts()).known, 5);
+  assert.deepEqual(parseKnownList(knownText(await library.knownWords())).forms.sort(), ['犬', '日本', '猫', '食べ物', '食べる'].sort());
+  const store = new MemoryStore(), full = new Library(store);
+  store.count = async () => KNOWN_LIMIT;
+  await assert.rejects(full.importKnown('猫'), /nothing was imported/);
+  await assert.rejects(full.setKnown('猫', true), /limit/);
+});
+
+test('backups carry known words (schema 2); schema 1 backups still restore; Delete all clears known words', async () => {
+  const source = new Library(new MemoryStore(), clock('2026-03-01T00:00:00Z'));
+  await source.setKnown('猫', true);
+  const backup = JSON.parse(JSON.stringify(await source.backup()));
+  assert.equal(backup.schema, 2); assert.deepEqual(backup.known, [{form: '猫', created_at: '2026-03-01T00:00:00.000Z'}]);
+  const target = new Library(new MemoryStore());
+  assert.deepEqual(await target.restore(backup), {words: 0, sentences: 0, known: 1});
+  assert.deepEqual(await target.restore({...backup, schema: 1, known: undefined}), {words: 0, sentences: 0, known: 0});
+  await assert.rejects(target.restore({...backup, known: undefined}), /not a YomiScan backup/);
+  await assert.rejects(new Library(new MemoryStore()).restore({...backup, known: [{form: 'cat', created_at: backup.exported_at}]}), /Invalid known word/);
+  await target.clear();
+  assert.deepEqual(await target.counts(), {words: 0, sentences: 0, known: 0});
 });

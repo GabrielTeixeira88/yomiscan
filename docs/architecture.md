@@ -273,6 +273,15 @@ Increment 1 lets a learner keep words and sentences:
 - **Card:** `popup.ts` adds a Save toggle to every expression and word and **Save sentence** to
   the original text, and marks saved words with one lookup per card.
 
+Increment 3 adds known words: a third IndexedDB store (`known`, keyed by the NFKC dictionary
+form, database version 2), `Library.known`/`setKnown`/`importKnown` and the `known` and
+`set-known` service-worker operations, and backup schema 2 (schema 1 still restores). The card
+asks once per card which of its forms are known, then draws itself again if any are: known rows
+fold into a `details` section, and `sentenceFurigana` (`furigana.ts`) puts ruby over the
+sentence's tokens that are not known (setting `yomiscanFurigana` in `chrome.storage.local`:
+`unknown`, `all` or `off`). A token counts as known when its own dictionary form is, or when
+the expression it belongs to is.
+
 No page URL, image or screenshot is stored, and nothing is stored without a Save click. See the
 [Stage 6 record](decisions/stage-6-capture-release.md).
 

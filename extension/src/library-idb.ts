@@ -3,8 +3,9 @@
 // writes consistent. Uninstalling the extension deletes it.
 import type {LibraryStore, StoreName} from './library';
 
-const NAME = 'yomiscan-library', VERSION = 1;
-const KEYS: Record<StoreName, string> = {words: 'key', sentences: 'id'};
+// Version 2 adds the known-word store (Stage 6 increment 3); upgrading keeps the other stores.
+const NAME = 'yomiscan-library', VERSION = 2;
+const KEYS: Record<StoreName, string> = {words: 'key', sentences: 'id', known: 'form'};
 
 const done = <T>(request: IDBRequest<T>) => new Promise<T>((resolve, reject) => {
   request.onsuccess = () => resolve(request.result);
