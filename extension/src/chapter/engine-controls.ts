@@ -81,7 +81,7 @@ export class EngineControls {
     if (operation === 'remove' && !confirm('Remove the browser engine models from this browser? They can be installed again later.')) return;
     const [reply, companion] = await Promise.all([
       chrome.runtime.sendMessage({type: 'engine', operation, base: this.source.value}).catch(() => null),
-      operation === 'status' ? chrome.runtime.sendMessage({type: 'companion-status'}).catch(() => null) : Promise.resolve(null)]);
+      operation === 'status' ? chrome.runtime.sendMessage({type: 'companion-status', fresh: true}).catch(() => null) : Promise.resolve(null)]);
     const companionLine = companion?.ok ? `${companionSummary(companion.data as CompanionStatus, chrome.runtime.id)}\n` : '';
     if (!reply?.ok) {this.output.textContent = companionLine + (reply?.error ?? 'Browser engine unavailable. Reload the extension.');return;}
     const status = reply.data as EngineStatus;

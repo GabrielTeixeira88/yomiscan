@@ -34,12 +34,37 @@ const record = (value: unknown): value is Record<string, unknown> => typeof valu
 /** Chrome's errors when no host is registered for this extension. */
 const NOT_INSTALLED = /native messaging host not found|specified native messaging host|forbidden/i;
 
-/** Whether the companion is installed and has its models. Cached for 30 s: each check starts the host. */
+/** One status query at a time: concurrent callers share it. */
+let querying: Promise<CompanionStatus> | null = null;
+
+/**
+ * Whether the companion is installed and has its models. Each query starts the host program
+ * (about 2.4 s with the frozen engine), so an answer is reused for 30 s. "Ready" is the steady
+ * state: an older ready answer is returned at once and checked again in the background, so a
+ * Read Chapter click never waits for the host (opening the panel already warms the cache). Any
+ * other answer (missing models, a download, an error) is asked again once it is 30 s old.
+ * `fresh` always asks (download progress, the Advanced status view).
+ */
 export async function companionStatus(deps: Deps | null = chromeDeps(), fresh = false): Promise<CompanionStatus> {
   if (!deps) return {installed: false, ready: false, missing: []};
   const cached = (await deps.session.get(STATUS_KEY))[STATUS_KEY];
-  if (!fresh && record(cached) && typeof cached.at === 'number' && deps.now() - cached.at < STATUS_TTL)
-    return cached.status as CompanionStatus;
+  if (!fresh && record(cached) && typeof cached.at === 'number') {
+    const status = cached.status as CompanionStatus;
+    if (deps.now() - cached.at < STATUS_TTL) return status;
+    if (status.installed && status.ready && !status.error) {
+      void query(deps).catch(error => console.warn('YomiScan: checking the local engine in the background failed', error));
+      return status;
+    }
+  }
+  return query(deps);
+}
+
+function query(deps: Deps): Promise<CompanionStatus> {
+  querying ??= askHost(deps).finally(() => {querying = null;});
+  return querying;
+}
+
+async function askHost(deps: Deps): Promise<CompanionStatus> {
   let status: CompanionStatus;
   try {
     const reply = await deps.native.sendNativeMessage(NATIVE_HOST, {type: 'status'});
