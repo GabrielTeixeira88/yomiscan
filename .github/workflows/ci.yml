@@ -115,6 +115,15 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+      - name: Chrome Web Store package (store checks, reproducible ZIP)
+        run: node package.mjs --out ../.cache/store-package
+      - name: Upload the store package
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: yomiscan-store-package-${{ github.sha }}
+          path: .cache/store-package/*
+          if-no-files-found: error
+          retention-days: 30
 
   distribution:
     name: Unsigned distribution artifacts

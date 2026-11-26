@@ -14,8 +14,8 @@ spec.loader.exec_module(builder)
 
 def fake_inputs(root: Path) -> dict[str, Path]:
     """Every input lives under the test folder; real exports, node_modules and data/ are never touched."""
-    paths = {"stage2": root / "stage2", "dictionary": root / "jmdict.sqlite3", "tokenizer": root / "lindera.wasm"}
-    for component in (*builder.components(paths["stage2"], paths["dictionary"], paths["tokenizer"]),
+    paths = {"stage2": root / "stage2", "dictionary": root / "jmdict.sqlite3"}
+    for component in (*builder.components(paths["stage2"], paths["dictionary"]),
                       *builder.local_components(paths["stage2"])):
         for source, _ in component.files:
             assert root in source.parents
@@ -26,9 +26,11 @@ def fake_inputs(root: Path) -> dict[str, Path]:
 
 def test_builder_copies_exports_and_pins_size_and_sha256(tmp_path):
     paths, output, pinned = fake_inputs(tmp_path), tmp_path / "out", tmp_path / "pinned.json"
-    manifest = builder.build(paths["stage2"], output, pinned, paths["dictionary"], paths["tokenizer"])
+    manifest = builder.build(paths["stage2"], output, pinned, paths["dictionary"])
     assert json.loads(pinned.read_text(encoding="utf-8")) == manifest == json.loads((output / "manifest.json").read_text(encoding="utf-8"))
-    assert [c["id"] for c in manifest["components"]] == ["detector", "ocr-q4", "ocr-int8", "tokenizer", "dictionary", "translation-opus-ja-en"]
+    assert [c["id"] for c in manifest["components"]] == ["detector", "ocr-q4", "ocr-int8", "dictionary", "translation-opus-ja-en"]
+    # No downloaded file is code (the Chrome Web Store allows no remotely loaded JS or WASM).
+    assert not [f["path"] for c in manifest["components"] for f in c["files"] if f["path"].endswith((".js", ".mjs", ".wasm"))]
     for component in manifest["components"]:
         for entry in component["files"]:
             data = (output / entry["path"]).read_bytes()
@@ -57,7 +59,7 @@ def test_committed_manifests_match_the_engine_contracts():
 
 def test_builder_writes_the_model_card_and_license_texts(tmp_path):
     paths, output = fake_inputs(tmp_path), tmp_path / "out"
-    manifest = builder.build(paths["stage2"], output, tmp_path / "pinned.json", paths["dictionary"], paths["tokenizer"])
+    manifest = builder.build(paths["stage2"], output, tmp_path / "pinned.json", paths["dictionary"])
     card = (output / "README.md").read_text(encoding="utf-8")
     assert f"# YomiScan browser models ({manifest['bundle']})" in card and "$" not in card
     assert card.count("\n| `") == len(manifest["components"]) + 2  # plus the local engine's fp32 detector and translator
@@ -81,7 +83,7 @@ def test_published_source_is_an_immutable_commit_url():
 
 def test_publisher_refuses_a_folder_that_differs_from_the_pinned_manifest(tmp_path):
     paths, output, pinned = fake_inputs(tmp_path), tmp_path / "out", tmp_path / "pinned.json"
-    builder.build(paths["stage2"], output, pinned, paths["dictionary"], paths["tokenizer"])
+    builder.build(paths["stage2"], output, pinned, paths["dictionary"])
     assert publisher.check_folder(output, pinned)["bundle"] == builder.BUNDLE
     local = publisher.check_folder(output, tmp_path / "local-manifest.json", "local-manifest.json")
     assert local["bundle"] == builder.LOCAL_BUNDLE
@@ -98,7 +100,7 @@ def test_publisher_refuses_a_folder_that_differs_from_the_pinned_manifest(tmp_pa
 def test_remote_check_reads_every_file_and_rejects_swapped_bytes(tmp_path):
     import io
     paths, output, pinned = fake_inputs(tmp_path), tmp_path / "out", tmp_path / "pinned.json"
-    manifest = builder.build(paths["stage2"], output, pinned, paths["dictionary"], paths["tokenizer"])
+    manifest = builder.build(paths["stage2"], output, pinned, paths["dictionary"])
     base, served = "https://host/x/", {}
     opener = lambda request, timeout: io.BytesIO(served.get(request.full_url, (output / request.full_url[len(base):]).read_bytes()))
     expected = sum(f["bytes"] for c in manifest["components"] for f in c["files"])

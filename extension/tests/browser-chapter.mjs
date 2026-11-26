@@ -181,6 +181,9 @@ try {
   for(const target of (await call('Target.getTargets')).targetInfos)
     if(target.type==='page'&&target.url.startsWith('http://127.0.0.1:8772'))await call('Target.closeTarget',{targetId:target.targetId});
   extensionId=(await call("Extensions.loadUnpacked",{path:extensionPath})).id;
+  // First install opens the welcome page (Stage 6); close it so the reader tab stays active.
+  const welcome=await until(async()=>(await call('Target.getTargets')).targetInfos.find(t=>t.url===`chrome-extension://${extensionId}/welcome.html`));
+  await call('Target.closeTarget',{targetId:welcome.targetId});
   const targetId=(await call("Target.createTarget",{url:"http://127.0.0.1:8772"})).targetId;
   session=(await call("Target.attachToTarget",{targetId,flatten:true})).sessionId;
   await call("Page.enable",{},session);await call("DOM.enable",{},session);

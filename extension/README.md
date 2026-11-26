@@ -20,6 +20,11 @@ Build includes TypeScript checking. Watch rebuilds code only; run `npm.cmd run t
 separately. Restart watch after manifest changes. Bundles/source maps are generated in
 ignored `dist/`; they are not repository source.
 
+**Store package:** `node package.mjs` (from `extension/`) makes a clean release build, checks it
+for the Chrome Web Store (no remote code, manifest and permissions, icons, licenses, size) and
+writes `../.cache/store-package/yomiscan-extension-<version>.zip`. The listing text and permission
+justifications are in [docs/store/listing.md](../docs/store/listing.md).
+
 Open `chrome://extensions` → Developer mode → Load unpacked → choose `extension/dist`
 (here `C:\Users\T-GAMER\yomiscan\extension\dist`). Reload the extension and refresh the
 webpage after rebuilding to replace injected code. Chrome 120+ is required.

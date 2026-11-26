@@ -1,5 +1,16 @@
 # Third-party resources
 
+## Chrome extension package (Stage 6)
+
+The extension ships ONNX Runtime Web (MIT, Microsoft), lindera-wasm-unidic (MIT) with the UniDic
+2.1.2 dictionary built into its WASM (BSD-3-Clause, the UniDic Consortium), SQLite WASM
+(Apache-2.0; SQLite is public domain), Hugging Face tokenizers.js (Apache-2.0), and ONNX Runtime
+Web's dependencies (protobuf.js BSD-3-Clause, Long.js and FlatBuffers Apache-2.0, platform.js MIT,
+guid-typescript ISC). The build writes every one of their license texts to
+`THIRD-PARTY-NOTICES.txt` in the package (`extension/tools/notices.mjs`; texts for packages that
+ship none are in `extension/licenses/`), and the extension's About & licenses page shows it.
+The models and JMdict are downloaded on first use and are described below.
+
 ## Optional Stage 2 vision experiments
 
 ONNX Runtime is **MIT**; the optional `vision` extra currently locks its CPU Python

@@ -1,0 +1,4 @@
+@sqlite.org/sqlite-wasm is licensed under the Apache License, Version 2.0 (the full text appears
+under @huggingface/tokenizers in this file). Project: https://github.com/sqlite/sqlite-wasm
+
+SQLite itself is in the public domain: https://www.sqlite.org/copyright.html

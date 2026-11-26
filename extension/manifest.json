@@ -4,11 +4,14 @@
   "version": "0.1.0",
   "description": "Study Japanese and read or translate manga with models that run on your computer, in Chrome or a local backend.",
   "minimum_chrome_version": "120",
+  "homepage_url": "https://github.com/GabrielTeixeira88/yomiscan",
+  "icons": {"16": "icons/icon-16.png", "32": "icons/icon-32.png", "48": "icons/icon-48.png", "128": "icons/icon-128.png"},
   "permissions": ["activeTab", "scripting", "offscreen", "storage", "unlimitedStorage", "nativeMessaging"],
   "host_permissions": ["http://127.0.0.1/*"],
   "optional_host_permissions": ["http://*/*", "https://*/*"],
   "background": {"service_worker": "background.js", "type": "module"},
-  "action": {"default_title": "YomiScan: Study / Translate Chapter"},
+  "action": {"default_title": "YomiScan: Study / Translate Chapter",
+    "default_icon": {"16": "icons/icon-16.png", "32": "icons/icon-32.png", "48": "icons/icon-48.png"}},
   "commands": {
     "select-text": {"suggested_key": {"default": "Ctrl+Shift+Y", "mac": "Command+Shift+Y"}, "description": "Select Japanese text (Study Mode)"}
   },

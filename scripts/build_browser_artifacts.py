@@ -29,8 +29,6 @@ LOCAL_BUNDLE = "yomiscan-local-2026.11.1"
 NOTICES = ROOT / "packaging" / "browser-models"
 BUNDLE = "yomiscan-browser-2026.11.1"
 MANGA_OCR = "kha-white/manga-ocr-base (Apache-2.0); ONNX export, research/stage-2"
-LINDERA = "lindera-wasm-unidic@2.1.0 (npm, pinned in extension/package-lock.json)"
-LINDERA_WASM = ROOT / "extension" / "node_modules" / "lindera-wasm-unidic" / "lindera_wasm_unidic_bg.wasm"
 JMDICT = "JMdict (EDRDG), imported by scripts/import_jmdict.py; attribution required"
 OPUS = "Xenova/opus-mt-ja-en: ONNX export of Helsinki-NLP/opus-mt-ja-en (Apache-2.0); fp16 files"
 DETECTOR = "ogkalu/comic-text-and-bubble-detector@16e8a622f91fabc6b5b65c96d32d1183f8843546 (Apache-2.0); ONNX export"
@@ -46,7 +44,7 @@ class Component:
     files: tuple[tuple[Path, str], ...]  # (source file, published path)
 
 
-def components(stage2: Path, dictionary: Path = ROOT / "data" / "jmdict.sqlite3", tokenizer: Path = LINDERA_WASM) -> tuple[Component, ...]:
+def components(stage2: Path, dictionary: Path = ROOT / "data" / "jmdict.sqlite3") -> tuple[Component, ...]:
     ocr = lambda variant: Component(f"ocr-{variant}", "ocr", variant, "Apache-2.0", MANGA_OCR, tuple(
         (stage2 / f"manga-ocr-onnx-{variant}" / name, f"ocr-{variant}/{name}")
         for name in ("encoder.onnx", "decoder.onnx", "vocab.txt", "generation.json")))
@@ -55,9 +53,8 @@ def components(stage2: Path, dictionary: Path = ROOT / "data" / "jmdict.sqlite3"
                   ((stage2 / "detector-onnx" / "detector-fp16.onnx", "detector/detector-fp16.onnx"),)),
         ocr("q4"),    # WebGPU (Stage 2: 85 ms median per block)
         ocr("int8"),  # CPU / WASM (Stage 2: 194 ms median per block, 8 threads)
-        # The WASM must match the JS glue bundled in the extension: the same pinned npm package.
-        Component("tokenizer", "tokenizer", "unidic", "MIT (lindera); UniDic BSD-3-Clause", LINDERA,
-                  ((tokenizer, "tokenizer/lindera_wasm_unidic_bg.wasm"),)),
+        # No code is downloaded: lindera's tokenizer WASM ships inside the extension (the Chrome Web
+        # Store allows no remotely loaded JS or WASM). Bundles up to 2026.11.1 still host it.
         Component("dictionary", "dictionary", "jmdict-schema2", "CC-BY-SA-4.0 (EDRDG)", JMDICT,
                   ((dictionary, "dictionary/jmdict.sqlite3"),)),
         # Stage 2: fp16 + beam search on WASM reproduces the Python backend on 99/100 lines.
@@ -105,15 +102,15 @@ def copy_component(component: Component, output: Path) -> dict:
 
 
 def build(stage2: Path, output: Path, pinned: Path = PINNED, dictionary: Path = ROOT / "data" / "jmdict.sqlite3",
-          tokenizer: Path = LINDERA_WASM, local_pinned: Path | None = None) -> dict:
+          local_pinned: Path | None = None) -> dict:
     """Writes both manifests; local_pinned defaults to local-manifest.json next to `pinned`."""
     manifest: dict = {"schema": 1, "bundle": BUNDLE, "components": []}
-    everything = (*components(stage2, dictionary, tokenizer), *local_components(stage2))
+    everything = (*components(stage2, dictionary), *local_components(stage2))
     missing = [source for c in everything for source, _ in c.files if not source.is_file()]
     if missing:
         raise FileNotFoundError("Missing inputs (research/stage-2 exports, npm ci in extension/, scripts/import_jmdict.py): "
                                 + ", ".join(str(p) for p in missing))
-    for component in components(stage2, dictionary, tokenizer):
+    for component in components(stage2, dictionary):
         manifest["components"].append(copy_component(component, output))
     local: dict = {"schema": 1, "bundle": LOCAL_BUNDLE, "components": [
         *(copy_component(c, output) for c in local_components(stage2)),

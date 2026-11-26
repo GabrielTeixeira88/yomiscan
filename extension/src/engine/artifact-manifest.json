@@ -75,20 +75,6 @@
    ]
   },
   {
-   "id": "tokenizer",
-   "kind": "tokenizer",
-   "variant": "unidic",
-   "license": "MIT (lindera); UniDic BSD-3-Clause",
-   "source": "lindera-wasm-unidic@2.1.0 (npm, pinned in extension/package-lock.json)",
-   "files": [
-    {
-     "path": "tokenizer/lindera_wasm_unidic_bg.wasm",
-     "bytes": 54146898,
-     "sha256": "c63a5e747bfbfad978636c7edec2f7738f4f4a3728c823254eddf26c066b16f0"
-    }
-   ]
-  },
-  {
    "id": "dictionary",
    "kind": "dictionary",
    "variant": "jmdict-schema2",
