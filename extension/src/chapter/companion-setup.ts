@@ -88,7 +88,7 @@ export class CompanionSetup {
   }
 
   private async poll(): Promise<void> {
-    const reply = await chrome.runtime.sendMessage({type: 'companion-status'}).catch(() => null);
+    const reply = await chrome.runtime.sendMessage({type: 'companion-status', fresh: true}).catch(() => null);
     if (!reply?.ok) {this.progress.textContent = reply?.error ?? 'Local engine status unavailable.';return;}
     const status = reply.data as CompanionStatus;
     if (status.ready) {this.hide();this.ready();return;}

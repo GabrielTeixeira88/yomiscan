@@ -243,6 +243,15 @@ real Anki was not run (the owner chose not to use AnkiConnect, and no Anki impor
   the companion installed, under both the browser and Automatic choices. The test now waits for
   the Translate Chapter session to start, then for its pages; it passed twice (Translate Chapter
   showed 10 English boxes about 18 s after the click, models warm).
+  *The delay, fixed (2026-11-26):* the panel's own status checks bypassed the 30 s cache in
+  `companionStatus` (the `companion-status` message always asked the host). Now only the
+  download-progress poll and the Advanced view ask fresh; a "ready" answer older than 30 s is
+  returned at once and checked again in the background (one check at a time), and any other
+  answer is asked again; opening the panel warms the cache. The panel says "Starting Read
+  Chapter…" / "Starting Translate Chapter…" at once. Measured from the click to the new session's
+  status, with the installed companion stopped before each click: 33–70 ms, against 380–500 ms on
+  `main` at the time (the host launch took 0.37–1.03 s then, 2.35–2.40 s earlier under load).
+  The browser-engine test's Translate Chapter took 15.7 s instead of 18.1 s.
 - The screenshot run read the synthetic page with the installed companion: three bubbles, 雨が
   降るかもしれない → "It might rain.", 今日はいい天気だね → "It's a nice day, isn't it?".
 - `library-e2e.mjs` passed (the welcome tab opening on install does not disturb it); the mocked

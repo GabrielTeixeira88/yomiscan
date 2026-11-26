@@ -182,7 +182,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
   if(message?.type==='companion-status'){
-    void companionStatus(undefined,true).then(data=>sendResponse({ok:true,data}),
+    // fresh: download progress and the Advanced view; the panel's checks reuse a recent answer.
+    void companionStatus(undefined,message.fresh===true).then(data=>sendResponse({ok:true,data}),
       error=>sendResponse({ok:false,error:error instanceof Error?error.message:'Local engine status unavailable'}));
     return true;
   }

@@ -149,6 +149,7 @@ export class ChapterControls {
   /** Resolve the engine, then start reading. With the browser engine, Translate Chapter reads pages and
    * draws their English over each bubble (the pixel renderer belongs to the local backend). */
   private async begin(mode:SessionMode):Promise<void> {
+    this.status.textContent=mode==='read'?'Starting Read Chapter…':'Starting Translate Chapter…';
     try {
       const engine=await this.checkEngines(true);
       if(engine==='setup'){this.status.textContent='Download the reading models above, or start the local backend, then try again.';return;}

@@ -118,8 +118,8 @@ try {
 
   await activate(); started = Date.now();
   await click("Translate Chapter");
-  // The panel keeps Read Chapter's "N / N pages read" until the new session starts (after the engine
-  // checks, about 2.4 s with the companion installed); wait for the new session, then its pages.
+  // Wait for the Translate Chapter session itself, then its pages: the previous Read Chapter
+  // session's "N / N pages read" must not count.
   await until(async () => (await text("chapter-panel")).includes("Translating pages in the browser"), 30000, "translate session");
   await until(async () => (await text("chapter-panel")).includes(`${pages.length} / ${pages.length} pages read`), 600000, "translate chapter");
   const boxes = await until(async () => {const doc = nodes((await call("DOM.getDocument", {depth: -1, pierce: true}, session)).root);

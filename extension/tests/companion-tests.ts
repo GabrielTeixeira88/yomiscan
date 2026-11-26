@@ -55,6 +55,32 @@ test("companion status: not installed, ready, missing models, cached for 30 s", 
     {installed: true, ready: false, missing: [], error: "OSError: disk full"});
 });
 
+test("an older ready status answers at once and is checked again in the background; other states are asked", async () => {
+  let now = 0, release = () => {};
+  const store = session();
+  const gate = new Promise<void>(resolve => {release = resolve;});
+  const host: NativeMessaging & {sent: number} = {sent: 0, sendNativeMessage: async () => {
+    host.sent++;
+    if (host.sent === 2) await gate;  // the background check is slow, like the real host (about 2.4 s)
+    return host.sent === 2 ? {ok: true, models: {ready: false, missing: ["detector"]}} : {ok: true, models: {ready: true, missing: []}};
+  }};
+  const deps = {native: host, session: store, now: () => now};
+  assert.equal((await companionStatus(deps)).ready, true);
+  now = 600_000;
+  // Ready, but 10 minutes old: answered from the cache without waiting for the host...
+  assert.equal((await companionStatus(deps)).ready, true);
+  assert.equal(host.sent, 2, "...while one background check runs");
+  assert.equal((await companionStatus(deps)).ready, true, "a second call during the check still answers at once");
+  assert.equal(host.sent, 2, "and shares the running check");
+  release();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  // The background check found the models missing: that answer is used, and a stale one is asked again.
+  assert.deepEqual((await companionStatus(deps)).missing, ["detector"]);
+  now = 700_000;
+  assert.equal((await companionStatus(deps)).ready, true, "a stale not-ready answer waits for the host");
+  assert.equal(host.sent, 3);
+});
+
 test("companion connection is started once, kept in session storage, and restarted on request", async () => {
   const store = session();
   const host = native([() => ({ok: true, port: 50001, token: TOKEN}), () => ({ok: true, port: 50002, token: TOKEN})]);
