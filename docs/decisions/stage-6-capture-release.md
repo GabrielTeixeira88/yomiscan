@@ -233,8 +233,16 @@ real Anki was not run (the owner chose not to use AnkiConnect, and no Anki impor
 - Browser engine with the packaged tokenizer (`browser-engine-e2e.mjs`, local model server): the
   models installed and Select Text analyzed a real page through the browser engine. The test then
   fails at its last step (Translate Chapter's English boxes, "auto English"), and fails the same
-  way on `main` built in a separate worktree, so the failure predates this increment; it is not
-  fixed here.
+  way on `main` built in a separate worktree, so the failure predates this increment.
+  *Diagnosed and fixed afterwards (2026-11-25):* a test race, not a product fault. After the
+  click, the panel keeps Read Chapter's "2 / 2 pages read" until the new session starts, so the
+  test's wait passed at once on the old text and gave the English boxes only 10 s, less than the
+  re-read (they appeared about 12 s after the click). The new session starts late because every
+  Read Chapter and Translate Chapter click first asks the companion for its status over native
+  messaging, which launches the engine's host program: 2.35–2.40 s per click (median of 4) with
+  the companion installed, under both the browser and Automatic choices. The test now waits for
+  the Translate Chapter session to start, then for its pages; it passed twice (Translate Chapter
+  showed 10 English boxes about 18 s after the click, models warm).
 - The screenshot run read the synthetic page with the installed companion: three bubbles, 雨が
   降るかもしれない → "It might rain.", 今日はいい天気だね → "It's a nice day, isn't it?".
 - `library-e2e.mjs` passed (the welcome tab opening on install does not disturb it); the mocked
