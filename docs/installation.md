@@ -76,8 +76,10 @@ Extract the extension ZIP to a stable folder. Open `chrome://extensions`, enable
 Developer mode and choose **Load unpacked**, selecting the folder containing
 `manifest.json`. Use an ordinary manga-reader tab, activate YomiScan, then open
 **Setup & readiness → Check Setup**. The server binds only to `127.0.0.1`, on port 47615 by default (`--port` changes it; set the same port in **Setup & readiness**).
-The MV3 package requests local `storage` for explicit Study history; it does not use
-Chrome Sync. Missing resources are reported with preparation/import commands.
+The MV3 package keeps settings, saved words and known words in local extension storage; it
+does not use Chrome Sync. The extension ZIP is the Chrome Web Store package
+(`extension/package.mjs`), so it includes the browser engine's runtimes, the icons and the
+license notices. Missing resources are reported with preparation/import commands.
 
 Study Mode: choose Select Text, drag over Japanese, then use the existing readings,
 dictionary and copy controls. Chapter mode: choose Translate Chapter on a supported
@@ -113,17 +115,18 @@ For development builds that still share version `0.1.0`, pass `--reinstall` to
 `uv pip install --python <application-python> --reinstall <matching-wheel>`; a version
 match alone does not select a newer commit. Reload the unpacked extension in Chrome.
 Back up `data/glossaries.sqlite3` deliberately; do not replace it with an installer
-template. Chrome-local Study history belongs to that extension identity/profile:
-export it before removing/reinstalling the extension or changing its folder/ID.
+template. Saved words, sentences and known words belong to that extension identity/profile:
+use **Back up all** on the Saved page before removing/reinstalling the extension or changing
+its folder/ID, then **Restore backup**.
 
 - `.cache/processing`: disposable opt-in page processing; clear in the app.
 - `data/glossaries.sqlite3`: user terminology; delete entries/series explicitly.
-- Chrome local Study history: opt-in selected text, up to100 entries/2MiB; disable
-  stops new saves but retains existing entries. Delete/Clear History erases only history.
+- Saved words, sentences and known words (Stage 6, the extension's IndexedDB): only what you
+  save or mark; the Saved page searches, exports, backs up and deletes them.
 - Hugging Face/model directories: separately downloaded weights; not user terminology.
 - `.venv` and unpacked extension folder: installed application files.
 
-Uninstalling the extension removes its local storage. Export history first if wanted.
+Uninstalling the extension removes its local storage. Back up saved items first if wanted.
 Remove the application environment and extension folder after stopping the app.
 Delete user data/model caches separately only if you intend to erase them; an app
 update or processing-cache clear must not perform that deletion automatically.

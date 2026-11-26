@@ -43,6 +43,8 @@ try{
     return response.result?.value||null;
   });
   assert.equal(manifest.manifest_version,3);assert.ok(manifest.permissions.includes('storage'));
+  // First install opens the welcome page from the package.
+  await until(async()=>(await call('Target.getTargets')).targetInfos.find(t=>t.type==='page'&&t.url===`chrome-extension://${id}/welcome.html`));
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const url=`http://127.0.0.1:${server.address().port}/`;
   const page=(await call('Target.createTarget',{url})).targetId;
   const session=(await call('Target.attachToTarget',{targetId:page,flatten:true})).sessionId;
@@ -50,7 +52,7 @@ try{
   const tab=await until(async()=>(await call('Target.getTargets',{filter:[{type:'tab',exclude:false},{exclude:true}]})).targetInfos.find(t=>t.url===url));
   await call('Extensions.triggerAction',{id,targetId:tab.targetId});
   await until(async()=>nodes((await call('DOM.getDocument',{depth:-1,pierce:true},session)).root).some(n=>n.attributes?.includes('chapter-panel')));
-  const report={browser:version.Browser,extension_version:manifest.version,checks:['actual ZIP loads as MV3','packaged service worker starts','packaged content opens reader controls'],model_inference:false};
+  const report={browser:version.Browser,extension_version:manifest.version,checks:['actual ZIP loads as MV3','packaged service worker starts','install opens the welcome page','packaged content opens reader controls'],model_inference:false};
   if(value('--report'))await writeFile(path.resolve(value('--report')),JSON.stringify(report,null,2)+'\n');
   console.log(JSON.stringify(report,null,2));
 }finally{

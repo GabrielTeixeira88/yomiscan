@@ -42,6 +42,8 @@ const iou = (x, y) => {
 try {
   for (const extension of (await call("Extensions.getExtensions")).extensions) if (extension.name.startsWith("YomiScan")) await call("Extensions.uninstall", {id: extension.id});
   const extensionId = (await call("Extensions.loadUnpacked", {path: path.resolve("extension/dist")})).id;
+  // First install opens the welcome page (Stage 6); close it so the reader tab stays the active tab.
+  for (let tries = 0; tries < 50; tries++) {const welcome = (await call("Target.getTargets")).targetInfos.find(t => t.url === `chrome-extension://${extensionId}/welcome.html`); if (welcome) {await call("Target.closeTarget", {targetId: welcome.targetId}); break;} await new Promise(r => setTimeout(r, 200));}
   const workerTarget = await (async () => {for (let i = 0; i < 100; i++) {const t = (await call("Target.getTargets")).targetInfos.find(t => t.type === "service_worker" && t.url.includes(extensionId)); if (t) return t; await wait(100);} throw new Error("No service worker");})();
   const worker = (await call("Target.attachToTarget", {targetId: workerTarget.targetId, flatten: true})).sessionId;
   const engine = async (operation, extra = {}) => {

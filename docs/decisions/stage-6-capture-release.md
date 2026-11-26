@@ -30,7 +30,7 @@ Each increment is merged only with its tests and a check in real Chrome.
 | 1 | **Saved words and sentences.** "Save word" on every word and expression in the study card, "Save sentence" for the whole card (replacing Save to History; old history entries become saved sentences). A local library in the extension's IndexedDB, a full-page **Saved** view (search, delete, reopen a sentence), CSV export of words and sentences, and a JSON backup and restore. Each word carries its dictionary form *and that form's reading* (食べた → 食べる, たべる), which both engines now report. | Done: real Chrome end to end; lookup 1–2 ms with 10,002 saved words (see increment 1) |
 | 2 | ~~**Anki export** through the AnkiConnect add-on.~~ Replaced by an **Export for Anki** CSV file on the Saved page (see increment 2). | Dropped by the owner (2026-11-25); Anki CSV done |
 | 3 | **Known words and furigana.** Mark a word as known from the card or the Saved view; import a known-word list (one word per line). The card's Japanese sentence gets furigana with a setting: off, unknown words only (default), all words. Known words fold away in the word breakdown. | Done: real Chrome end to end; known lookup 1–2 ms with 10,003 known words (see increment 3) |
-| 4 | **Release preparation.** Welcome page on install (shortcut, reading modes, model download, privacy), an About & licenses page in the extension, `PRIVACY.md`, the Web Store listing text and permission justifications, a store-package script with checks (no remote code, manifest, size) built by CI, screenshots from the synthetic fixtures, and a user-first README. | Planned |
+| 4 | **Release preparation.** Welcome page on install (shortcut, reading modes, model download, privacy), an About & licenses page in the extension, `PRIVACY.md`, the Web Store listing text and permission justifications, a store-package script with checks (no remote code, manifest, size) built by CI, screenshots from the synthetic fixtures, and a user-first README. | Done: store package passes its checks (64 MB ZIP, reproducible); see increment 4 |
 | 5 | **Submission (owner).** The owner registers a Chrome Web Store developer account and submits the package. Once the store ID is known, the companion installer is rebuilt with it pre-filled and attached to a GitHub release. | Waits for the owner |
 
 ## Gates
@@ -180,3 +180,69 @@ real Anki was not run (the owner chose not to use AnkiConnect, and no Anki impor
   60 forms took 1.2–2.4 ms (median of 20; gate 50 ms; one run had a single 34.6 ms maximum).
 - Tests: extension 133/133 (known forms, list parsing, import limits, backup schema 2, sentence
   furigana); the mocked Chrome fixture passed twice; `uv run pytest` 445 passed, 1 skipped.
+
+## Increment 4: release preparation
+
+**Design.**
+- **No remote code (a fix, not only a check).** The browser engine downloaded lindera's tokenizer
+  WASM (54 MB, with UniDic inside) from Hugging Face and ran it. The Chrome Web Store counts
+  remotely loaded WebAssembly as remote code, so it now ships in the package (`dist/lindera/`,
+  from the same pinned npm package; SHA-256 `c63a5e74…`, identical to the downloaded file, so
+  tokenization and the parity results are unchanged). The model manifest and
+  `scripts/build_browser_artifacts.py` no longer list it; the first-run download falls by 54 MB
+  to about 525 MB (graphics card) or 548 MB (processor). A unit test fails if the manifest lists
+  a `.js` or `.wasm` file. Users who downloaded the old bundle keep an unused copy in Cache
+  Storage until they reinstall the extension.
+- **Store package.** `extension/package.mjs` makes a clean release build, runs
+  `tools/store-checks.mjs` and writes a reproducible ZIP with a JSON report. The checks: MV3,
+  name and description lengths, version format, the exact permission list (`PERMISSIONS`; a
+  unit test requires each to be justified in `docs/store/listing.md`), no content scripts or
+  web-accessible resources, `script-src 'self' 'wasm-unsafe-eval'` only, the four icon sizes as
+  real PNGs, no remote script, import or `.js`/`.wasm` URL in any packaged script or page, pages
+  that load only packaged files, no source maps or unexpected file types, the license files, and
+  a 150 MiB budget. CI builds it in the extension job and uploads it; `scripts/build_distribution.py`
+  ships the same ZIP (the developer ZIP lacked `ort/` and `sqlite/` before).
+- **Licenses.** `tools/notices.mjs` writes `THIRD-PARTY-NOTICES.txt` from the production
+  dependency tree in `package-lock.json` (type-only packages left out) plus UniDic, and fails on a
+  package without a license text; `extension/licenses/` holds texts for ONNX Runtime, sqlite-wasm
+  and guid-typescript, which ship none, and UniDic's. `LICENSE.txt` is YomiScan's MIT license.
+- **Pages.** `welcome.html` opens once on install: how to start, the three reading modes with the
+  configured shortcut, the one-time model download, saving and known words, privacy. `about.html`
+  shows the version, the JMdict attribution in EDRDG's wording, the downloaded models with their
+  licenses and sizes (from the pinned manifest), the shipped software and the full notices. The
+  panel links both ("Getting started · About & licenses").
+- **Icon.** Drawn by `tools/icons.mjs` from shapes (a speech bubble with three vertical text lines
+  and a furigana mark): 16, 32 and 48 px full-bleed for the toolbar, 128 px with the store's 16 px
+  margin.
+- **Documents.** `PRIVACY.md` (what is processed where, the only network connections, exports,
+  deletion), `docs/store/listing.md` (listing text, single purpose, permission justifications,
+  remote-code and data-use answers, reviewer notes), a user-first `README.md`, and the former
+  README moved unchanged to `docs/development.md` (relative links adjusted).
+- **Screenshots.** `extension/tests/store-screenshots.mjs` draws an original synthetic page
+  (scenery and three bubbles in HTML and CSS), turns it into a page image, and runs the real
+  extension and engine on it: study card, word breakdown, Translate Chapter, the Saved page and
+  the welcome page at 1280 × 800, and the 440 × 280 promo tile, in `docs/store/screenshots/`.
+
+**Measurements (2026-11-25, development machine).**
+- Store package: 28 files, 100.0 MB unpacked, 64.0 MB ZIP; the same SHA-256 on every rebuild and
+  from `build_distribution.py`. Largest files: lindera WASM 54.1 MB, ONNX Runtime's two WASM
+  builds 28.7 and 14.8 MB.
+- The packaged ZIP, extracted and loaded in a fresh Chrome (`scripts/validate_extension_package.mjs`):
+  loads as MV3, the service worker starts, install opens the welcome page, the panel opens.
+  `scripts/validate_distribution.py` passed on the built distribution.
+- Browser engine with the packaged tokenizer (`browser-engine-e2e.mjs`, local model server): the
+  models installed and Select Text analyzed a real page through the browser engine. The test then
+  fails at its last step (Translate Chapter's English boxes, "auto English"), and fails the same
+  way on `main` built in a separate worktree, so the failure predates this increment; it is not
+  fixed here.
+- The screenshot run read the synthetic page with the installed companion: three bubbles, 雨が
+  降るかもしれない → "It might rain.", 今日はいい天気だね → "It's a nice day, isn't it?".
+- `library-e2e.mjs` passed (the welcome tab opening on install does not disturb it); the mocked
+  Chrome fixture passed twice after it, like the other end-to-end scripts, closes the welcome tab
+  first. Extension 137/137; `uv run pytest` 445 passed, 1 skipped.
+
+**Waits for the owner (increment 5).** The version to submit (proposed 1.0.0; the manifest still
+says 0.1.0), the developer account and publisher name, and the submission with
+`docs/store/listing.md`. `AGENTS.md` still says to document current behavior in `README.md`; the
+README now documents it for users and `docs/development.md` for developers, which the owner may
+want to state there.

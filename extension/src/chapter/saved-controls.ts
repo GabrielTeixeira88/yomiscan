@@ -13,7 +13,21 @@ export class SavedControls {
       });
     });
     this.summary.style.display = 'block';
-    this.element.append(open, this.summary);
+    // Getting started and About & licenses (version, privacy, third-party licenses).
+    const pages = document.createElement('small');
+    pages.style.display = 'block';
+    for (const [page, label] of [['welcome', 'Getting started'], ['about', 'About & licenses']] as const) {
+      const link = document.createElement('a');
+      link.href = '#'; link.textContent = label; link.dataset.page = page;
+      link.addEventListener('click', event => {
+        event.preventDefault();
+        void chrome.runtime.sendMessage({type: 'open-page', page}).then(reply => {
+          if (!reply?.ok) this.summary.textContent = reply?.error ?? 'Could not open the page. Reload the extension.';
+        });
+      });
+      pages.append(...pages.childNodes.length ? [' · ', link] : [link]);
+    }
+    this.element.append(open, this.summary, pages);
   }
 
   async refresh(): Promise<void> {

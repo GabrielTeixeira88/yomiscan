@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Welcome to YomiScan</title>
+<link rel="icon" href="icons/icon-32.png">
+<link rel="stylesheet" href="pages.css">
+<body>
+<div class="page">
+  <header class="top">
+    <img src="icons/icon-128.png" alt="">
+    <h1>Welcome to YomiScan</h1>
+  </header>
+  <p class="lead">Read manga in Japanese, and study any bubble: its words, readings, meanings, grammar and an English
+    translation. Everything runs on your computer.</p>
+
+  <h2>Start reading</h2>
+  <ol class="steps">
+    <li>Pin YomiScan: click the puzzle-piece icon in Chrome's toolbar, then the pin next to YomiScan.</li>
+    <li>Open a manga chapter whose pages are images.</li>
+    <li>Click the YomiScan icon. A panel opens on the page; choose how to read.</li>
+  </ol>
+  <div class="grid">
+    <div class="card"><h3>Read Chapter</h3><p>Keeps the Japanese. Each bubble gets an outline: click one, or press
+      <kbd>J</kbd> / <kbd>K</kbd> to go to the next or previous bubble, and its study card opens.</p></div>
+    <div class="card"><h3>Select Text</h3><p>Drag a box around any Japanese text on any page. Shortcut:
+      <kbd id="shortcut">Ctrl+Shift+Y</kbd>.</p></div>
+    <div class="card"><h3>Translate Chapter</h3><p>Puts English over every bubble. Switch a page back to Japanese at any
+      time.</p></div>
+  </div>
+
+  <h2>The first time: reading models</h2>
+  <p>YomiScan reads the page with models that run on your own computer. It needs them once, and asks before
+    downloading anything:</p>
+  <div class="grid">
+    <div class="card"><h3>In Chrome</h3><p>The panel offers to download about 525–550 MB of models (text detection, OCR,
+      the JMdict dictionary and translation) from Hugging Face. They run inside Chrome, on your graphics card when it
+      can.</p></div>
+    <div class="card"><h3>YomiScan Engine for Windows (optional)</h3><p>A separate, faster engine that YomiScan starts
+      when needed. Install it from the <a href="https://github.com/GabrielTeixeira88/yomiscan/releases" target="_blank"
+      rel="noopener noreferrer">YomiScan releases page</a>; it downloads its models on first start.</p></div>
+  </div>
+
+  <h2>Keep what you learn</h2>
+  <div class="grid">
+    <div class="card"><h3>Save</h3><p><b>☆ Save word</b> and <b>Save sentence</b> in the study card keep them on the
+      Saved page, with search, CSV export and <b>Export for Anki</b>.</p></div>
+    <div class="card"><h3>Mark known</h3><p>Known words fold away in the card, and furigana shows only over the words you
+      don't know yet. Import a list you already have from the Saved page.</p></div>
+  </div>
+
+  <h2>Your privacy</h2>
+  <p>No account, no analytics, no tracking. Screenshots, page text, saved words and settings stay on this computer.
+    YomiScan connects to the internet only to download its models (once, after you agree) and to fetch the manga
+    pages you ask it to read, from the site that hosts them; Chrome asks before YomiScan may fetch from a new site.
+    <a href="https://github.com/GabrielTeixeira88/yomiscan/blob/main/PRIVACY.md" target="_blank" rel="noopener noreferrer">Privacy policy</a>.</p>
+
+  <div class="actions">
+    <button id="shortcuts">Change the shortcut</button>
+    <button id="saved">Open Saved</button>
+    <button id="about">About &amp; licenses</button>
+  </div>
+  <footer>
+    <p>Meanings from JMdict © the Electronic Dictionary Research and Development Group, CC BY-SA 4.0. YomiScan is open
+      source under the MIT license.</p>
+  </footer>
+</div>
+<script type="module" src="welcome.js"></script>
+</body>
+</html>

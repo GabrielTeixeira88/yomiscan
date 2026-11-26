@@ -53,6 +53,8 @@ const report = {pages: pages.length, checks: []};
 try {
   for (const extension of (await call("Extensions.getExtensions")).extensions) if (extension.name.startsWith("YomiScan")) await call("Extensions.uninstall", {id: extension.id});
   const extensionId = (await call("Extensions.loadUnpacked", {path: path.resolve("extension/dist")})).id;
+  // First install opens the welcome page (Stage 6); close it so the reader tab stays the active tab.
+  await call("Target.closeTarget", {targetId: (await until(async () => (await call("Target.getTargets")).targetInfos.find(t => t.url === `chrome-extension://${extensionId}/welcome.html`), 10000, "welcome page")).targetId});
   const workerTarget = await until(async () => (await call("Target.getTargets")).targetInfos.find(t => t.type === "service_worker" && t.url.includes(extensionId)), 10000, "service worker");
   const worker = (await call("Target.attachToTarget", {targetId: workerTarget.targetId, flatten: true})).sessionId;
   // A first run: Automatic engine, no models (an earlier run's files are removed), only the source override if given.

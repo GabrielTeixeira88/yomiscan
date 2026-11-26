@@ -44,7 +44,7 @@ export async function chooseBackend(): Promise<Backend> {
 /** The components one backend needs. int8 OCR must not run on WebGPU (no fast int8 path; 10x slower). */
 export function requiredComponents(backend: Backend, components: readonly ArtifactComponent[] = manifest.components): ArtifactComponent[] {
   const ocr = backend === 'webgpu' ? 'q4' : 'int8';
-  return components.filter(c => ['detector', 'tokenizer', 'dictionary', 'translation'].includes(c.kind) || (c.kind === 'ocr' && c.variant === ocr));
+  return components.filter(c => ['detector', 'dictionary', 'translation'].includes(c.kind) || (c.kind === 'ocr' && c.variant === ocr));
 }
 
 interface LexicalEngine {tokenize(text: string): JapaneseToken[]; dictionary: JmdictDatabase}
@@ -173,10 +173,11 @@ export class BrowserEngine {
         if (!found) throw new Error(`Manifest lacks the ${kind} component`);
         return found;
       };
-      for (const kind of ['tokenizer', 'dictionary']) if (!await this.store.installed(component(kind)))
+      if (!await this.store.installed(component('dictionary')))
         throw new Error('Browser engine dictionary is not installed. Open Setup → Browser engine.');
-      // lindera's JS glue is bundled; its WASM (with UniDic inside) is the pinned artifact.
-      await initLindera({module_or_path: await this.store.read(component('tokenizer').files[0])});
+      // lindera's JS glue is bundled and its WASM (with UniDic inside) ships with the extension:
+      // the store allows no remotely loaded code. Same pinned npm package, same bytes as before.
+      await initLindera({module_or_path: chrome.runtime.getURL('lindera/lindera_wasm_unidic_bg.wasm')});
       const builder = new TokenizerBuilder();
       builder.setDictionary('embedded://unidic'); builder.setMode('normal');
       const tokenizer = builder.build();

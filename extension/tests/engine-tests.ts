@@ -69,7 +69,10 @@ test("PIL bilinear resize keeps a flat image flat and crops copy rows exactly", 
 
 test("pinned artifact manifest is valid; each backend needs one OCR variant plus the shared components", () => {
   const manifest = parseManifest(pinned);
-  const shared = ['tokenizer', 'dictionary', 'translation-opus-ja-en'];
+  const shared = ['dictionary', 'translation-opus-ja-en'];
+  // No downloaded component may be code: the Web Store forbids remotely loaded JS and WASM.
+  for (const component of manifest.components) for (const file of component.files)
+    assert.doesNotMatch(file.path, /\.(?:m?js|wasm)$/i, file.path);
   assert.deepEqual(requiredComponents('webgpu', manifest.components).map(c => c.id), ['detector', 'ocr-q4', ...shared]);
   assert.deepEqual(requiredComponents('wasm', manifest.components).map(c => c.id), ['detector', 'ocr-int8', ...shared]);
   assert.throws(() => parseManifest({...manifest, components: [{...manifest.components[0], files: [{path: '../x', bytes: 1, sha256: 'a'.repeat(64)}]}]}));

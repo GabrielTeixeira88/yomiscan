@@ -35,6 +35,12 @@ async function activate(tab: chrome.tabs.Tab, study = false): Promise<void> {
   }
 }
 chrome.action.onClicked.addListener(tab=>{void activate(tab);});
+// First install: the welcome page (how to start, the one-time model download, privacy).
+chrome.runtime.onInstalled.addListener(({reason})=>{
+  if(reason===chrome.runtime.OnInstalledReason.INSTALL)void chrome.tabs.create({url:chrome.runtime.getURL('welcome.html')});
+});
+/** Extension pages the panel may open. */
+const PAGES:Record<string,string>={welcome:'welcome.html',about:'about.html',saved:'library.html'};
 chrome.commands.onCommand.addListener(async command=>{if(command==="select-text"){
   const [tab]=await chrome.tabs.query({active:true,currentWindow:true});if(tab)await activate(tab,true);
 }});
@@ -200,6 +206,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     void engineState().then(({mode})=>mode==='setup'?Promise.reject(new Error(SETUP_NEEDED)):mode==='browser'?engineRequest('analyze-text',{text:message.text.trim(),translate:true}).then(parseAnalysis):
       analyzeText(message.text,controller.signal)).then(data=>sendResponse({ok:true,data}),
       error=>sendResponse({ok:false,error:error instanceof Error?error.message:'Local analysis failed'})).finally(()=>clearTimeout(timer));
+    return true;
+  }
+  if(message?.type==='open-page'){
+    const page=Object.hasOwn(PAGES,message.page)?PAGES[message.page]:null;
+    if(!page){sendResponse({ok:false,error:'Unknown YomiScan page.'});return;}
+    void chrome.tabs.create({url:chrome.runtime.getURL(page)}).then(()=>sendResponse({ok:true}),
+      error=>sendResponse({ok:false,error:error instanceof Error?error.message:'Could not open the page.'}));
     return true;
   }
   if(message?.type==='library'){

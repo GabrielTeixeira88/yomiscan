@@ -97,9 +97,10 @@ def main(argv: list[str] | None = None) -> int:
     unpacked = environment/"unpacked-extension"
     with ZipFile(extension) as archive:
         for name in archive.namelist():
-            if Path(name).name != name:
-                raise ValueError("Unexpected archive path")
-            unpacked.mkdir(exist_ok=True)
+            parts = name.split("/")
+            if name.startswith("/") or "\\" in name or any(part in ("", ".", "..") for part in parts):
+                raise ValueError("Unexpected archive path: " + name)
+            (unpacked/name).parent.mkdir(parents=True, exist_ok=True)
             (unpacked/name).write_bytes(archive.read(name))
     print(json.dumps({"wheel_and_sdist": "installed", "entry_points": "passed", "checksums": "passed",
                       "browser_smoke_directory": str(unpacked)}, indent=2))

@@ -10,13 +10,14 @@ import shutil
 import subprocess
 import sys
 import tarfile
-from time import gmtime
 import tomllib
-from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
+from zipfile import ZipFile
 
 ROOT = Path(__file__).resolve().parents[1]
+# Required in the extension ZIP, which is the store package from extension/package.mjs (Stage 6).
 EXTENSION_FILES = ("manifest.json", "background.js", "content.js", "offscreen.js", "offscreen.html", "image-access.js", "image-access.html",
-                   "library.js", "library.html")
+                   "library.js", "library.html", "welcome.html", "about.html", "lindera/lindera_wasm_unidic_bg.wasm",
+                   "ort/ort.wasm.min.mjs", "sqlite/sqlite3.wasm", "icons/icon-128.png", "LICENSE.txt", "THIRD-PARTY-NOTICES.txt")
 
 
 def run(arguments: list[str], *, cwd: Path = ROOT, environment: dict[str, str] | None = None) -> str:
@@ -54,7 +55,10 @@ def validate_packages(directory: Path) -> None:
         raise ValueError("Private/generated artifact appeared in Python distribution")
     extension = next(directory.glob("yomiscan-extension-*.zip"))
     with ZipFile(extension) as archive:
-        if set(archive.namelist()) != {*EXTENSION_FILES, "LICENSE", "THIRD-PARTY-NOTICES.md"}:
+        names = set(archive.namelist())
+        if missing := set(EXTENSION_FILES) - names:
+            raise ValueError("Extension ZIP lacks " + ", ".join(sorted(missing)))
+        if any(name.endswith((".map", ".ts")) or name.startswith("/") or ".." in name.split("/") for name in names):
             raise ValueError("Unexpected extension ZIP contents")
         manifest = json.loads(archive.read("manifest.json"))
         if manifest["manifest_version"] != 3 or manifest.get("content_scripts") or manifest["host_permissions"] != ["http://127.0.0.1/*"]:
@@ -85,21 +89,18 @@ def main(argv: list[str] | None = None) -> int:
         run(["uv", "run", "--frozen", "pytest"], environment=environment)
         run([npm, "test"], cwd=ROOT/"extension", environment=environment)
     run([npm, "run", "typecheck"], cwd=ROOT/"extension", environment=environment)
-    run(["node", "build.mjs", "--release"], cwd=ROOT/"extension", environment=environment)
     output.mkdir(parents=True, exist_ok=True)
     run(["uv", "build", "--wheel", "--sdist", "--out-dir", str(output)], environment=environment)
     # uv adds this marker to a newly created build directory. It is not a deliverable.
     (output/".gitignore").unlink(missing_ok=True)
     config = tomllib.loads((ROOT/"pyproject.toml").read_text(encoding="utf-8"))
     app_version = config["project"]["version"]
-    extension = output/f"yomiscan-extension-{app_version}-{commit[:12]}.zip"
-    with ZipFile(extension, "w", compression=ZIP_DEFLATED, compresslevel=9) as archive:
-        files = {name: ROOT/"extension"/"dist"/name for name in EXTENSION_FILES}
-        files.update({"LICENSE": ROOT/"LICENSE", "THIRD-PARTY-NOTICES.md": ROOT/"docs"/"third-party-licenses.md"})
-        for name, path in sorted(files.items()):
-            info = ZipInfo(name, gmtime(max(315532800, int(epoch)))[:6])
-            info.create_system = 3;info.external_attr = 0o100644 << 16;info.compress_type = ZIP_DEFLATED
-            archive.writestr(info, path.read_text(encoding="utf-8").encode("utf-8"))
+    # The store package: a release build that passes the store checks, as a reproducible ZIP.
+    store = ROOT/".cache"/"store-package-distribution"
+    shutil.rmtree(store, ignore_errors=True)
+    run(["node", "package.mjs", "--out", str(store)], cwd=ROOT/"extension", environment=environment)
+    extension_version = json.loads((ROOT/"extension"/"manifest.json").read_text(encoding="utf-8"))["version"]
+    shutil.copyfile(store/f"yomiscan-extension-{extension_version}.zip", output/f"yomiscan-extension-{app_version}-{commit[:12]}.zip")
     for source, destination in ((ROOT/"docs"/"third-party-licenses.md", "THIRD-PARTY-NOTICES.md"),
                                 (ROOT/"docs"/"installation.md", "INSTALLATION.md"), (ROOT/"uv.lock", "uv.lock")):
         (output/destination).write_text(source.read_text(encoding="utf-8"), encoding="utf-8", newline="\n")

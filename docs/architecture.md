@@ -180,7 +180,9 @@ model installation into Cache Storage from an explicit user action. The extensio
 COOP `same-origin`) so WASM runs multi-threaded; the CSP adds only `'wasm-unsafe-eval'`.
 Increment 2 adds lexical analysis. `engine/lexical.ts` ports the analyzer, ranking, units,
 grammar and inflection over the backend's own rule JSON. `engine/lexicon.ts` adds JMdict
-SQLite (sqlite-wasm), the lindera UniDic tokenizer and the Study response. On the golden
+SQLite (sqlite-wasm), the lindera UniDic tokenizer and the Study response (since Stage 6
+increment 4 the tokenizer's WASM ships in the extension, under `dist/lindera/`; it was a downloaded
+artifact before, which the Chrome Web Store would count as remote code). On the golden
 set it matches Python token for token and scores the same 96.7%. Increment 3 adds OPUS-MT
 (`engine/translation.ts`): fp16 on WASM threads with the backend's exact beam search and the
 standalone `@huggingface/tokenizers`. It matched the backend on 175 of 178 real lines.
@@ -272,6 +274,20 @@ Increment 1 lets a learner keep words and sentences:
   database directly. It reuses `StudyPopup` to reopen a saved sentence.
 - **Card:** `popup.ts` adds a Save toggle to every expression and word and **Save sentence** to
   the original text, and marks saved words with one lookup per card.
+
+Increment 4 prepares the Chrome Web Store release:
+- **No remote code.** Every script and WASM file ships in the package: lindera's tokenizer WASM
+  moved from the model download into `dist/lindera/` (same pinned npm package, same bytes), so
+  the download is only data (ONNX weights, the JMdict SQLite file, tokenizer JSON).
+- **Package.** `extension/package.mjs` makes a clean release build, runs
+  `tools/store-checks.mjs` (manifest and permission list, icons, no remote script or WASM URL,
+  pages load only packaged files, no source maps, license files, a size budget) and writes a
+  reproducible ZIP. CI uploads it; `scripts/build_distribution.py` ships the same ZIP.
+- **Pages.** `welcome.html` opens on first install (`runtime.onInstalled`); `about.html` shows the
+  version, the downloaded models with their licenses (from the pinned artifact manifest) and
+  `THIRD-PARTY-NOTICES.txt`, which `tools/notices.mjs` builds from the production dependency
+  tree and fails on a package without a license. The panel links both through `open-page`.
+- **Icons** are drawn by `tools/icons.mjs` (16, 32, 48 and a padded 128 px).
 
 Increment 3 adds known words: a third IndexedDB store (`known`, keyed by the NFKC dictionary
 form, database version 2), `Library.known`/`setKnown`/`importKnown` and the `known` and
